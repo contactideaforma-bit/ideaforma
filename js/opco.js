@@ -522,16 +522,30 @@ const OpcoPage = {
         </div>
 
         <div class="form-section">
-          <div class="form-section-title">📚 Formation</div>
+          <div class="form-section-title" style="display:flex;align-items:center;justify-content:space-between;">
+            <span>📚 Formation</span>
+            <button type="button" class="btn-ai" id="aiAssistBtn">
+              ✨ Assistance IA
+            </button>
+          </div>
+          <div id="aiStatus" style="display:none;margin-bottom:10px;"></div>
           <div class="form-grid">
             <div class="field form-col-full"><label>Intitulé de la formation *</label>
-              <input type="text" name="trainingSubject" value="${esc(d?.trainingSubject)}"
+              <input type="text" name="trainingSubject" id="trainingSubjectInput" value="${esc(d?.trainingSubject)}"
                 placeholder="Ex. Management d'équipe, Excel avancé…" required /></div>
-            <div class="field form-col-full"><label>Objectifs pédagogiques</label>
-              <textarea name="objectifs" rows="3"
+            <div class="field form-col-full">
+              <label style="display:flex;align-items:center;justify-content:space-between;">
+                Objectifs pédagogiques
+                <button type="button" class="btn-reformuler" data-field="objectifs">↺ Reformuler</button>
+              </label>
+              <textarea name="objectifs" id="fieldObjectifs" rows="4"
                 placeholder="À l'issue de la formation, le stagiaire sera capable de…">${esc(d?.objectifs)}</textarea></div>
-            <div class="field form-col-full"><label>Programme / Contenu des modules</label>
-              <textarea name="contenu" rows="4"
+            <div class="field form-col-full">
+              <label style="display:flex;align-items:center;justify-content:space-between;">
+                Programme / Contenu des modules
+                <button type="button" class="btn-reformuler" data-field="contenu">↺ Reformuler</button>
+              </label>
+              <textarea name="contenu" id="fieldContenu" rows="5"
                 placeholder="Module 1 : …&#10;Module 2 : …&#10;Module 3 : …">${esc(d?.contenu)}</textarea></div>
             <div class="field"><label>Modalité pédagogique</label>
               <select name="modalite">
@@ -539,11 +553,15 @@ const OpcoPage = {
                 <option value="distanciel" ${d?.modalite==='distanciel'?'selected':''}>Distanciel</option>
                 <option value="mixte"      ${d?.modalite==='mixte'?'selected':''}>Mixte (présentiel + distanciel)</option>
               </select></div>
-            <div class="field"><label>Modalité d'évaluation</label>
-              <input type="text" name="evaluation" value="${esc(d?.evaluation)}"
+            <div class="field">
+              <label style="display:flex;align-items:center;justify-content:space-between;">
+                Modalité d'évaluation
+                <button type="button" class="btn-reformuler" data-field="evaluation">↺ Reformuler</button>
+              </label>
+              <input type="text" name="evaluation" id="fieldEvaluation" value="${esc(d?.evaluation)}"
                 placeholder="Ex. QCM, mise en situation, entretien…" /></div>
             <div class="field form-col-full"><label>Prérequis</label>
-              <input type="text" name="prerequis" value="${esc(d?.prerequis)}"
+              <input type="text" name="prerequis" id="fieldPrerequis" value="${esc(d?.prerequis)}"
                 placeholder="Ex. Aucun prérequis / Maîtrise de base du français…" /></div>
           </div>
         </div>
@@ -642,6 +660,66 @@ const OpcoPage = {
       });
     });
     this._bindRemoveRows();
+
+    /* ── Assistance IA ── */
+    document.getElementById('aiAssistBtn')?.addEventListener('click', async () => {
+      const btn     = document.getElementById('aiAssistBtn');
+      const subject = document.getElementById('trainingSubjectInput')?.value.trim();
+      const status  = document.getElementById('aiStatus');
+
+      if (!subject) { Toast.show('Renseignez d\'abord l\'intitulé de la formation', 'warning'); return; }
+
+      btn.disabled = true;
+      btn.textContent = '⏳ Génération…';
+      if (status) {
+        status.style.display = 'block';
+        status.innerHTML = `<div class="ai-loading">
+          <span class="ai-spinner"></span>
+          <span>L'IA génère le contenu en tenant compte des exigences <strong>${this.CONFIG[this.currentOpco]?.label || 'OPCO'}</strong>…</span>
+        </div>`;
+      }
+
+      try {
+        const result = await AI.genererFormation(this.currentOpco, subject, c);
+        if (result.objectifs)  document.getElementById('fieldObjectifs').value = result.objectifs;
+        if (result.contenu)    document.getElementById('fieldContenu').value   = result.contenu;
+        if (result.evaluation) document.getElementById('fieldEvaluation').value = result.evaluation;
+        if (result.prerequis)  document.getElementById('fieldPrerequis').value  = result.prerequis;
+        if (status) {
+          status.innerHTML = `<div class="ai-success">
+            ✅ Contenu généré par IA${result.duree ? ` — Durée suggérée : <strong>${result.duree}</strong>` : ''}.
+            Vérifiez et ajustez si nécessaire.
+          </div>`;
+        }
+        Toast.show('Contenu généré ✓', 'success');
+      } catch (err) {
+        if (status) {
+          status.innerHTML = `<div class="ai-error">⚠️ ${err.message}</div>`;
+        }
+        Toast.show('Erreur IA : ' + err.message, 'error');
+      }
+      btn.disabled = false;
+      btn.textContent = '✨ Assistance IA';
+    });
+
+    /* ── Boutons Reformuler ── */
+    document.querySelectorAll('.btn-reformuler').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const field   = btn.dataset.field;
+        const ids     = { objectifs:'fieldObjectifs', contenu:'fieldContenu', evaluation:'fieldEvaluation' };
+        const el      = document.getElementById(ids[field]);
+        const subject = document.getElementById('trainingSubjectInput')?.value.trim() || '';
+        if (!el || !el.value.trim()) { Toast.show('Champ vide à reformuler', 'warning'); return; }
+
+        btn.disabled = true; btn.textContent = '⏳…';
+        try {
+          const result = await AI.reformuler(field, el.value, this.currentOpco, subject);
+          el.value = result;
+          Toast.show('Reformulé ✓', 'success');
+        } catch (err) { Toast.show('Erreur : ' + err.message, 'error'); }
+        btn.disabled = false; btn.textContent = '↺ Reformuler';
+      });
+    });
   },
 
   async _submitDossierForm(opco, clientId, dossierId) {
