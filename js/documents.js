@@ -23,26 +23,33 @@ const Documents = {
   async _getOFProfile() {
     try {
       const p = await DataStore.getProfile();
-      const hex = p?.couleur_primaire || '#1E2D4B';
       return {
-        nom:      p?.organisme       || p?.nom || 'IDEAFORMA',
-        email:    p?.email           || '',
-        siret:    p?.siret           || '',
-        adresse:  p?.adresse         || '',
-        tel:      p?.telephone       || '',
-        da:       p?.numero_da       || '',
-        qualiopi: p?.numero_qualiopi || '',
-        logo:     p?.logo_base64     || null,
-        color:    this._hexToRgb(hex)
+        nom:      p?.organisme        || p?.nom || 'IDEAFORMA',
+        email:    p?.email            || '',
+        siret:    p?.siret            || '',
+        adresse:  p?.adresse          || '',
+        tel:      p?.telephone        || '',
+        da:       p?.numero_da        || '',
+        qualiopi: p?.numero_qualiopi  || '',
+        logo:     p?.logo_base64      || null,
+        color:    this._hexToRgb(p?.couleur_primaire   || '#1E2D4B'),
+        color2:   this._hexToRgb(p?.couleur_secondaire || '#3B82F6')
       };
     } catch {
-      return { nom:'IDEAFORMA', email:'', siret:'', adresse:'', tel:'', da:'', qualiopi:'', logo:null, color:[30,41,59] };
+      return { nom:'IDEAFORMA', email:'', siret:'', adresse:'', tel:'', da:'',
+               qualiopi:'', logo:null, color:[30,41,59], color2:[59,130,246] };
     }
   },
 
   _hexToRgb(hex) {
     if (!hex || hex.length < 7) return [30, 41, 59];
     return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16)];
+  },
+
+  /* Fond léger à partir de la couleur secondaire */
+  _lightBg(of) {
+    const [r,g,b] = of.color2 || [59,130,246];
+    return [Math.round(r*0.09+246), Math.round(g*0.09+246), Math.round(b*0.09+246)];
   },
 
   /* ══════════════════════════════════════════════
@@ -460,38 +467,48 @@ const Documents = {
      COMPOSANTS VISUELS PARTAGÉS
   ══════════════════════════════════════════════ */
 
-  /** En-tête clean — retourne la position Y après l'en-tête */
+  /** En-tête clean — logo visible, aucun chevauchement */
   _header(doc, of, docType, num, date) {
-    const c = this._c(of);
+    const c      = this._c(of);
+    const hasLogo = !!(of.logo);
 
-    // Logo
-    if (of.logo) {
-      try { doc.addImage(of.logo, 'auto', 14, 8, 32, 22); }
-      catch {}
+    /* ── Logo (haut gauche, max 40×30 mm) ── */
+    let logoH = 0;
+    if (hasLogo) {
+      try {
+        doc.addImage(of.logo, 'auto', 14, 6, 40, 30);
+        logoH = 30;
+      } catch { /* logo invalide → on passe en mode texte */ }
     }
 
-    // Titre document (droite)
-    doc.setFontSize(18).setFont(undefined,'bold').setTextColor(...c);
-    doc.text(docType, 195, 14, { align:'right' });
+    /* ── Titre document (haut droite) ── */
+    doc.setFontSize(17).setFont(undefined,'bold').setTextColor(...c);
+    doc.text(docType, 196, 14, { align:'right' });
     doc.setFontSize(8.5).setFont(undefined,'normal').setTextColor(...this.GRAY);
-    doc.text(`N° ${num}   ·   ${date}`, 195, 20, { align:'right' });
+    doc.text(`N° ${num}   ·   ${date}`, 196, 21, { align:'right' });
 
-    // OF info (gauche)
-    const nameX = of.logo ? 50 : 14;
-    doc.setFontSize(10).setFont(undefined,'bold').setTextColor(...this.DARK);
-    doc.text(of.nom, nameX, 14);
-    doc.setFontSize(7.5).setFont(undefined,'normal').setTextColor(...this.GRAY);
-    const sub = [of.siret?`SIRET : ${of.siret}`:'', of.da?`N° DA : ${of.da}`:'', of.email||'']
-      .filter(Boolean).join('   ·   ');
-    if (sub) doc.text(sub, nameX, 19);
+    /* ── Identité OF (sous le logo, ou à gauche si pas de logo) ── */
+    const infoY = hasLogo && logoH > 0 ? 6 + logoH + 4 : 14;
+    const infoX = 14;
+    if (!hasLogo || logoH === 0) {
+      doc.setFontSize(10).setFont(undefined,'bold').setTextColor(...this.DARK);
+      doc.text(of.nom, infoX, infoY);
+      doc.setFontSize(7.5).setFont(undefined,'normal').setTextColor(...this.GRAY);
+      const sub = [of.siret?`SIRET : ${of.siret}`:'', of.da?`N° DA : ${of.da}`:'']
+        .filter(Boolean).join('   ·   ');
+      if (sub) doc.text(sub, infoX, infoY + 4.5);
+    }
 
-    // Ligne séparatrice (couleur principale)
+    /* ── Ligne séparatrice ── */
+    const sepY = hasLogo && logoH > 0
+      ? Math.max(infoY + 2, 38)   // sous le logo
+      : infoY + 11;               // sous le texte OF
+
     doc.setDrawColor(...c).setLineWidth(1);
-    doc.line(14, 32, 196, 32);
-    doc.setLineWidth(0.2).setDrawColor(...this.LINE);
-    doc.line(14, 33, 196, 33);
+    doc.line(14, sepY, 196, sepY);
+    doc.setDrawColor(...this.LINE).setLineWidth(0.2);
 
-    return 40; // Y après header
+    return sepY + 6;
   },
 
   /** Bloc bipartites (émetteur + destinataire) */
@@ -536,16 +553,17 @@ const Documents = {
     return finalY + 5;
   },
 
-  /** Titre de section — barre colorée gauche, fond léger */
+  /** Titre de section — barre couleur secondaire gauche, fond léger */
   _sectionTitle(doc, y, of, title) {
-    if (y > 255) { doc.addPage(); y = 20; }
-    const c = this._c(of);
-    doc.setFillColor(...this.LIGHT);
+    if (y > 258) { doc.addPage(); y = 20; }
+    const c  = this._c(of);
+    const bg = this._lightBg(of);
+    doc.setFillColor(...bg);
     doc.rect(14, y - 2, 182, 8, 'F');
-    doc.setFillColor(...c);
+    doc.setFillColor(...(of.color2 || c));
     doc.rect(14, y - 2, 3, 8, 'F');
-    doc.setFontSize(9).setFont(undefined,'bold').setTextColor(...c);
-    doc.text(title.toUpperCase(), 20, y + 3.5);
+    doc.setFontSize(8.5).setFont(undefined,'bold').setTextColor(...c);
+    doc.text(title, 20, y + 3.5);
     return y + 10;
   },
 
@@ -558,12 +576,13 @@ const Documents = {
 
   /** Article numéroté */
   _article(doc, y, of, title, lines) {
-    if (y > 252) { doc.addPage(); y = 20; }
-    const c = this._c(of);
+    if (y > 258) { doc.addPage(); y = 20; }
+    const c  = this._c(of);
+    const bg = this._lightBg(of);
 
-    doc.setFillColor(...this.LIGHT);
+    doc.setFillColor(...bg);
     doc.rect(14, y - 2, 182, 8, 'F');
-    doc.setFillColor(...c);
+    doc.setFillColor(...(of.color2 || c));
     doc.rect(14, y - 2, 3, 8, 'F');
     doc.setFontSize(8.5).setFont(undefined,'bold').setTextColor(...c);
     doc.text(title, 20, y + 3.5);
@@ -585,15 +604,16 @@ const Documents = {
 
   /** Bloc texte (section + contenu) */
   _textBlock(doc, y, of, title, text) {
-    if (y > 245) { doc.addPage(); y = 20; }
-    const c = this._c(of);
+    if (y > 252) { doc.addPage(); y = 20; }
+    const c  = this._c(of);
+    const bg = this._lightBg(of);
 
-    doc.setFillColor(...this.LIGHT);
+    doc.setFillColor(...bg);
     doc.rect(14, y - 2, 182, 8, 'F');
-    doc.setFillColor(...c);
+    doc.setFillColor(...(of.color2 || c));
     doc.rect(14, y - 2, 3, 8, 'F');
     doc.setFontSize(8.5).setFont(undefined,'bold').setTextColor(...c);
-    doc.text(title.toUpperCase(), 20, y + 3.5);
+    doc.text(title, 20, y + 3.5);
     y += 10;
 
     doc.setFontSize(8.5).setFont(undefined,'normal').setTextColor(60, 65, 80);
@@ -663,12 +683,13 @@ const Documents = {
     return y + off + 30;
   },
 
-  /** Thème tableau */
+  /** Thème tableau — utilise la couleur secondaire pour l'en-tête */
   _tableTheme(of, compact = false) {
-    const c = this._c(of);
+    const c  = this._c(of);
+    const bg = this._lightBg(of);
     return {
       headStyles: {
-        fillColor: this.LIGHT,
+        fillColor: bg,
         textColor: c,
         fontStyle: 'bold',
         fontSize:  9,
@@ -676,13 +697,14 @@ const Documents = {
         lineWidth: 0.3
       },
       bodyStyles: {
-        fontSize:   8.5,
-        textColor:  this.DARK,
-        lineColor:  this.LINE,
-        lineWidth:  0.2
+        fontSize:  8.5,
+        textColor: this.DARK,
+        lineColor: this.LINE,
+        lineWidth: 0.2
       },
       alternateRowStyles: { fillColor: [252, 253, 255] },
-      styles: { cellPadding: compact ? 2.5 : 3.5 }
+      styles: { cellPadding: compact ? 2.5 : 3.5 },
+      margin: { left: 14, right: 14 }
     };
   },
 

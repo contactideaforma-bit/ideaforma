@@ -181,16 +181,31 @@ const SettingsPage = {
                         : ''}
                     </div>
                   </div>
-                  <div class="field">
-                    <label>Couleur principale</label>
-                    <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
-                      <input type="color" name="couleur_primaire" id="colorPicker"
-                        value="${couleur}"
-                        style="width:48px;height:48px;border:2px solid var(--border);border-radius:8px;cursor:pointer;padding:2px;" />
-                      <div>
-                        <div id="colorPreviewLabel" style="font-size:14px;font-weight:600;color:${couleur};">${couleur.toUpperCase()}</div>
-                        <div style="font-size:12px;color:var(--text-muted);">En-têtes, titres de sections</div>
-                        <div id="colorSwatch" style="margin-top:4px;height:8px;width:100px;border-radius:4px;background:${couleur};"></div>
+                  <div class="field" style="display:flex;flex-direction:column;gap:12px;">
+                    <div>
+                      <label>Couleur principale</label>
+                      <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                        <input type="color" name="couleur_primaire" id="colorPicker"
+                          value="${couleur}"
+                          style="width:44px;height:44px;border:2px solid var(--border);border-radius:8px;cursor:pointer;padding:2px;" />
+                        <div>
+                          <div id="colorPreviewLabel" style="font-size:13px;font-weight:600;color:${couleur};">${couleur.toUpperCase()}</div>
+                          <div style="font-size:11px;color:var(--text-muted);">Titres, séparateurs</div>
+                          <div id="colorSwatch" style="margin-top:3px;height:6px;width:80px;border-radius:3px;background:${couleur};"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label>Couleur secondaire</label>
+                      <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+                        <input type="color" name="couleur_secondaire" id="colorPicker2"
+                          value="${esc(profile.couleur_secondaire||'#3B82F6')}"
+                          style="width:44px;height:44px;border:2px solid var(--border);border-radius:8px;cursor:pointer;padding:2px;" />
+                        <div>
+                          <div id="colorPreviewLabel2" style="font-size:13px;font-weight:600;color:${esc(profile.couleur_secondaire||'#3B82F6')};">${(profile.couleur_secondaire||'#3B82F6').toUpperCase()}</div>
+                          <div style="font-size:11px;color:var(--text-muted);">Fonds de section, tableaux</div>
+                          <div id="colorSwatch2" style="margin-top:3px;height:6px;width:80px;border-radius:3px;background:${esc(profile.couleur_secondaire||'#3B82F6')};"></div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -255,12 +270,18 @@ const SettingsPage = {
       document.getElementById('removeLogoBtn')?.remove();
     });
 
-    // ── Color picker live preview ──
+    // ── Color pickers live preview ──
     document.getElementById('colorPicker')?.addEventListener('input', e => {
       const c = e.target.value;
       document.getElementById('colorPreviewLabel').textContent = c.toUpperCase();
       document.getElementById('colorPreviewLabel').style.color = c;
       document.getElementById('colorSwatch').style.background  = c;
+    });
+    document.getElementById('colorPicker2')?.addEventListener('input', e => {
+      const c = e.target.value;
+      document.getElementById('colorPreviewLabel2').textContent = c.toUpperCase();
+      document.getElementById('colorPreviewLabel2').style.color = c;
+      document.getElementById('colorSwatch2').style.background  = c;
     });
 
     // ── Save ──
@@ -275,8 +296,9 @@ const SettingsPage = {
         adresse:          form.querySelector('[name="adresse"]').value.trim(),
         numero_da:        form.querySelector('[name="numero_da"]').value.trim(),
         numero_qualiopi:  form.querySelector('[name="numero_qualiopi"]').value.trim(),
-        couleur_primaire: form.querySelector('[name="couleur_primaire"]').value,
-        logo_base64:      this._logoBase64
+        couleur_primaire:   form.querySelector('[name="couleur_primaire"]').value,
+        couleur_secondaire: form.querySelector('[name="couleur_secondaire"]').value,
+        logo_base64:        this._logoBase64
       };
       if (!data.organisme) { Toast.show('Le nom de l\'organisme est requis', 'error'); return; }
       btn.disabled = true; btn.textContent = 'Enregistrement…';

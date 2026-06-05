@@ -358,14 +358,15 @@ const DataStore = {
   async updateProfile(updates) {
     const uid = await this._uid();
     const patch = {
-      nom:              updates.nom              || null,
-      organisme:        updates.organisme        || null,
-      siret:            updates.siret            || null,
-      adresse:          updates.adresse          || null,
-      telephone:        updates.telephone        || null,
-      numero_da:        updates.numero_da        || null,
-      numero_qualiopi:  updates.numero_qualiopi  || null,
-      couleur_primaire: updates.couleur_primaire || '#1E2D4B'
+      nom:                updates.nom               || null,
+      organisme:          updates.organisme         || null,
+      siret:              updates.siret             || null,
+      adresse:            updates.adresse           || null,
+      telephone:          updates.telephone         || null,
+      numero_da:          updates.numero_da         || null,
+      numero_qualiopi:    updates.numero_qualiopi   || null,
+      couleur_primaire:   updates.couleur_primaire  || '#1E2D4B',
+      couleur_secondaire: updates.couleur_secondaire|| '#3B82F6'
     };
     // Logo seulement si fourni
     if (updates.logo_base64 !== undefined) patch.logo_base64 = updates.logo_base64;

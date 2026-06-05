@@ -5,48 +5,123 @@ const OpcoPage = {
   CONFIG: {
     opco_commerce: {
       label:'OPCO Commerce', shortLabel:'Commerce', color:'#3B82F6',
-      sectors:'Commerce de détail, grande distribution, bricolage, jardinerie, e-commerce',
+      sectors:'Commerce de détail, grande distribution, e-commerce, bricolage, jardinerie, sport',
       deadline:'Dossier à déposer AVANT le démarrage de la formation',
       ceiling:'15 à 25 €/h HT selon accord de branche',
-      contact:'opcominternational.fr', phone:'Voir site opcominternational.fr',
-      documents:['Convention de formation signée (2 exemplaires)','Programme détaillé de la formation','Devis signé par l\'employeur','Attestation Qualiopi en cours de validité','RIB de l\'organisme de formation','Fiche d\'adhésion de l\'entreprise à OPCO Commerce'],
-      alerts:['Vérifier l\'adhésion de l\'entreprise à OPCO Commerce avant tout dossier','La TVA n\'est pas prise en charge — facturer HT','Certains accords de branche imposent des plafonds spécifiques']
+      website:'https://www.opcominternational.fr',
+      contact:'opcominternational.fr',
+      phone:'09 69 32 99 08',
+      documents:['Convention de formation signée (2 exemplaires)','Programme pédagogique détaillé','Devis signé par l\'employeur','Attestation Qualiopi en cours de validité','RIB de l\'organisme de formation','Fiche d\'adhésion de l\'entreprise à OPCO Commerce'],
+      alerts:['Vérifier l\'adhésion de l\'entreprise à OPCO Commerce avant tout dossier','La TVA n\'est pas prise en charge — facturer HT uniquement','Certains accords de branche imposent des plafonds spécifiques par niveau'],
+      tips:[
+        '📌 Vérifier l\'adhésion sur le portail OPCO Commerce avant de signer quoi que ce soit — un non-adhérent = dossier refusé.',
+        '💡 Les formations liées à la transition numérique, RSE et management sont prioritaires et souvent mieux financées.',
+        '⚡ Pour la grande distribution (Leclerc, Carrefour…) : des accords d\'entreprise spécifiques existent — se renseigner auprès du contact RH.',
+        '📝 L\'attestation de présence signée est indispensable pour déclencher le paiement — la préparer dès la création du dossier.',
+        '🔄 Depuis 2024 : les dossiers CPF co-financés par l\'OPCO suivent un circuit distinct — ne pas mélanger avec les dossiers plan de développement.'
+      ],
+      thresholds:[
+        'TPE < 11 salariés : taux de prise en charge bonifiés sur certains accords',
+        'Plan de développement des compétences : 15-25€/h selon accord de branche',
+        'Formations > 10 000 € HT : accord préalable recommandé',
+        'Alternance et Pro-A : circuit et financements séparés'
+      ]
     },
     opco_mobilite: {
       label:'OPCO Mobilité', shortLabel:'Mobilité', color:'#8B5CF6',
-      sectors:'Transport routier de voyageurs et de marchandises, automobile, location de véhicules, voyagistes',
+      sectors:'Transport routier (voyageurs, marchandises), déménagement, automobile, location, voyagistes, logistique urbaine',
       deadline:'Dossier complet à soumettre minimum 15 jours avant le démarrage',
       ceiling:'25 à 40 €/h HT selon CPNE et type de formation',
-      contact:'opcoemobilite.fr', phone:'Voir site opcoemobilite.fr',
+      website:'https://www.opcoemobilite.fr',
+      contact:'opcoemobilite.fr',
+      phone:'0970 816 816',
       documents:['Convention de formation signée','Programme pédagogique détaillé','Devis signé par l\'employeur','Attestation Qualiopi valide','Numéro SIRET de l\'entreprise (vérification adhésion)','Liste nominative des salariés à former'],
-      alerts:['Pour toute formation > 5 000 € : accord préalable OPCO Mobilité obligatoire','Distinguer formations réglementaires (FCO, FIMO) et formations qualifiantes','Respecter impérativement le délai de 15 jours — dossier refusé si tardif']
+      alerts:['Pour toute formation > 5 000 € : accord préalable OPCO Mobilité obligatoire','Distinguer formations réglementaires (FCO, FIMO) et formations qualifiantes','Respecter impérativement le délai de 15 jours — dossier refusé si tardif'],
+      tips:[
+        '📌 Le délai de 15 jours est strict et non négociable — intégrer ce délai dès la planification avec le client.',
+        '🚛 Distinguer les formations réglementaires (FCO, FIMO, ADR…) des formations qualifiantes : circuits et plafonds différents.',
+        '💡 Les formations à la conduite économique et écologique (éco-conduite) sont très soutenues depuis la loi LOM.',
+        '⚡ Pour les formations > 5 000 € : demander l\'accord préalable DÈS la signature du devis, pas après.',
+        '📱 Le portail Extranet MyOPCO permet de suivre l\'état d\'avancement des dossiers en temps réel.'
+      ],
+      thresholds:[
+        'Petites entreprises (< 50 salariés) : accès au fonds TPE-PME avec taux majorés',
+        'FCO Marchandises/Voyageurs : prise en charge jusqu\'à 300€/jour/stagiaire',
+        'Formations > 5 000 € : accord préalable obligatoire avant tout démarrage',
+        'Pro-A et alternance : circuits dédiés avec conseillers spécialisés'
+      ]
     },
     akto: {
       label:'AKTO', shortLabel:'AKTO', color:'#10B981',
-      sectors:'Hôtellerie, restauration, tourisme, sport, loisirs, services à la personne, propreté',
+      sectors:'Hôtellerie-restauration, tourisme, sport & loisirs, services à la personne, propreté, sécurité privée',
       deadline:'Dossier complet à soumettre avant le démarrage de la formation',
       ceiling:'15 à 35 €/h HT selon type de formation et taille de l\'entreprise',
-      contact:'akto.fr', phone:'09 80 80 10 00',
-      documents:['Devis signé par le représentant légal','Convention de formation (signée par les deux parties)','Programme pédagogique détaillé','Attestation Qualiopi en cours de validité','Fiche de renseignements de l\'entreprise (adhérent AKTO)','Liste nominative des salariés concernés avec intitulés de postes'],
-      alerts:['Vérifier impérativement l\'adhésion AKTO — sinon refus automatique','Les TPE (< 11 salariés) bénéficient de taux de prise en charge majorés','Les formations en alternance relèvent d\'un circuit distinct — ne pas mélanger']
+      website:'https://www.akto.fr',
+      contact:'akto.fr',
+      phone:'09 80 80 10 00',
+      documents:['Devis signé par le représentant légal','Convention de formation (signée par les deux parties)','Programme pédagogique détaillé','Attestation Qualiopi en cours de validité','Fiche de renseignements de l\'entreprise (adhérent AKTO)','Liste nominative des salariés avec intitulés de postes'],
+      alerts:['Vérifier impérativement l\'adhésion AKTO — sinon refus automatique','Les TPE (< 11 salariés) bénéficient de taux de prise en charge majorés','Les formations en alternance relèvent d\'un circuit distinct'],
+      tips:[
+        '📌 L\'adhésion à AKTO est vérifiable directement sur akto.fr/adherents — toujours vérifier avant de signer.',
+        '🍽️ Pour la restauration et l\'hôtellerie : des formations certifiantes (HACCP, hygiène alimentaire) bénéficient de financements spécifiques.',
+        '💡 Les TPE de moins de 11 salariés ont accès à des enveloppes dédiées avec des taux nettement supérieurs.',
+        '⚡ AKTO propose des "Kits formation" sectoriels prêts à l\'emploi — les référencer dans les objectifs facilite l\'instruction.',
+        '🔄 La plateforme AKTO Connect permet la dématérialisation complète des dossiers — fortement recommandé pour accélérer les délais.'
+      ],
+      thresholds:[
+        'TPE < 11 salariés : enveloppe dédiée, taux pouvant atteindre 35€/h',
+        'PME 11-49 salariés : plan de développement standard 15-25€/h',
+        'Formations certifiantes (HACCP, CQP) : financements bonifiés',
+        'Alternance : prise en charge selon NPEC défini par la branche'
+      ]
     },
     constructys: {
       label:'Constructys', shortLabel:'Constructys', color:'#F59E0B',
-      sectors:'Bâtiment, travaux publics, négoce de matériaux de construction',
+      sectors:'Bâtiment, travaux publics, négoce de matériaux, génie civil, menuiserie, plomberie, électricité du bâtiment',
       deadline:'1 mois avant le démarrage de la formation — délai strict',
       ceiling:'12 à 28 €/h HT selon type de formation',
-      contact:'constructys.fr', phone:'01 55 68 70 00',
+      website:'https://www.constructys.fr',
+      contact:'constructys.fr',
+      phone:'01 55 68 70 00',
       documents:['Devis signé par l\'employeur','Programme pédagogique détaillé','Attestation Qualiopi valide','KBIS de moins de 3 mois','Convention de formation signée','Attestation de présence à fournir après chaque session'],
-      alerts:['KBIS de moins de 3 mois obligatoire — à demander en amont','Les attestations de présence sont une condition sine qua non du paiement','Respecter le délai d\'1 mois — refus systématique si tardif']
+      alerts:['KBIS de moins de 3 mois obligatoire — à demander en amont','Les attestations de présence sont une condition sine qua non du paiement','Respecter le délai d\'1 mois — refus systématique si tardif'],
+      tips:[
+        '📌 Demander le KBIS DÈS la signature du devis — délai de 3 mois très souvent oublié et cause de rejets.',
+        '🏗️ Les formations habilitations (travaux en hauteur, CACES, électrique) sont hautement prioritaires et bien financées.',
+        '💡 Constructys publie chaque année ses "thèmes prioritaires" — aligner les intitulés de formation dessus optimise les prises en charge.',
+        '⚡ L\'attestation de présence doit être signée à chaque demi-journée — informer le client dès la création du dossier.',
+        '🔄 Pour les chantiers multi-entreprises : chaque entreprise doit faire son propre dossier, même pour les mêmes salariés.'
+      ],
+      thresholds:[
+        'Très petites entreprises (< 10 salariés) : fonds mutualisés spécifiques',
+        'Formations sécurité (CACES, habilitations) : jusqu\'à 28€/h',
+        'Plan de développement : 12-20€/h selon accord de branche BTP',
+        'Alternance BTP : prise en charge NPEC variable selon diplôme préparé'
+      ]
     },
     opco_ep: {
       label:'OPCO EP', shortLabel:'EP', color:'#EC4899',
-      sectors:'Coiffure, esthétique-cosmétique, fleuristes, pompes funèbres, pressing, cordonnerie',
+      sectors:'Coiffure, esthétique-cosmétique, fleuristes, pompes funèbres, pressing, cordonnerie, blanchisserie',
       deadline:'Dossier à soumettre avant le démarrage de la formation',
       ceiling:'10 à 25 €/h HT selon accord de branche et taille d\'entreprise',
-      contact:'opcoep.fr', phone:'01 53 32 53 40',
-      documents:['Devis signé par l\'employeur','Programme de formation détaillé','Convention de formation signée par les deux parties','Attestation Qualiopi en cours de validité','Numéro adhérent OPCO EP (ou vérification via le site)'],
-      alerts:['Certaines formations nécessitent un accord préalable — se renseigner au cas par cas','Niveaux de prise en charge très variables selon taille d\'entreprise','Pour les très petites structures (1-2 salariés), vérifier l\'éligibilité au fonds TPE']
+      website:'https://www.opcoep.fr',
+      contact:'opcoep.fr',
+      phone:'01 53 32 53 40',
+      documents:['Devis signé par l\'employeur','Programme de formation détaillé','Convention de formation signée','Attestation Qualiopi en cours de validité','Numéro adhérent OPCO EP (ou vérification via le site)'],
+      alerts:['Certaines formations nécessitent un accord préalable — se renseigner cas par cas','Niveaux de prise en charge très variables selon taille d\'entreprise','Pour les très petites structures (1-2 salariés), vérifier l\'éligibilité au fonds TPE'],
+      tips:[
+        '📌 Pour les structures de 1-2 salariés (très fréquent en coiffure/esthétique) : le fonds TPE est dédié avec des règles spécifiques.',
+        '💅 Les formations BP Coiffure, CAP Esthétique et CQP ont des prises en charge NPEC dédiées — les prioriser dans les intitulés.',
+        '💡 OPCO EP dispose de conseillers formation sectoriels — les contacter AVANT de monter un dossier complexe.',
+        '⚡ Les formations liées à l\'hygiène et à la désinfection (post-COVID) restent bien financées en coiffure/esthétique.',
+        '🔄 Le portail Mon Compte Formation permet aux salariés de cofinancer via CPF — option à proposer systématiquement.'
+      ],
+      thresholds:[
+        'Micro-entreprises (1-2 salariés) : fonds TPE spécifique OPCO EP',
+        'TPE < 11 salariés : taux bonifiés selon accord de branche',
+        'BP Coiffure, CAP Esthétique, CQP : NPEC défini par branche professionnelle',
+        'Formations > 3 000 € : accord préalable recommandé pour éviter les refus'
+      ]
     }
   },
 
@@ -958,43 +1033,96 @@ const OpcoPage = {
     const cfg = this.CONFIG[opco];
     document.getElementById('tabContent').innerHTML = `
       <div class="process-sheet">
-        <div class="process-section">
-          <div class="process-section-header"><span class="process-section-icon">🏢</span>
-            <div class="process-section-title">Informations générales</div></div>
-          <div class="process-section-body">
-            <div class="process-grid">
-              <div class="process-item"><div class="process-item-label">Secteurs</div><div class="process-item-value">${cfg.sectors}</div></div>
-              <div class="process-item"><div class="process-item-label">Site web</div><div class="process-item-value" style="color:var(--primary);">${cfg.contact}</div></div>
-              <div class="process-item"><div class="process-item-label">Téléphone</div><div class="process-item-value">${cfg.phone}</div></div>
-              <div class="process-item"><div class="process-item-label">Plafond horaire</div><div class="process-item-value">${cfg.ceiling}</div></div>
+
+        <!-- ── Contact & accès rapide ── -->
+        <div class="process-section opco-contact-card" style="border-left:4px solid ${cfg.color};">
+          <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:200px;">
+              <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:6px;">${cfg.label}</div>
+              <div style="font-size:13px;color:var(--text-muted);line-height:1.6;">${cfg.sectors}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+              <a href="${cfg.website}" target="_blank" rel="noopener noreferrer"
+                style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:${cfg.color};color:#fff;border-radius:8px;font-size:13px;font-weight:600;text-decoration:none;transition:opacity 0.18s;"
+                onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+                🌐 Accéder au site ${cfg.label}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </a>
+              <div style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-muted);">
+                📞 <strong style="color:var(--navy);">${cfg.phone}</strong>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- ── Délai clé ── -->
         <div class="process-section">
           <div class="process-section-header"><span class="process-section-icon">⏱️</span>
-            <div class="process-section-title">Délais de dépôt</div></div>
+            <div class="process-section-title">Délai de dépôt</div></div>
           <div class="process-section-body">
-            <div style="font-size:15px;font-weight:600;color:var(--navy);padding:8px 12px;background:var(--primary-light);border-radius:var(--radius);border-left:4px solid var(--primary);">
-              ${cfg.deadline}
+            <div style="font-size:14px;font-weight:600;color:var(--navy);padding:10px 14px;background:var(--warning-bg);border-radius:var(--radius);border-left:4px solid var(--warning);display:flex;align-items:center;gap:8px;">
+              ⚠️ ${cfg.deadline}
             </div>
           </div>
         </div>
+
+        <!-- ── Seuils et plafonds ── -->
+        <div class="process-section">
+          <div class="process-section-header"><span class="process-section-icon">💶</span>
+            <div class="process-section-title">Seuils & plafonds de prise en charge</div></div>
+          <div class="process-section-body">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;">
+              ${cfg.thresholds.map(t => `
+                <div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12.5px;color:var(--text);">
+                  ${t}
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Documents requis ── -->
         <div class="process-section">
           <div class="process-section-header"><span class="process-section-icon">📄</span>
-            <div class="process-section-title">Documents requis</div></div>
+            <div class="process-section-title">Documents à fournir à l'OPCO</div></div>
           <div class="process-section-body">
             <div class="doc-list">
-              ${cfg.documents.map(doc => `<div class="doc-item"><div class="doc-check">✓</div>${doc}</div>`).join('')}
+              ${cfg.documents.map((doc, i) => `
+                <div class="doc-item">
+                  <div class="doc-check" style="background:${cfg.color};color:#fff;">${i+1}</div>
+                  ${doc}
+                </div>`).join('')}
             </div>
           </div>
         </div>
+
+        <!-- ── Astuces pratiques ── -->
         <div class="process-section">
-          <div class="process-section-header"><span class="process-section-icon">⚠️</span>
-            <div class="process-section-title">Points d'attention</div></div>
+          <div class="process-section-header"><span class="process-section-icon">✨</span>
+            <div class="process-section-title">Astuces pratiques</div></div>
           <div class="process-section-body" style="display:flex;flex-direction:column;gap:10px;">
-            ${cfg.alerts.map(a => `<div class="alert-note"><div class="alert-note-icon">💡</div><div>${a}</div></div>`).join('')}
+            ${cfg.tips.map(t => `
+              <div style="padding:10px 14px;background:var(--primary-lighter,rgba(59,130,246,0.04));border:1px solid var(--primary-border,rgba(59,130,246,0.15));border-radius:8px;font-size:13px;line-height:1.6;color:var(--text);">
+                ${t}
+              </div>`).join('')}
           </div>
         </div>
+
+        <!-- ── Points d'attention ── -->
+        <div class="process-section">
+          <div class="process-section-header"><span class="process-section-icon">🚨</span>
+            <div class="process-section-title">Points d'attention critiques</div></div>
+          <div class="process-section-body" style="display:flex;flex-direction:column;gap:10px;">
+            ${cfg.alerts.map(a => `
+              <div class="alert-note" style="border-left:3px solid var(--danger);">
+                <div class="alert-note-icon">⛔</div>
+                <div style="font-size:13px;">${a}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+
       </div>`;
   }
 };
