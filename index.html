@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Connexion — Ideaforma</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    /* ── Onglets ── */
+    .auth-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+      gap: 0;
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 10px 0;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.18s, border-color 0.18s;
+    }
+    .auth-tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+    .auth-tab:hover:not(.active) {
+      color: var(--text);
+    }
+
+    /* ── Panneau ── */
+    .auth-panel { display: none; }
+    .auth-panel.active { display: block; }
+
+    /* ── Lien mot de passe oublié ── */
+    .forgot-link {
+      display: block;
+      text-align: right;
+      font-size: 12px;
+      color: var(--primary);
+      margin-top: -8px;
+      margin-bottom: 16px;
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+    .forgot-link:hover { text-decoration: underline; }
+
+    /* ── Message info (confirmation email, etc.) ── */
+    .auth-info {
+      background: color-mix(in srgb, var(--primary) 10%, transparent);
+      border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: var(--primary);
+      margin-bottom: 16px;
+      line-height: 1.5;
+      display: none;
+    }
+    .auth-info.visible { display: block; }
+
+    /* ── Panneau mot de passe oublié ── */
+    #forgotPanel {
+      display: none;
+    }
+    #forgotPanel.active {
+      display: block;
+    }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      margin-bottom: 18px;
+    }
+    .back-link:hover { color: var(--primary); }
+  </style>
+</head>
+<body>
+  <div class="login-page">
+    <div class="login-card">
+
+      <div class="login-logo">
+        <img src="logo_ideaforma.png" alt="Ideaforma"
+             onerror="this.style.display='none'; document.getElementById('logo-fallback').style.display='flex';" />
+        <div class="login-logo-fallback" id="logo-fallback" style="display:none;">
+          <div class="login-logo-icon">I</div>
+          <div class="login-logo-text">Ideaforma</div>
+        </div>
+      </div>
+
+      <p class="login-subtitle">Plateforme de gestion interne — Accès sécurisé</p>
+
+      <!-- ── Onglets ── -->
+      <div class="auth-tabs" id="authTabs">
+        <button class="auth-tab active" data-tab="login">Se connecter</button>
+        <button class="auth-tab"        data-tab="signup">Créer un compte</button>
+      </div>
+
+      <!-- ══════════════════════════════════
+           PANNEAU : Connexion
+      ══════════════════════════════════ -->
+      <div class="auth-panel active" id="loginPanel">
+
+        <form class="login-form" id="loginForm" novalidate>
+          <div class="form-group">
+            <label for="loginEmail">Adresse email</label>
+            <input type="email" id="loginEmail" name="email"
+                   placeholder="votre@email.fr" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Mot de passe</label>
+            <input type="password" id="loginPassword" name="password"
+                   placeholder="••••••••••" autocomplete="current-password" required />
+          </div>
+
+          <button type="button" class="forgot-link" id="forgotBtn">Mot de passe oublié ?</button>
+
+          <div class="login-error" id="loginError"></div>
+
+          <button type="submit" class="btn-login" id="loginSubmitBtn">Se connecter</button>
+        </form>
+
+      </div>
+
+      <!-- ══════════════════════════════════
+           PANNEAU : Créer un compte
+      ══════════════════════════════════ -->
+      <div class="auth-panel" id="signupPanel">
+
+        <div class="auth-info" id="signupInfo"></div>
+
+        <form class="login-form" id="signupForm" novalidate>
+          <div class="form-group">
+            <label for="signupNom">Votre nom</label>
+            <input type="text" id="signupNom" name="nom"
+                   placeholder="Prénom Nom" autocomplete="name" required />
+          </div>
+          <div class="form-group">
+            <label for="signupEmail">Adresse email</label>
+            <input type="email" id="signupEmail" name="email"
+                   placeholder="votre@email.fr" autocomplete="email" required />
+          </div>
+          <div class="form-group">
+            <label for="signupPassword">Mot de passe</label>
+            <input type="password" id="signupPassword" name="password"
+                   placeholder="8 caractères minimum" autocomplete="new-password" required minlength="8" />
+          </div>
+          <div class="form-group">
+            <label for="signupConfirm">Confirmer le mot de passe</label>
+            <input type="password" id="signupConfirm" name="confirm"
+                   placeholder="••••••••••" autocomplete="new-password" required />
+          </div>
+
+          <div class="login-error" id="signupError"></div>
+
+          <button type="submit" class="btn-login" id="signupSubmitBtn">Créer mon compte</button>
+        </form>
+
+      </div>
+
+      <!-- ══════════════════════════════════
+           PANNEAU : Mot de passe oublié
+      ══════════════════════════════════ -->
+      <div id="forgotPanel">
+
+        <button type="button" class="back-link" id="backFromForgot">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Retour à la connexion
+        </button>
+
+        <div style="margin-bottom:16px;">
+          <p style="font-size:13.5px;font-weight:600;color:var(--text);margin:0 0 6px;">Réinitialiser le mot de passe</p>
+          <p style="font-size:12.5px;color:var(--text-muted);margin:0;line-height:1.5;">
+            Saisissez votre adresse email, vous recevrez un lien pour choisir un nouveau mot de passe.
+          </p>
+        </div>
+
+        <div class="auth-info" id="forgotInfo"></div>
+
+        <form class="login-form" id="forgotForm" novalidate>
+          <div class="form-group">
+            <label for="forgotEmail">Adresse email</label>
+            <input type="email" id="forgotEmail" name="email"
+                   placeholder="votre@email.fr" autocomplete="email" required />
+          </div>
+
+          <div class="login-error" id="forgotError"></div>
+
+          <button type="submit" class="btn-login" id="forgotSubmitBtn">Envoyer le lien</button>
+        </form>
+
+      </div>
+
+      <div class="login-badge">
+        <span class="qualiopi-badge">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Organisme certifié Qualiopi
+        </span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Dark mode toggle -->
+  <div style="position:fixed;top:16px;right:16px;z-index:10;">
+    <button id="loginDarkToggle" aria-label="Mode sombre"
+      style="width:36px;height:36px;border-radius:8px;border:1px solid rgba(59,130,246,0.25);
+             background:var(--white);cursor:pointer;display:flex;align-items:center;
+             justify-content:center;color:var(--text-muted);transition:all 0.18s ease;">
+      <svg id="loginIconSun" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+      </svg>
+      <svg id="loginIconMoon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </svg>
+    </button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <script src="js/supabase.js"></script>
+  <script src="js/auth.js"></script>
+  <script>
+    /* ── Dark mode init ── */
+    (function() {
+      const saved = localStorage.getItem('ideaforma_theme');
+      const dark  = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (dark) document.documentElement.setAttribute('data-theme', 'dark');
+      document.getElementById('loginIconSun').style.display  = dark ? 'none'  : 'block';
+      document.getElementById('loginIconMoon').style.display = dark ? 'block' : 'none';
+    })();
+
+    document.getElementById('loginDarkToggle').addEventListener('click', function() {
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+      localStorage.setItem('ideaforma_theme', isDark ? 'light' : 'dark');
+      document.getElementById('loginIconSun').style.display  = isDark ? 'block' : 'none';
+      document.getElementById('loginIconMoon').style.display = isDark ? 'none'  : 'block';
+    });
+
+    /* ── Redirect si déjà connecté ── */
+    Auth.getSession().then(session => {
+      if (session) window.location.href = 'app.html';
+    });
+
+    /* ── Gestion des onglets ── */
+    const TABS = document.querySelectorAll('.auth-tab');
+    TABS.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        TABS.forEach(t => t.classList.toggle('active', t.dataset.tab === target));
+        document.getElementById('loginPanel').classList.toggle('active',  target === 'login');
+        document.getElementById('signupPanel').classList.toggle('active', target === 'signup');
+        document.getElementById('forgotPanel').classList.remove('active');
+        document.getElementById('authTabs').style.display = 'flex';
+        clearErrors();
+      });
+    });
+
+    function clearErrors() {
+      ['loginError','signupError','forgotError'].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.remove('visible');
+        el.textContent = '';
+      });
+    }
+
+    /* ── Formulaire : Se connecter ── */
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const email    = document.getElementById('loginEmail').value.trim();
+      const password = document.getElementById('loginPassword').value;
+      const errEl    = document.getElementById('loginError');
+      const btn      = document.getElementById('loginSubmitBtn');
+
+      errEl.classList.remove('visible');
+      btn.disabled    = true;
+      btn.textContent = 'Connexion…';
+
+      const { success, error } = await Auth.login(email, password);
+
+      if (success) {
+        window.location.href = 'app.html';
+      } else {
+        let msg = 'Identifiants incorrects.';
+        if (error && error.includes('Email not confirmed')) {
+          msg = 'Veuillez confirmer votre adresse email avant de vous connecter.';
+        } else if (error && error.includes('Invalid login credentials')) {
+          msg = 'Email ou mot de passe incorrect.';
+        }
+        errEl.textContent = msg;
+        errEl.classList.add('visible');
+        document.getElementById('loginPassword').value = '';
+        document.getElementById('loginPassword').focus();
+        btn.disabled    = false;
+        btn.textContent = 'Se connecter';
+      }
+    });
+
+    /* ── Formulaire : Créer un compte ── */
+    document.getElementById('signupForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const nom      = document.getElementById('signupNom').value.trim();
+      const email    = document.getElementById('signupEmail').value.trim();
+      const password = document.getElementById('signupPassword').value;
+      const confirm  = document.getElementById('signupConfirm').value;
+      const errEl    = document.getElementById('signupError');
+      const infoEl   = document.getElementById('signupInfo');
+      const btn      = document.getElementById('signupSubmitBtn');
+
+      errEl.classList.remove('visible');
+      infoEl.classList.remove('visible');
+
+      if (password.length < 8) {
+        errEl.textContent = 'Le mot de passe doit contenir au moins 8 caractères.';
+        errEl.classList.add('visible');
+        return;
+      }
+      if (password !== confirm) {
+        errEl.textContent = 'Les mots de passe ne correspondent pas.';
+        errEl.classList.add('visible');
+        document.getElementById('signupConfirm').value = '';
+        document.getElementById('signupConfirm').focus();
+        return;
+      }
+
+      btn.disabled    = true;
+      btn.textContent = 'Création en cours…';
+
+      const { success, error, needsConfirm } = await Auth.signup(email, password, nom);
+
+      if (success) {
+        if (needsConfirm) {
+          // Email de confirmation envoyé
+          document.getElementById('signupForm').style.display = 'none';
+          infoEl.innerHTML = `
+            <strong>Compte créé !</strong><br>
+            Un email de confirmation a été envoyé à <strong>${email}</strong>.<br>
+            Cliquez sur le lien dans l'email pour activer votre compte.
+          `;
+          infoEl.classList.add('visible');
+        } else {
+          // Pas de confirmation requise (ex: local dev) → redirection directe
+          window.location.href = 'app.html';
+        }
+      } else {
+        let msg = error || "Impossible de créer le compte.";
+        if (error && error.includes('already registered')) {
+          msg = 'Cette adresse email est déjà utilisée. Essayez de vous connecter.';
+        } else if (error && error.includes('Password should be at least')) {
+          msg = 'Le mot de passe doit contenir au moins 8 caractères.';
+        }
+        errEl.textContent = msg;
+        errEl.classList.add('visible');
+        btn.disabled    = false;
+        btn.textContent = 'Créer mon compte';
+      }
+    });
+
+    /* ── Mot de passe oublié (affichage) ── */
+    document.getElementById('forgotBtn').addEventListener('click', function() {
+      document.getElementById('authTabs').style.display    = 'none';
+      document.getElementById('loginPanel').classList.remove('active');
+      document.getElementById('signupPanel').classList.remove('active');
+      document.getElementById('forgotPanel').classList.add('active');
+      document.getElementById('forgotEmail').value = document.getElementById('loginEmail').value;
+    });
+
+    document.getElementById('backFromForgot').addEventListener('click', function() {
+      document.getElementById('forgotPanel').classList.remove('active');
+      document.getElementById('authTabs').style.display = 'flex';
+      document.getElementById('loginPanel').classList.add('active');
+      TABS.forEach(t => t.classList.toggle('active', t.dataset.tab === 'login'));
+    });
+
+    /* ── Formulaire : Mot de passe oublié ── */
+    document.getElementById('forgotForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const email  = document.getElementById('forgotEmail').value.trim();
+      const errEl  = document.getElementById('forgotError');
+      const infoEl = document.getElementById('forgotInfo');
+      const btn    = document.getElementById('forgotSubmitBtn');
+
+      errEl.classList.remove('visible');
+      infoEl.classList.remove('visible');
+      btn.disabled    = true;
+      btn.textContent = 'Envoi en cours…';
+
+      const { success, error } = await Auth.sendPasswordReset(email);
+
+      if (success) {
+        document.getElementById('forgotForm').style.display = 'none';
+        infoEl.innerHTML = `
+          <strong>Email envoyé !</strong><br>
+          Si l'adresse <strong>${email}</strong> correspond à un compte, vous recevrez un lien de réinitialisation dans quelques instants.
+        `;
+        infoEl.classList.add('visible');
+      } else {
+        errEl.textContent = error || "Erreur lors de l'envoi. Réessayez.";
+        errEl.classList.add('visible');
+        btn.disabled    = false;
+        btn.textContent = 'Envoyer le lien';
+      }
+    });
+
+    /* ── Effacer erreurs sur saisie ── */
+    document.querySelectorAll('.login-form input').forEach(input => {
+      input.addEventListener('input', clearErrors);
+    });
+  </script>
+</body>
+</html>
