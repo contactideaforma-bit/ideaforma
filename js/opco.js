@@ -25,6 +25,14 @@ const OpcoPage = {
         'Plan de développement des compétences : 15-25€/h selon accord de branche',
         'Formations > 10 000 € HT : accord préalable recommandé',
         'Alternance et Pro-A : circuit et financements séparés'
+      ],
+      plafonds:[
+        { type:'Plan de développement des compétences', taille:'TPE < 11 salariés', taux:'25 €/h', plafond:'1 500 € / formation', note:'Taux bonifiés selon accord de branche' },
+        { type:'Plan de développement des compétences', taille:'PME 11–49 salariés', taux:'18 €/h', plafond:'1 000 € / formation', note:'' },
+        { type:'Plan de développement des compétences', taille:'ETI / GE ≥ 50 salariés', taux:'15 €/h', plafond:'Sur devis', note:'Accord préalable recommandé > 10 000 €' },
+        { type:'Pro-A (reconversion / promotion)', taille:'Tous effectifs', taux:'Jusqu\'à 30 €/h', plafond:'Selon accord de branche', note:'Circuit et dossier spécifiques' },
+        { type:'Formations numérique & RSE (prioritaires)', taille:'TPE < 11 salariés', taux:'25 €/h', plafond:'2 000 € / formation', note:'Enveloppe dédiée 2024-2025' },
+        { type:'Alternance / Apprentissage', taille:'Tous effectifs', taux:'NPEC branche', plafond:'Selon diplôme préparé', note:'Circuit dédié — conseillers spécialisés' }
       ]
     },
     opco_mobilite: {
@@ -49,6 +57,14 @@ const OpcoPage = {
         'FCO Marchandises/Voyageurs : prise en charge jusqu\'à 300€/jour/stagiaire',
         'Formations > 5 000 € : accord préalable obligatoire avant tout démarrage',
         'Pro-A et alternance : circuits dédiés avec conseillers spécialisés'
+      ],
+      plafonds:[
+        { type:'FCO Marchandises (réglementaire)', taille:'Tous effectifs', taux:'300 €/j/stagiaire', plafond:'300 €/j/stagiaire', note:'Formation obligatoire — prise en charge prioritaire' },
+        { type:'FCO Voyageurs (réglementaire)', taille:'Tous effectifs', taux:'300 €/j/stagiaire', plafond:'300 €/j/stagiaire', note:'Formation obligatoire — prise en charge prioritaire' },
+        { type:'Plan de développement des compétences', taille:'TPE < 50 salariés', taux:'30–40 €/h', plafond:'Fonds TPE-PME dédié', note:'Délai dépôt : 15 j avant démarrage' },
+        { type:'Plan de développement des compétences', taille:'PME 50–249 salariés', taux:'25–30 €/h', plafond:'Sur enveloppe annuelle', note:'Accord préalable obligatoire > 5 000 €' },
+        { type:'Éco-conduite / Loi LOM', taille:'Tous effectifs', taux:'Financement majoré', plafond:'Selon dossier', note:'Formations très soutenues depuis 2023' },
+        { type:'Pro-A & Alternance', taille:'Tous effectifs', taux:'NPEC CPNE', plafond:'Selon diplôme / CQP', note:'Circuit dédié — conseillers spécialisés' }
       ]
     },
     akto: {
@@ -73,6 +89,14 @@ const OpcoPage = {
         'PME 11-49 salariés : plan de développement standard 15-25€/h',
         'Formations certifiantes (HACCP, CQP) : financements bonifiés',
         'Alternance : prise en charge selon NPEC défini par la branche'
+      ],
+      plafonds:[
+        { type:'Plan de développement des compétences', taille:'TPE < 11 salariés', taux:'35 €/h', plafond:'Enveloppe dédiée TPE', note:'Taux les plus élevés — à prioriser' },
+        { type:'Plan de développement des compétences', taille:'PME 11–49 salariés', taux:'15–25 €/h', plafond:'1 200 € / formation', note:'' },
+        { type:'Plan de développement des compétences', taille:'≥ 50 salariés', taux:'15 €/h', plafond:'Sur enveloppe annuelle', note:'' },
+        { type:'HACCP / Hygiène alimentaire (certifiant)', taille:'Tous effectifs', taux:'Financement bonifié', plafond:'Jusqu\'à 100% du coût', note:'Formations certifiantes prioritaires 2024-2025' },
+        { type:'CQP (Certificat de qualification professionnelle)', taille:'Tous effectifs', taux:'NPEC branche', plafond:'Selon CQP visé', note:'Circuit AKTO Connect — dématérialisé' },
+        { type:'Alternance / Pro-A', taille:'Tous effectifs', taux:'NPEC branche', plafond:'Selon diplôme préparé', note:'Circuit dédié — distinct du plan de développement' }
       ]
     },
     constructys: {
@@ -97,6 +121,14 @@ const OpcoPage = {
         'Formations sécurité (CACES, habilitations) : jusqu\'à 28€/h',
         'Plan de développement : 12-20€/h selon accord de branche BTP',
         'Alternance BTP : prise en charge NPEC variable selon diplôme préparé'
+      ],
+      plafonds:[
+        { type:'Formations sécurité réglementaires (CACES, habilitations, travail en hauteur)', taille:'Tous effectifs', taux:'Jusqu\'à 28 €/h', plafond:'Thèmes prioritaires Constructys', note:'Toujours bien financées — à aligner sur thèmes annuels' },
+        { type:'Plan de développement des compétences', taille:'TPE < 10 salariés', taux:'20–28 €/h', plafond:'Fonds mutualisés BTP', note:'KBIS < 3 mois obligatoire' },
+        { type:'Plan de développement des compétences', taille:'PME 10–49 salariés', taux:'14–20 €/h', plafond:'Sur enveloppe annuelle', note:'Dépôt 1 mois avant démarrage' },
+        { type:'Plan de développement des compétences', taille:'≥ 50 salariés', taux:'12–15 €/h', plafond:'Sur accord préalable', note:'' },
+        { type:'Habilitations électriques (B0, H0, BR…)', taille:'Tous effectifs', taux:'Jusqu\'à 25 €/h', plafond:'Thèmes prioritaires', note:'Vérifier liste thèmes prioritaires annuels' },
+        { type:'Alternance BTP', taille:'Tous effectifs', taux:'NPEC branche', plafond:'Selon diplôme préparé', note:'Chaque entreprise = dossier séparé' }
       ]
     },
     opco_ep: {
@@ -121,6 +153,14 @@ const OpcoPage = {
         'TPE < 11 salariés : taux bonifiés selon accord de branche',
         'BP Coiffure, CAP Esthétique, CQP : NPEC défini par branche professionnelle',
         'Formations > 3 000 € : accord préalable recommandé pour éviter les refus'
+      ],
+      plafonds:[
+        { type:'Plan de développement des compétences', taille:'Micro (1–2 salariés)', taux:'Fonds TPE OPCO EP', plafond:'Enveloppe dédiée', note:'Règles spécifiques — contacter conseiller avant dossier' },
+        { type:'Plan de développement des compétences', taille:'TPE < 11 salariés', taux:'25 €/h', plafond:'Taux bonifiés branche', note:'Vérifier adhésion OPCO EP avant tout dossier' },
+        { type:'Plan de développement des compétences', taille:'PME 11–49 salariés', taux:'10–18 €/h', plafond:'1 000 € / formation', note:'' },
+        { type:'BP Coiffure / CAP Esthétique', taille:'Tous effectifs', taux:'NPEC branche', plafond:'Selon diplôme préparé', note:'Prioriser ces intitulés dans les dossiers' },
+        { type:'CQP sectoriels (coiffure, esthétique…)', taille:'Tous effectifs', taux:'NPEC branche', plafond:'Selon CQP visé', note:'Financements bonifiés — circuits dédiés' },
+        { type:'Hygiène & désinfection', taille:'Tous effectifs', taux:'Financement bonifié', plafond:'Jusqu\'à 100% du coût', note:'Toujours bien financé en coiffure/esthétique' }
       ]
     }
   },
@@ -1030,7 +1070,59 @@ const OpcoPage = {
      FICHE OPCO
   ══════════════════════════════════════════════ */
   _renderProcessTab(opco) {
-    const cfg = this.CONFIG[opco];
+    const cfg      = this.CONFIG[opco];
+    const notesKey = `opco_notes_${opco}`;
+    const savedNotes = localStorage.getItem(notesKey) || '';
+
+    /* ── Tableau de plafonds ── */
+    const plafondSection = cfg.plafonds?.length ? `
+      <div class="process-section">
+        <div class="process-section-header">
+          <span class="process-section-icon">💶</span>
+          <div class="process-section-title">Tableau des plafonds de prise en charge</div>
+        </div>
+        <div class="process-section-body" style="padding:0;">
+          <div class="plafonds-table-wrap">
+            <table class="plafonds-table">
+              <thead>
+                <tr>
+                  <th>Type de formation</th>
+                  <th>Taille entreprise</th>
+                  <th>Taux horaire</th>
+                  <th>Plafond / engagement</th>
+                  <th>Remarque</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${cfg.plafonds.map(p => `
+                  <tr>
+                    <td>${p.type}</td>
+                    <td>${p.taille}</td>
+                    <td><span class="plafonds-taux">${p.taux}</span></td>
+                    <td><span class="plafonds-max">${p.plafond}</span></td>
+                    <td>${p.note ? `<span class="plafonds-note">${p.note}</span>` : '—'}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div style="padding:10px 16px;font-size:11.5px;color:var(--text-muted);">
+            ℹ️ Plafonds indicatifs 2024-2025 — se référer aux accords de branche en vigueur et confirmer avec votre conseiller OPCO.
+          </div>
+        </div>
+      </div>` : `
+      <div class="process-section">
+        <div class="process-section-header"><span class="process-section-icon">💶</span>
+          <div class="process-section-title">Seuils & plafonds de prise en charge</div></div>
+        <div class="process-section-body">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;">
+            ${cfg.thresholds.map(t => `
+              <div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12.5px;color:var(--text);">
+                ${t}
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>`;
+
     document.getElementById('tabContent').innerHTML = `
       <div class="process-sheet">
 
@@ -1069,19 +1161,8 @@ const OpcoPage = {
           </div>
         </div>
 
-        <!-- ── Seuils et plafonds ── -->
-        <div class="process-section">
-          <div class="process-section-header"><span class="process-section-icon">💶</span>
-            <div class="process-section-title">Seuils & plafonds de prise en charge</div></div>
-          <div class="process-section-body">
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;">
-              ${cfg.thresholds.map(t => `
-                <div style="padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:12.5px;color:var(--text);">
-                  ${t}
-                </div>`).join('')}
-            </div>
-          </div>
-        </div>
+        <!-- ── Tableau de plafonds ── -->
+        ${plafondSection}
 
         <!-- ── Documents requis ── -->
         <div class="process-section">
@@ -1123,7 +1204,43 @@ const OpcoPage = {
           </div>
         </div>
 
+        <!-- ── Notes internes ── -->
+        <div class="process-section">
+          <div class="process-section-header">
+            <span class="process-section-icon">📝</span>
+            <div class="process-section-title">Notes internes — ${cfg.label}</div>
+          </div>
+          <div class="process-section-body">
+            <div class="opco-notes-wrap">
+              <textarea
+                class="opco-notes-textarea"
+                id="opcoNotesArea"
+                placeholder="Vos notes spécifiques à cet OPCO : contact habituel, numéro d'adhérent, accords particuliers, historique des dossiers…"
+              >${savedNotes ? savedNotes.replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''}</textarea>
+              <div class="opco-notes-footer">
+                <span class="opco-notes-hint">Sauvegarde automatique — notes conservées localement</span>
+                <span class="opco-notes-saved" id="opcoNotesSaved">✓ Sauvegardé</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>`;
+
+    /* ── Sauvegarde automatique des notes ── */
+    let saveTimer = null;
+    const textarea = document.getElementById('opcoNotesArea');
+    const savedLabel = document.getElementById('opcoNotesSaved');
+
+    textarea?.addEventListener('input', () => {
+      clearTimeout(saveTimer);
+      savedLabel?.classList.remove('show');
+      saveTimer = setTimeout(() => {
+        localStorage.setItem(notesKey, textarea.value);
+        savedLabel?.classList.add('show');
+        setTimeout(() => savedLabel?.classList.remove('show'), 2000);
+      }, 600);
+    });
   }
 };
 

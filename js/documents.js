@@ -129,8 +129,7 @@ const Documents = {
     if (y > 230) { doc.addPage(); y = 20; }
     this._signatures(doc, y, of, 'L\'Organisme de Formation', 'L\'Entreprise');
     this._footer(doc, of);
-    doc.save(`Devis_${num}_${this._slug(dossier.companyName)}.pdf`);
-    Toast.show(`Devis ${num} téléchargé ✓`, 'success');
+    this._showPreview(doc, dossier, of, 'DEVIS', `Devis_${num}_${this._slug(dossier.companyName)}`);
   },
 
   /* ══════════════════════════════════════════════
@@ -221,8 +220,7 @@ const Documents = {
     doc.text(`À ________________, le ________________`, 105, y, { align:'center' }); y += 10;
     this._signatures(doc, y, of, `L\'Organisme de Formation\n${of.nom}`, `L\'Entreprise\n${dossier.companyName}`);
     this._footer(doc, of);
-    doc.save(`Convention_${num}_${this._slug(dossier.companyName)}.pdf`);
-    Toast.show(`Convention ${num} téléchargée ✓`, 'success');
+    this._showPreview(doc, dossier, of, 'CONVENTION', `Convention_${num}_${this._slug(dossier.companyName)}`);
   },
 
   /* ══════════════════════════════════════════════
@@ -307,8 +305,7 @@ const Documents = {
       'Notre organisme est attentif à l\'accueil des personnes en situation de handicap. Contactez-nous pour tout aménagement spécifique.');
 
     this._footer(doc, of);
-    doc.save(`Programme_${num}_${this._slug(dossier.companyName)}.pdf`);
-    Toast.show(`Programme pédagogique ${num} téléchargé ✓`, 'success');
+    this._showPreview(doc, dossier, of, 'PROGRAMME', `Programme_${num}_${this._slug(dossier.companyName)}`);
   },
 
   /* ══════════════════════════════════════════════
@@ -386,8 +383,7 @@ const Documents = {
       doc.text(`${of.nom}${of.siret ? ' · SIRET : '+of.siret : ''}${of.da ? ' · N° DA : '+of.da : ''}`, 105, 287, { align:'center' });
     });
 
-    doc.save(`Presences_${this._slug(dossier.companyName)}.pdf`);
-    Toast.show(`${jours.length} feuille(s) de présence téléchargée(s) ✓`, 'success');
+    this._showPreview(doc, dossier, of, 'PRESENCES', `Presences_${this._slug(dossier.companyName)}`);
   },
 
   /* ══════════════════════════════════════════════
@@ -459,8 +455,7 @@ const Documents = {
     ].forEach(l => { doc.text(l, 15, y); y += 4.5; });
 
     this._footer(doc, of);
-    doc.save(`Facture_${num}_${this._slug(dossier.companyName)}.pdf`);
-    Toast.show(`Facture ${num} téléchargée ✓`, 'success');
+    this._showPreview(doc, dossier, of, 'FACTURE', `Facture_${num}_${this._slug(dossier.companyName)}`);
   },
 
   /* ══════════════════════════════════════════════
@@ -721,6 +716,307 @@ const Documents = {
       doc.text(info,  105, 287, { align:'center' });
       doc.text(`${i}/${n}`, 195, 287, { align:'right' });
     }
+  },
+
+  /* ══════════════════════════════════════════════
+     PRÉVISUALISATION + EXPORT WORD/PAGES
+  ══════════════════════════════════════════════ */
+
+  /** Ouvre la modal de prévisualisation avec choix du format */
+  _showPreview(doc, dossier, of, docType, filename) {
+    const blob  = doc.output('blob');
+    const url   = URL.createObjectURL(blob);
+    const title = { DEVIS:'Devis', CONVENTION:'Convention de formation',
+                    PROGRAMME:'Programme pédagogique', FACTURE:'Facture',
+                    PRESENCES:'Feuilles de présence' }[docType] || docType;
+
+    const body = `
+      <div class="pdf-preview-wrap">
+        <iframe
+          id="pdfPreviewIframe"
+          src="${url}#toolbar=1&navpanes=0&view=FitH"
+          class="pdf-preview-frame"
+          title="Aperçu ${title}"
+        ></iframe>
+        <div class="pdf-preview-fallback" id="pdfFallback" style="display:none;">
+          <div style="text-align:center;padding:20px;">
+            <div style="font-size:42px;margin-bottom:12px;">📄</div>
+            <div style="font-weight:600;color:var(--navy);margin-bottom:8px;">Aperçu non disponible</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+              Votre navigateur ne peut pas afficher le PDF directement.<br>
+              Téléchargez-le ou ouvrez-le dans un nouvel onglet.
+            </div>
+            <a href="${url}" target="_blank" rel="noopener" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:6px;">
+              🔗 Ouvrir dans un nouvel onglet
+            </a>
+          </div>
+        </div>
+
+        <div class="pdf-dl-bar">
+          <span class="pdf-dl-bar-label">Télécharger :</span>
+          <button class="pdf-dl-btn pdf-dl-btn-pdf" id="dlPdf">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            PDF
+          </button>
+          <button class="pdf-dl-btn pdf-dl-btn-doc" id="dlDoc">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            Word / Pages (.doc)
+          </button>
+          <button class="pdf-dl-btn pdf-dl-btn-close" id="dlClose">
+            Fermer
+          </button>
+        </div>
+      </div>`;
+
+    Modal.open(`👁 Aperçu — ${title}`, body, [], 'modal-preview');
+
+    setTimeout(() => {
+      // Détection iframe invalide → fallback
+      const iframe = document.getElementById('pdfPreviewIframe');
+      if (iframe) {
+        iframe.addEventListener('error', () => {
+          iframe.style.display = 'none';
+          const fb = document.getElementById('pdfFallback');
+          if (fb) { fb.style.display = 'flex'; }
+        });
+        // Safari : l'iframe charge mais reste vide → détection load timeout
+        const checkTimer = setTimeout(() => {
+          try {
+            if (!iframe.contentDocument && !iframe.contentWindow?.document?.body?.childNodes?.length) {
+              iframe.style.display = 'none';
+              const fb = document.getElementById('pdfFallback');
+              if (fb) { fb.style.display = 'flex'; }
+            }
+          } catch {}
+        }, 2500);
+        iframe.addEventListener('load', () => clearTimeout(checkTimer));
+      }
+
+      // Boutons téléchargement
+      document.getElementById('dlPdf')?.addEventListener('click', () => {
+        doc.save(filename + '.pdf');
+        Toast.show('PDF téléchargé ✓', 'success');
+      });
+      document.getElementById('dlDoc')?.addEventListener('click', () => {
+        this._downloadDoc(dossier, of, docType, filename);
+      });
+      document.getElementById('dlClose')?.addEventListener('click', () => {
+        URL.revokeObjectURL(url);
+        Modal.close();
+      });
+    }, 80);
+  },
+
+  /** Génère et télécharge un fichier .doc (HTML Word) */
+  _downloadDoc(dossier, of, docType, filename) {
+    const colorHex = this._rgbToHex(of.color);
+    const color2Hex = this._rgbToHex(of.color2);
+    const opcoLabel = OpcoPage.CONFIG[dossier.opco]?.label || dossier.opco;
+    const duree     = this._calculerDuree(dossier.trainingDates);
+    const today     = new Date().toLocaleDateString('fr-FR');
+    const due       = new Date(); due.setDate(due.getDate()+30);
+    const dueStr    = due.toLocaleDateString('fr-FR');
+
+    const datesStr = (dossier.trainingDates||[]).filter(d => d.start)
+      .map(d => {
+        const s = new Date(d.start+'T00:00').toLocaleDateString('fr-FR');
+        const e = d.end ? new Date(d.end+'T00:00').toLocaleDateString('fr-FR') : null;
+        return e && e!==s ? `du ${s} au ${e}` : `le ${s}`;
+      }).join(', ') || 'À définir';
+
+    const logoTag = of.logo ? `<img src="${of.logo}" style="max-height:55px;max-width:140px;vertical-align:middle;" alt="Logo">` : '';
+    const ofInfoHtml = `<strong>${of.nom}</strong>${of.siret ? ` — SIRET : ${of.siret}` : ''}${of.da ? ` — N° DA : ${of.da}` : ''}`;
+    const clientInfoHtml = `<strong>${dossier.companyName}</strong>${dossier.siret ? ` — SIRET : ${dossier.siret}` : ''}${dossier.nomGerant ? `<br>Gérant : ${dossier.nomGerant}` : ''}${dossier.address ? `<br>${dossier.address}` : ''}`;
+    const traineesHtml = (dossier.trainees||[]).length
+      ? '<ol>' + dossier.trainees.map(t => `<li>${t.firstName} ${t.lastName}</li>`).join('') + '</ol>'
+      : '<p>À préciser</p>';
+
+    const css = `
+      body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; margin: 2.5cm; color: #1e293b; line-height: 1.5; }
+      h1   { font-size: 18pt; color: ${colorHex}; border-bottom: 2pt solid ${colorHex}; padding-bottom: 6pt; margin-bottom: 4pt; }
+      h2   { font-size: 11pt; color: ${colorHex}; background: ${color2Hex}18; border-left: 3pt solid ${color2Hex}; padding: 5pt 8pt; margin: 14pt 0 6pt 0; }
+      h3   { font-size: 10pt; color: #475569; margin: 10pt 0 4pt 0; }
+      table { border-collapse: collapse; width: 100%; margin: 8pt 0; font-size: 10pt; }
+      th   { background: ${colorHex}15; color: ${colorHex}; font-weight: bold; padding: 7pt 8pt; border: 1pt solid #e2e8f0; text-align: left; }
+      td   { padding: 5pt 8pt; border: 1pt solid #e2e8f0; vertical-align: top; }
+      tr:nth-child(even) td { background: #f8fafc; }
+      .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20pt; }
+      .of-info { font-size: 9pt; color: #64748b; }
+      .parties { display: flex; gap: 20pt; margin: 12pt 0; }
+      .party-block { flex: 1; padding: 8pt; border: 1pt solid #e2e8f0; border-radius: 4pt; font-size: 9.5pt; }
+      .party-label { font-size: 8pt; color: #94a3b8; text-transform: uppercase; font-weight: bold; margin-bottom: 4pt; }
+      .total-box { text-align: right; margin: 12pt 0; border-top: 2pt solid ${colorHex}; padding-top: 8pt; }
+      .total-line { font-size: 10pt; color: #64748b; margin: 3pt 0; }
+      .total-final { font-size: 14pt; font-weight: bold; color: ${colorHex}; }
+      .sig-section { margin-top: 30pt; border-top: 1pt solid #e2e8f0; padding-top: 16pt; }
+      .sig-grid { display: flex; gap: 20pt; }
+      .sig-box { flex: 1; }
+      .sig-line { border-top: 1pt solid #ccc; height: 60pt; margin-top: 8pt; }
+      .mention { font-size: 8pt; color: #94a3b8; margin-top: 16pt; border-top: 1pt solid #f1f5f9; padding-top: 8pt; }
+    `;
+
+    let body = '';
+
+    if (docType === 'DEVIS') {
+      body = `
+        <div class="header">
+          <div>${logoTag}<br><span class="of-info">${ofInfoHtml}</span></div>
+          <div style="text-align:right;"><h1 style="border:none;margin:0;">DEVIS</h1>
+            <div style="font-size:9pt;color:#64748b;">Date : ${today} — Valable 30 jours</div></div>
+        </div>
+        <div class="parties">
+          <div class="party-block"><div class="party-label">Émetteur</div>${ofInfoHtml}</div>
+          <div class="party-block"><div class="party-label">Destinataire</div>${clientInfoHtml}</div>
+        </div>
+        <h2>Formation</h2>
+        <table><tr><th>Intitulé</th><th>Durée</th><th>Participants</th><th>Prix HT</th></tr>
+          <tr><td>${dossier.trainingSubject}</td><td>${duree}</td>
+              <td>${(dossier.trainees||[]).length || '—'} pers.</td>
+              <td><strong>${this._fmtEuro(dossier.price)}</strong></td></tr></table>
+        <div class="total-box">
+          <div class="total-line">Montant HT : ${this._fmtEuro(dossier.price)}</div>
+          <div class="total-line">TVA : Exonéré (art. 261-4-4° CGI)</div>
+          <div class="total-final">Total à payer : ${this._fmtEuro(dossier.price)}</div>
+        </div>
+        ${(dossier.trainees||[]).length ? `<h2>Participants</h2>${traineesHtml}` : ''}
+        ${datesStr !== 'À définir' ? `<h2>Dates de formation</h2><p>${datesStr}</p>` : ''}
+        <h2>Conditions</h2>
+        <ul>
+          <li>Devis valable 30 jours.</li>
+          <li>Règlement à 30 jours réception de facture.</li>
+          <li>Formation exonérée de TVA (art. 261-4-4° CGI).</li>
+          <li>Organisme certifié Qualiopi${of.qualiopi ? ` n° ${of.qualiopi}` : ''}.</li>
+        </ul>
+        <div class="sig-section">
+          <p style="text-align:center;font-style:italic;">À ___________________,&nbsp;&nbsp; le ___________________</p>
+          <div class="sig-grid">
+            <div class="sig-box"><strong>L'Organisme de Formation</strong><br>${of.nom}<br>Signature et cachet :<div class="sig-line"></div></div>
+            <div class="sig-box"><strong>L'Entreprise</strong><br>${dossier.companyName}<br>Signature et cachet :<div class="sig-line"></div></div>
+          </div>
+        </div>`;
+    }
+
+    else if (docType === 'CONVENTION') {
+      body = `
+        <div class="header">
+          <div>${logoTag}</div>
+          <div style="text-align:right;"><h1 style="border:none;margin:0;">CONVENTION DE FORMATION</h1>
+            <div style="font-size:8pt;color:#64748b;">Établie conformément aux art. L.6353-1 et suivants du Code du Travail</div>
+            <div style="font-size:9pt;color:#64748b;">Date : ${today}</div></div>
+        </div>
+        <div class="parties">
+          <div class="party-block"><div class="party-label">Organisme de formation</div>${ofInfoHtml}
+            ${of.adresse ? `<br>${of.adresse}` : ''}</div>
+          <div class="party-block"><div class="party-label">Entreprise</div>${clientInfoHtml}
+            ${dossier.idcc ? `<br>IDCC : ${dossier.idcc}` : ''}</div>
+        </div>
+        <h2>Article 1 — Objet</h2>
+        <p>La présente convention porte sur : <strong>« ${dossier.trainingSubject} »</strong></p>
+        <p>Financement OPCO : ${opcoLabel}</p>
+        <h2>Article 2 — Programme et modalités</h2>
+        <table>
+          <tr><th>Durée</th><td>${duree}</td></tr>
+          <tr><th>Dates</th><td>${datesStr}</td></tr>
+          <tr><th>Modalité</th><td>${{presentiel:'Présentiel',distanciel:'Distanciel',mixte:'Mixte'}[dossier.modalite]||'Présentiel'}</td></tr>
+        </table>
+        ${dossier.objectifs ? `<h3>Objectifs pédagogiques</h3><p style="white-space:pre-line;">${dossier.objectifs}</p>` : ''}
+        <h2>Article 3 — Participants</h2>${traineesHtml}
+        <h2>Article 4 — Conditions financières</h2>
+        <p>Coût total HT : <strong>${this._fmtEuro(dossier.price)}</strong></p>
+        <p>Exonéré de TVA (art. 261-4-4° CGI). Règlement à 30 jours réception de facture.</p>
+        <div class="sig-section">
+          <p style="text-align:center;font-style:italic;">Fait en deux exemplaires &nbsp;—&nbsp; À ___________________,&nbsp; le ___________________</p>
+          <div class="sig-grid">
+            <div class="sig-box"><strong>L'Organisme de Formation</strong><br>${of.nom}<br>Signature et cachet :<div class="sig-line"></div></div>
+            <div class="sig-box"><strong>L'Entreprise</strong><br>${dossier.companyName}<br>Signature et cachet :<div class="sig-line"></div></div>
+          </div>
+        </div>`;
+    }
+
+    else if (docType === 'PROGRAMME') {
+      body = `
+        <div class="header">
+          <div>${logoTag}</div>
+          <div style="text-align:right;"><h1 style="border:none;margin:0;">PROGRAMME PÉDAGOGIQUE</h1>
+            <div style="font-size:9pt;color:#64748b;">Date : ${today}</div></div>
+        </div>
+        <h2 style="font-size:14pt;text-align:center;border:none;background:none;">${dossier.trainingSubject}</h2>
+        <p style="text-align:center;color:#64748b;">${opcoLabel} &nbsp;·&nbsp; ${duree} &nbsp;·&nbsp; ${{presentiel:'Présentiel',distanciel:'Distanciel',mixte:'Mixte'}[dossier.modalite]||'Présentiel'}</p>
+        <h2>Informations générales</h2>
+        <table>
+          <tr><th>Organisme de formation</th><td>${of.nom}${of.da ? ` — N° DA : ${of.da}` : ''}</td></tr>
+          <tr><th>Entreprise</th><td>${clientInfoHtml}</td></tr>
+          <tr><th>OPCO</th><td>${opcoLabel}</td></tr>
+          <tr><th>Durée</th><td>${duree}</td></tr>
+          <tr><th>Dates</th><td>${datesStr}</td></tr>
+          <tr><th>Tarif HT</th><td>${this._fmtEuro(dossier.price)}</td></tr>
+        </table>
+        <h2>Public visé</h2>${traineesHtml}
+        <h2>Prérequis</h2><p>${dossier.prerequis || 'Aucun prérequis particulier.'}</p>
+        <h2>Objectifs pédagogiques</h2>
+        <p style="white-space:pre-line;">${dossier.objectifs || 'À l\'issue de la formation, les participants auront acquis les compétences visées.'}</p>
+        <h2>Programme détaillé</h2>
+        <p style="white-space:pre-line;">${dossier.contenu || 'Le programme détaillé est joint à la convention de formation.'}</p>
+        <h2>Méthodes pédagogiques</h2>
+        <p>Apports théoriques et pratiques, exercices d'application, mises en situation professionnelle, échanges et retours d'expérience.</p>
+        <h2>Modalités d'évaluation</h2>
+        <p>${dossier.evaluation || 'Évaluation formative continue. Bilan de compétences en fin de formation.'}</p>
+        <div class="mention">Organisme certifié Qualiopi${of.qualiopi ? ` n° ${of.qualiopi}` : ''}. Document établi conformément à l'art. L.6353-1 du Code du Travail.</div>`;
+    }
+
+    else if (docType === 'FACTURE') {
+      body = `
+        <div class="header">
+          <div>${logoTag}<br><span class="of-info">${ofInfoHtml}</span></div>
+          <div style="text-align:right;"><h1 style="border:none;margin:0;">FACTURE</h1>
+            <div style="font-size:9pt;color:#64748b;">Date : ${today} — Échéance : ${dueStr}</div></div>
+        </div>
+        <div class="parties">
+          <div class="party-block"><div class="party-label">Émetteur</div>${ofInfoHtml}</div>
+          <div class="party-block"><div class="party-label">Destinataire — ${opcoLabel}</div>${clientInfoHtml}</div>
+        </div>
+        <h2>Détail</h2>
+        <table><tr><th>Désignation</th><th>Dates</th><th>Durée</th><th>Pers.</th><th>Montant HT</th></tr>
+          <tr><td>${dossier.trainingSubject}</td><td>${datesStr}</td><td>${duree}</td>
+              <td>${(dossier.trainees||[]).length||'—'}</td>
+              <td><strong>${this._fmtEuro(dossier.price)}</strong></td></tr></table>
+        <div class="total-box">
+          <div class="total-line">Montant HT : ${this._fmtEuro(dossier.price)}</div>
+          <div class="total-line">TVA : Exonéré (art. 261-4-4° CGI)</div>
+          <div class="total-final">Total à payer : ${this._fmtEuro(dossier.price)}</div>
+        </div>
+        ${(dossier.trainees||[]).length ? `<h2>Participants formés</h2>${traineesHtml}` : ''}
+        <h2>Conditions de règlement</h2>
+        <ul>
+          <li>Échéance : ${dueStr}</li>
+          <li>Modalité : Virement bancaire.</li>
+          <li>Pénalités de retard : taux légal × 3 — Indemnité forfaitaire : 40 €.</li>
+          <li>Exonéré de TVA — Art. 261-4-4° CGI.</li>
+        </ul>`;
+    }
+
+    else {
+      body = `<h1>Document de formation</h1><p>${dossier.trainingSubject} — ${dossier.companyName}</p>`;
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${css}</style></head><body>${body}</body></html>`;
+    const b    = new Blob([html], { type: 'application/msword;charset=utf-8' });
+    const a    = Object.assign(document.createElement('a'), { href: URL.createObjectURL(b), download: filename + '.doc' });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    Toast.show('Document Word/Pages téléchargé ✓', 'success');
+  },
+
+  /** Hex depuis RGB array */
+  _rgbToHex(rgb) {
+    if (!rgb) return '#1E2D4B';
+    return '#' + rgb.map(v => v.toString(16).padStart(2,'0')).join('');
   },
 
   /* ══════════════════════════════════════════════
