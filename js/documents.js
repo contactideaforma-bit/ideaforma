@@ -20,6 +20,9 @@ const Documents = {
   async _getOFProfile() {
     try {
       const p = await DataStore.getProfile();
+      // Couleur primaire → convertir hex en RGB
+      const hex = p?.couleur_primaire || '#1E2D4B';
+      const rgb = this._hexToRgb(hex);
       return {
         nom:      p?.organisme       || p?.nom || 'IDEAFORMA',
         email:    p?.email           || '',
@@ -27,11 +30,20 @@ const Documents = {
         adresse:  p?.adresse         || '',
         tel:      p?.telephone       || '',
         da:       p?.numero_da       || '',
-        qualiopi: p?.numero_qualiopi || ''
+        qualiopi: p?.numero_qualiopi || '',
+        logo:     p?.logo_base64     || null,
+        color:    rgb
       };
     } catch {
-      return { nom:'IDEAFORMA', email:'', siret:'', adresse:'', tel:'', da:'', qualiopi:'' };
+      return { nom:'IDEAFORMA', email:'', siret:'', adresse:'', tel:'', da:'', qualiopi:'', logo:null, color:[30,45,75] };
     }
+  },
+
+  _hexToRgb(hex) {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return isNaN(r) ? [30,45,75] : [r,g,b];
   },
 
   /* ══════════════════════════════════════════════
@@ -244,6 +256,135 @@ const Documents = {
   },
 
   /* ══════════════════════════════════════════════
+     PROGRAMME PÉDAGOGIQUE
+  ══════════════════════════════════════════════ */
+  async genererProgramme(dossier) {
+    const { jsPDF } = window.jspdf;
+    const doc       = new jsPDF({ unit:'mm', format:'a4' });
+    const of        = await this._getOFProfile();
+    const num       = this._docNum('PROG');
+    const today     = new Date().toLocaleDateString('fr-FR');
+    const opcoLabel = OpcoPage.CONFIG[dossier.opco]?.label || dossier.opco;
+    const duree     = this._calculerDuree(dossier.trainingDates);
+    const color     = of.color || this.NAVY;
+    const modaliteLabel = { presentiel:'Présentiel', distanciel:'Distanciel', mixte:'Mixte (présentiel + distanciel)' };
+
+    this._header(doc, of, 'PROGRAMME PÉDAGOGIQUE', num, today);
+
+    let y = 38;
+
+    // Titre formation
+    doc.setFillColor(245, 247, 252);
+    doc.roundedRect(15, y, 180, 18, 2, 2, 'F');
+    doc.setFontSize(13).setFont(undefined,'bold').setTextColor(...color);
+    doc.text(dossier.trainingSubject, 105, y + 7, { align:'center' });
+    doc.setFontSize(9).setFont(undefined,'normal').setTextColor(...this.GRAY);
+    doc.text(`${opcoLabel}  •  ${duree}  •  ${modaliteLabel[dossier.modalite]||dossier.modalite||'Présentiel'}`, 105, y + 13, { align:'center' });
+    y += 24;
+
+    // ── Bloc informations générales ──
+    y = this._progSection(doc, y, color, '📋 Informations générales', [
+      ['Organisme de formation', of.nom + (of.da ? ` (N° DA : ${of.da})` : '')],
+      ['Entreprise commanditaire', dossier.companyName + (dossier.siret ? ` — SIRET : ${dossier.siret}` : '')],
+      ['Responsable / Gérant',    dossier.nomGerant   || 'À préciser'],
+      ['Convention collective',   dossier.idcc ? `IDCC ${dossier.idcc}` : 'À préciser'],
+      ['OPCO',                    opcoLabel],
+      ['Durée totale',            duree],
+      ['Modalité',                modaliteLabel[dossier.modalite] || 'Présentiel'],
+      ['Dates', (dossier.trainingDates||[]).filter(d => d.start).map(d => {
+        const s = new Date(d.start+'T00:00').toLocaleDateString('fr-FR');
+        const e = d.end ? new Date(d.end+'T00:00').toLocaleDateString('fr-FR') : null;
+        return e && e!==s ? `du ${s} au ${e}` : `le ${s}`;
+      }).join(', ') || 'À définir'],
+      ['Tarif HT',                this._fmtEuro(dossier.price)],
+      ['Certification Qualiopi',  of.qualiopi ? `N° ${of.qualiopi}` : 'Oui'],
+    ]);
+
+    // ── Public visé & prérequis ──
+    if (y > 220) { doc.addPage(); y = 20; }
+    const publicVise = (dossier.trainees||[]).length
+      ? (dossier.trainees||[]).map(t => `${t.firstName} ${t.lastName}`).join(', ')
+      : 'Salariés de l\'entreprise';
+    y = this._progTextBlock(doc, y, color, '👥 Public visé', publicVise);
+    y = this._progTextBlock(doc, y, color, '✅ Prérequis', dossier.prerequis || 'Aucun prérequis particulier.');
+
+    // ── Objectifs ──
+    if (y > 220) { doc.addPage(); y = 20; }
+    y = this._progTextBlock(doc, y, color, '🎯 Objectifs pédagogiques',
+      dossier.objectifs || 'À l\'issue de la formation, les participants seront capables de maîtriser les compétences visées.');
+
+    // ── Programme ──
+    if (y > 200) { doc.addPage(); y = 20; }
+    y = this._progTextBlock(doc, y, color, '📚 Programme détaillé',
+      dossier.contenu || 'Le programme détaillé sera fourni lors de la convention de formation.');
+
+    // ── Méthodes et évaluation ──
+    if (y > 220) { doc.addPage(); y = 20; }
+    y = this._progTextBlock(doc, y, color, '🛠 Méthodes pédagogiques',
+      'Apports théoriques, exercices pratiques, mises en situation, échanges et retours d\'expérience.');
+    y = this._progTextBlock(doc, y, color, '📊 Modalités d\'évaluation',
+      dossier.evaluation || 'Évaluation continue tout au long de la formation. Bilan de fin de formation.');
+
+    // ── Accessibilité ──
+    if (y > 230) { doc.addPage(); y = 20; }
+    y = this._progTextBlock(doc, y, color, '♿ Accessibilité',
+      'Notre organisme prend en compte les besoins des personnes en situation de handicap. Contactez-nous pour tout aménagement spécifique.');
+
+    // ── Signature OF ──
+    if (y > 245) { doc.addPage(); y = 20; }
+    y += 6;
+    doc.setFontSize(9).setFont(undefined,'bold').setTextColor(...color);
+    doc.text(`Document établi par : ${of.nom}`, 15, y); y += 5;
+    doc.setFont(undefined,'normal').setFontSize(8.5).setTextColor(...this.GRAY);
+    if (of.da)    { doc.text(`N° Déclaration d'activité : ${of.da}`, 15, y); y += 4; }
+    if (of.siret) { doc.text(`SIRET : ${of.siret}`, 15, y); y += 4; }
+
+    this._footer(doc, of);
+    doc.save(`Programme_${num}_${dossier.companyName.replace(/[^a-zA-Z0-9]/g,'_')}.pdf`);
+    Toast.show(`Programme pédagogique ${num} généré ✓`, 'success');
+  },
+
+  /* ── Helpers programme ── */
+  _progSection(doc, y, color, title, rows) {
+    if (y > 240) { doc.addPage(); y = 20; }
+    // Titre section
+    doc.setFillColor(...color);
+    doc.roundedRect(15, y-2, 180, 7, 1, 1, 'F');
+    doc.setFontSize(9).setFont(undefined,'bold').setTextColor(255,255,255);
+    doc.text(title, 17, y + 3); y += 9;
+
+    rows.forEach(([label, value]) => {
+      if (!value || value === 'À préciser') return;
+      if (y > 270) { doc.addPage(); y = 20; }
+      doc.setFontSize(8.5).setFont(undefined,'bold').setTextColor(...color);
+      doc.text(`${label} :`, 17, y);
+      doc.setFont(undefined,'normal').setTextColor(60,65,85);
+      const wrapped = doc.splitTextToSize(String(value), 130);
+      doc.text(wrapped, 70, y);
+      y += Math.max(wrapped.length * 4, 4.5);
+    });
+    return y + 4;
+  },
+
+  _progTextBlock(doc, y, color, title, text) {
+    if (y > 240) { doc.addPage(); y = 20; }
+    doc.setFillColor(...color);
+    doc.roundedRect(15, y-2, 180, 7, 1, 1, 'F');
+    doc.setFontSize(9).setFont(undefined,'bold').setTextColor(255,255,255);
+    doc.text(title, 17, y + 3); y += 9;
+
+    doc.setFontSize(8.5).setFont(undefined,'normal').setTextColor(60,65,85);
+    const lines = String(text || '—').split('\n');
+    lines.forEach(line => {
+      if (y > 270) { doc.addPage(); y = 20; }
+      const wrapped = doc.splitTextToSize(line || ' ', 174);
+      doc.text(wrapped, 17, y);
+      y += wrapped.length * 4.2;
+    });
+    return y + 5;
+  },
+
+  /* ══════════════════════════════════════════════
      FEUILLES DE PRÉSENCE
   ══════════════════════════════════════════════ */
   async genererFeuillesPresence(dossier) {
@@ -412,23 +553,34 @@ const Documents = {
   ══════════════════════════════════════════════ */
 
   _header(doc, of, docType, num, date) {
-    // Bande navy
-    doc.setFillColor(...this.NAVY);
+    const color = of.color || this.NAVY;
+
+    // Bande couleur principale
+    doc.setFillColor(...color);
     doc.rect(0, 0, 210, 32, 'F');
 
-    // Titre
+    // Logo ou nom OF
+    if (of.logo) {
+      try {
+        doc.addImage(of.logo, 'auto', 12, 4, 28, 24);
+      } catch {
+        doc.setTextColor(200,220,255).setFontSize(8).setFont(undefined,'normal');
+        doc.text(of.nom, 15, 28);
+      }
+    } else {
+      doc.setTextColor(200,220,255).setFontSize(8).setFont(undefined,'normal');
+      doc.text(of.nom, 15, 28);
+    }
+
+    // Titre document
     doc.setTextColor(255,255,255).setFontSize(17).setFont(undefined,'bold');
     doc.text(docType, 105, 14, { align:'center' });
     doc.setFontSize(9).setFont(undefined,'normal');
     doc.text(`N° ${num}   |   Date : ${date}`, 105, 22, { align:'center' });
 
     // Ligne de séparation
-    doc.setDrawColor(200, 210, 230).setLineWidth(0.3);
+    doc.setDrawColor(...color).setLineWidth(0.3);
     doc.line(15, 36, 195, 36);
-
-    // Nom OF (coin haut gauche dans la bande)
-    doc.setTextColor(200, 220, 255).setFontSize(8).setFont(undefined,'normal');
-    doc.text(of.nom, 15, 28);
   },
 
   _partiesBlock(doc, of, dossier, y, rightLabel = 'Destinataire') {

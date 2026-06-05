@@ -1,24 +1,40 @@
-/* ─── DataStore — Supabase backend ─── */
+/* ─── DataStore — Supabase backend v2 ─── */
 
-/* Convertit une ligne dossiers+clients en objet plat utilisé par l'UI */
-function _mapClient(row) {
-  const c = row.clients || {};
+/* ── Mappers ── */
+function _mapClientRow(row) {
+  return {
+    id:          row.id,
+    opco:        row.opco            || '',
+    companyName: row.nom_entreprise  || '',
+    siret:       row.siret           || '',
+    address:     row.adresse         || '',
+    phone:       row.tel             || '',
+    email:       row.email           || '',
+    employees:   row.nb_salaries     ?? '',
+    nomGerant:   row.nom_gerant      || '',
+    idcc:        row.idcc            || '',
+    salaries:    Array.isArray(row.salaries) ? row.salaries : [],
+    /* stats calculées à partir des dossiers joints */
+    dossiers:    (row.dossiers || []).map(_mapDossierRow),
+    createdAt:   row.cree_le
+  };
+}
+
+function _mapDossierRow(row) {
   return {
     id:              row.id,
     clientId:        row.client_id,
-    opco:            c.opco            || '',
-    companyName:     c.nom_entreprise  || '',
-    siret:           c.siret           || '',
-    address:         c.adresse         || '',
-    phone:           c.tel             || '',
-    email:           c.email           || '',
-    employees:       c.nb_salaries     ?? '',
-    trainees:        Array.isArray(row.salaries)        ? row.salaries        : [],
-    trainingSubject: row.sujet_formation                || '',
-    price:           parseFloat(row.prix)               || 0,
+    trainingSubject: row.sujet_formation  || '',
+    price:           parseFloat(row.prix) || 0,
     trainingDates:   Array.isArray(row.dates_formation) ? row.dates_formation : [],
-    status:          row.statut        || 'devis_fait',
-    notes:           row.notes         || '',
+    trainees:        Array.isArray(row.salaries)        ? row.salaries        : [],
+    status:          row.statut           || 'devis_fait',
+    notes:           row.notes            || '',
+    objectifs:       row.objectifs        || '',
+    contenu:         row.contenu          || '',
+    modalite:        row.modalite         || 'presentiel',
+    evaluation:      row.evaluation       || '',
+    prerequis:       row.prerequis        || '',
     createdAt:       row.cree_le,
     updatedAt:       row.modifie_le
   };
@@ -40,52 +56,52 @@ const DataStore = {
   },
 
   /* ══════════════════════════════════════════════
-     CLIENTS / DOSSIERS
+     CLIENTS
   ══════════════════════════════════════════════ */
 
+  /** Retourne les clients d'un OPCO avec leurs dossiers */
   async getClients(opco) {
     const uid = await this._uid();
     const { data, error } = await supa
-      .from('dossiers')
-      .select('*, clients!inner(id, opco, nom_entreprise, siret, adresse, tel, email, nb_salaries)')
+      .from('clients')
+      .select(`
+        id, opco, nom_entreprise, siret, adresse, tel, email,
+        nb_salaries, nom_gerant, idcc, salaries, cree_le,
+        dossiers(id, client_id, sujet_formation, prix, dates_formation,
+                 salaries, statut, notes, objectifs, contenu, modalite,
+                 evaluation, prerequis, cree_le, modifie_le)
+      `)
       .eq('user_id', uid)
-      .eq('clients.opco', opco)
-      .order('cree_le', { ascending: false });
+      .eq('opco', opco)
+      .order('nom_entreprise', { ascending: true });
 
     if (error) this._handleError(error, 'getClients');
-    return (data || []).map(_mapClient);
+    return (data || []).map(_mapClientRow);
   },
 
+  /** Retourne tous les clients (tous OPCOs) avec leurs dossiers */
   async getAllClients() {
     const uid = await this._uid();
     const { data, error } = await supa
-      .from('dossiers')
-      .select('*, clients!inner(id, opco, nom_entreprise, siret, adresse, tel, email, nb_salaries)')
+      .from('clients')
+      .select(`
+        id, opco, nom_entreprise, siret, adresse, tel, email,
+        nb_salaries, nom_gerant, idcc, salaries, cree_le,
+        dossiers(id, client_id, sujet_formation, prix, dates_formation,
+                 salaries, statut, notes, objectifs, contenu, modalite,
+                 evaluation, prerequis, cree_le, modifie_le)
+      `)
       .eq('user_id', uid)
-      .order('cree_le', { ascending: false });
+      .order('nom_entreprise', { ascending: true });
 
     if (error) this._handleError(error, 'getAllClients');
-    return (data || []).map(_mapClient);
+    return (data || []).map(_mapClientRow);
   },
 
-  async getClient(opco, id) {
-    const uid = await this._uid();
-    const { data, error } = await supa
-      .from('dossiers')
-      .select('*, clients!inner(id, opco, nom_entreprise, siret, adresse, tel, email, nb_salaries)')
-      .eq('id', id)
-      .eq('user_id', uid)
-      .single();
-
-    if (error) return null;
-    return _mapClient(data);
-  },
-
+  /** Crée un client (entreprise) sans formation */
   async addClient(opco, d) {
     const uid = await this._uid();
-
-    // 1. Créer le client (entreprise)
-    const { data: client, error: cErr } = await supa
+    const { data, error } = await supa
       .from('clients')
       .insert({
         user_id:        uid,
@@ -95,80 +111,112 @@ const DataStore = {
         adresse:        d.address     || null,
         tel:            d.phone       || null,
         email:          d.email       || null,
-        nb_salaries:    d.employees   ? parseInt(d.employees) : null
+        nb_salaries:    d.employees   ? parseInt(d.employees) : null,
+        nom_gerant:     d.nomGerant   || null,
+        idcc:           d.idcc        || null,
+        salaries:       d.salaries    || []
       })
       .select()
       .single();
 
-    if (cErr) this._handleError(cErr, 'addClient/client');
+    if (error) this._handleError(error, 'addClient');
+    return { ..._mapClientRow(data), dossiers: [] };
+  },
 
-    // 2. Créer le dossier (formation)
-    const { data: dossier, error: dErr } = await supa
+  /** Met à jour les infos d'un client */
+  async updateClient(id, d) {
+    const uid = await this._uid();
+    const { error } = await supa
+      .from('clients')
+      .update({
+        nom_entreprise: d.companyName,
+        siret:          d.siret       || null,
+        adresse:        d.address     || null,
+        tel:            d.phone       || null,
+        email:          d.email       || null,
+        nb_salaries:    d.employees   ? parseInt(d.employees) : null,
+        nom_gerant:     d.nomGerant   || null,
+        idcc:           d.idcc        || null,
+        salaries:       d.salaries    || []
+      })
+      .eq('id', id)
+      .eq('user_id', uid);
+
+    if (error) this._handleError(error, 'updateClient');
+  },
+
+  /** Supprime un client et ses dossiers */
+  async deleteClient(id) {
+    const uid = await this._uid();
+    // Les dossiers se suppriment en cascade (ON DELETE CASCADE)
+    const { error } = await supa
+      .from('clients')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', uid);
+
+    if (error) this._handleError(error, 'deleteClient');
+  },
+
+  /* ══════════════════════════════════════════════
+     DOSSIERS (formations)
+  ══════════════════════════════════════════════ */
+
+  /** Crée une formation pour un client */
+  async addDossier(clientId, d) {
+    const uid = await this._uid();
+    const { data, error } = await supa
       .from('dossiers')
       .insert({
         user_id:         uid,
-        client_id:       client.id,
-        salaries:        d.trainees        || [],
-        dates_formation: d.trainingDates   || [],
-        sujet_formation: d.trainingSubject || null,
+        client_id:       clientId,
+        salaries:        d.trainees       || [],
+        sujet_formation: d.trainingSubject|| null,
         prix:            parseFloat(d.price) || 0,
-        statut:          d.status           || 'devis_fait',
-        notes:           d.notes            || null
+        dates_formation: d.trainingDates  || [],
+        statut:          d.status         || 'devis_fait',
+        notes:           d.notes          || null,
+        objectifs:       d.objectifs      || null,
+        contenu:         d.contenu        || null,
+        modalite:        d.modalite       || 'presentiel',
+        evaluation:      d.evaluation     || null,
+        prerequis:       d.prerequis      || null
       })
-      .select('*, clients!inner(id, opco, nom_entreprise, siret, adresse, tel, email, nb_salaries)')
+      .select()
       .single();
 
-    if (dErr) this._handleError(dErr, 'addClient/dossier');
-    return _mapClient(dossier);
+    if (error) this._handleError(error, 'addDossier');
+    return _mapDossierRow(data);
   },
 
-  async updateClient(opco, id, updates) {
+  /** Met à jour une formation */
+  async updateDossier(id, d) {
     const uid = await this._uid();
-
-    // Récupérer le client_id du dossier
-    const { data: dRef, error: refErr } = await supa
-      .from('dossiers')
-      .select('client_id')
-      .eq('id', id)
-      .eq('user_id', uid)
-      .single();
-
-    if (refErr || !dRef) this._handleError(refErr || new Error('Dossier introuvable'), 'updateClient/ref');
-
-    // Mettre à jour l'entreprise (clients table)
-    await supa
-      .from('clients')
-      .update({
-        nom_entreprise: updates.companyName,
-        siret:          updates.siret     || null,
-        adresse:        updates.address   || null,
-        tel:            updates.phone     || null,
-        email:          updates.email     || null,
-        nb_salaries:    updates.employees ? parseInt(updates.employees) : null
-      })
-      .eq('id', dRef.client_id)
-      .eq('user_id', uid);
-
-    // Mettre à jour le dossier (formation)
-    const { data: updated, error: dErr } = await supa
+    const { data, error } = await supa
       .from('dossiers')
       .update({
-        salaries:        updates.trainees        || [],
-        dates_formation: updates.trainingDates   || [],
-        sujet_formation: updates.trainingSubject || null,
-        prix:            parseFloat(updates.price) || 0,
-        statut:          updates.status           || 'devis_fait',
-        notes:           updates.notes            || null
+        salaries:        d.trainees       || [],
+        sujet_formation: d.trainingSubject|| null,
+        prix:            parseFloat(d.price) || 0,
+        dates_formation: d.trainingDates  || [],
+        statut:          d.status         || 'devis_fait',
+        notes:           d.notes          || null,
+        objectifs:       d.objectifs      || null,
+        contenu:         d.contenu        || null,
+        modalite:        d.modalite       || 'presentiel',
+        evaluation:      d.evaluation     || null,
+        prerequis:       d.prerequis      || null
       })
       .eq('id', id)
       .eq('user_id', uid)
-      .select('*, clients!inner(id, opco, nom_entreprise, siret, adresse, tel, email, nb_salaries)')
+      .select()
       .single();
 
-    if (dErr) this._handleError(dErr, 'updateClient/dossier');
-    return _mapClient(updated);
+    if (error) this._handleError(error, 'updateDossier');
+    return _mapDossierRow(data);
   },
 
+  /** Met à jour uniquement le statut */
   async updateDossierStatus(id, statut) {
     const uid = await this._uid();
     const { error } = await supa
@@ -180,57 +228,53 @@ const DataStore = {
     if (error) this._handleError(error, 'updateDossierStatus');
   },
 
-  async deleteClient(opco, id) {
+  /** Supprime une formation */
+  async deleteDossier(id) {
     const uid = await this._uid();
-
-    // Trouver le client_id pour nettoyage éventuel
-    const { data: dRef } = await supa
+    const { error } = await supa
       .from('dossiers')
-      .select('client_id')
+      .delete()
       .eq('id', id)
-      .eq('user_id', uid)
-      .single();
+      .eq('user_id', uid);
 
-    // Supprimer le dossier
-    await supa.from('dossiers').delete().eq('id', id).eq('user_id', uid);
-
-    if (dRef?.client_id) {
-      // Supprimer le client si aucun autre dossier ne le référence
-      const { count } = await supa
-        .from('dossiers')
-        .select('id', { count: 'exact', head: true })
-        .eq('client_id', dRef.client_id);
-
-      if (count === 0) {
-        await supa.from('clients').delete().eq('id', dRef.client_id).eq('user_id', uid);
-      }
-    }
+    if (error) this._handleError(error, 'deleteDossier');
   },
 
   /* ══════════════════════════════════════════════
-     AGRÉGATS (synchrones sur données pré-chargées)
+     AGRÉGATS (pour dashboard)
   ══════════════════════════════════════════════ */
 
-  computeFormationDates(clients) {
+  /** Tous les dossiers à plat (pour dashboard/calendar) */
+  _flatDossiers(allClients) {
     const result = [];
-    clients.forEach(c => {
-      (c.trainingDates || []).forEach(d => {
-        if (d.start) result.push({
-          ...d,
-          opco:        c.opco,
-          companyName: c.companyName,
-          subject:     c.trainingSubject,
-          dossierId:   c.id
+    allClients.forEach(c => {
+      (c.dossiers || []).forEach(d => {
+        result.push({ ...d, opco: c.opco, companyName: c.companyName });
+      });
+    });
+    return result;
+  },
+
+  computeFormationDates(allClients) {
+    const result = [];
+    this._flatDossiers(allClients).forEach(d => {
+      (d.trainingDates || []).forEach(dt => {
+        if (dt.start) result.push({
+          ...dt,
+          opco:        d.opco,
+          companyName: d.companyName,
+          subject:     d.trainingSubject,
+          dossierId:   d.id
         });
       });
     });
     return result;
   },
 
-  computeUpcoming(clients, days = 14) {
+  computeUpcoming(allClients, days = 14) {
     const now   = new Date();
     const limit = new Date(now.getTime() + days * 86400000);
-    return this.computeFormationDates(clients)
+    return this.computeFormationDates(allClients)
       .filter(d => {
         const start = new Date(d.start + 'T00:00:00');
         return start >= now && start <= limit;
@@ -238,17 +282,15 @@ const DataStore = {
       .sort((a, b) => new Date(a.start) - new Date(b.start));
   },
 
-  computeAlerts(clients) {
+  computeAlerts(allClients) {
     const alerts = [];
-    clients.forEach(c => {
-      if (!c.updatedAt) return;
-      const ageDays = (new Date() - new Date(c.updatedAt)) / 86400000;
-      if (c.status === 'devis_envoye' && ageDays > 7) {
-        alerts.push({ type: 'warning', msg: `Devis sans réponse depuis ${Math.floor(ageDays)}j`, sub: c.companyName });
-      }
-      if (c.status === 'devis_signe' && ageDays > 5) {
-        alerts.push({ type: 'urgent', msg: `Dossier signé en attente OPCO (${Math.floor(ageDays)}j)`, sub: c.companyName });
-      }
+    this._flatDossiers(allClients).forEach(d => {
+      if (!d.updatedAt) return;
+      const ageDays = (new Date() - new Date(d.updatedAt)) / 86400000;
+      if (d.status === 'devis_envoye' && ageDays > 7)
+        alerts.push({ type:'warning', msg:`Devis sans réponse depuis ${Math.floor(ageDays)}j`, sub: d.companyName });
+      if (d.status === 'devis_signe' && ageDays > 5)
+        alerts.push({ type:'urgent', msg:`Dossier signé en attente OPCO (${Math.floor(ageDays)}j)`, sub: d.companyName });
     });
     return alerts;
   },
@@ -267,7 +309,6 @@ const DataStore = {
       .order('echeance', { ascending: true, nullsFirst: false });
 
     if (dossierId) q = q.eq('dossier_id', dossierId);
-
     const { data, error } = await q;
     if (error) this._handleError(error, 'getTaches');
     return data || [];
@@ -316,17 +357,22 @@ const DataStore = {
 
   async updateProfile(updates) {
     const uid = await this._uid();
+    const patch = {
+      nom:              updates.nom              || null,
+      organisme:        updates.organisme        || null,
+      siret:            updates.siret            || null,
+      adresse:          updates.adresse          || null,
+      telephone:        updates.telephone        || null,
+      numero_da:        updates.numero_da        || null,
+      numero_qualiopi:  updates.numero_qualiopi  || null,
+      couleur_primaire: updates.couleur_primaire || '#1E2D4B'
+    };
+    // Logo seulement si fourni
+    if (updates.logo_base64 !== undefined) patch.logo_base64 = updates.logo_base64;
+
     const { data, error } = await supa
       .from('profiles')
-      .update({
-        nom:              updates.nom              || null,
-        organisme:        updates.organisme        || null,
-        siret:            updates.siret            || null,
-        adresse:          updates.adresse          || null,
-        telephone:        updates.telephone        || null,
-        numero_da:        updates.numero_da        || null,
-        numero_qualiopi:  updates.numero_qualiopi  || null
-      })
+      .update(patch)
       .eq('id', uid)
       .select()
       .single();

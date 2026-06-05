@@ -99,6 +99,8 @@ const MobileNav = {
 /* ── Settings page ── */
 const SettingsPage = {
 
+  _logoBase64: null, // cache local du logo
+
   async render() {
     document.getElementById('pageTitle').textContent    = 'Paramètres';
     document.getElementById('pageSubtitle').textContent = 'Informations de votre organisme';
@@ -108,10 +110,14 @@ const SettingsPage = {
     let profile = {};
     try { profile = (await DataStore.getProfile()) || {}; } catch { /* ignore */ }
 
-    document.getElementById('pageContent').innerHTML = `
-      <div style="max-width:680px;margin:0 auto;">
+    this._logoBase64 = profile.logo_base64 || null;
+    const couleur    = profile.couleur_primaire || '#1E2D4B';
 
-        <div class="section-card" style="margin-bottom:20px;">
+    document.getElementById('pageContent').innerHTML = `
+      <div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:20px;">
+
+        <!-- ── Identité organisme ── -->
+        <div class="section-card">
           <div class="section-card-header">
             <div class="section-card-title">🏢 Organisme de formation</div>
           </div>
@@ -149,43 +155,128 @@ const SettingsPage = {
                     placeholder="Ex. 2023/2026-XXX" />
                 </div>
               </div>
-              <div style="margin-top:16px;">
+
+              <!-- ── Logo et couleur ── -->
+              <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:18px;">
+                <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:14px;">
+                  🎨 Personnalisation des documents PDF
+                </div>
+                <div class="form-grid">
+                  <div class="field">
+                    <label>Logo de l'organisme</label>
+                    <div class="logo-upload-area" id="logoUploadArea">
+                      ${this._logoBase64
+                        ? `<img id="logoPreview" src="${this._logoBase64}" alt="Logo" style="max-height:60px;max-width:160px;object-fit:contain;" />`
+                        : `<div id="logoPreview" style="color:var(--text-muted);font-size:13px;">Cliquer pour choisir<br><small>PNG, JPG, SVG — max 500 Ko</small></div>`
+                      }
+                    </div>
+                    <input type="file" id="logoInput" accept="image/png,image/jpeg,image/svg+xml,image/gif"
+                      style="display:none;" />
+                    <div style="display:flex;gap:8px;margin-top:6px;">
+                      <button type="button" class="btn btn-sm btn-secondary" id="pickLogoBtn">
+                        📁 Choisir un logo
+                      </button>
+                      ${this._logoBase64
+                        ? `<button type="button" class="btn btn-sm btn-secondary" id="removeLogoBtn" style="color:var(--danger);">✕ Supprimer</button>`
+                        : ''}
+                    </div>
+                  </div>
+                  <div class="field">
+                    <label>Couleur principale</label>
+                    <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
+                      <input type="color" name="couleur_primaire" id="colorPicker"
+                        value="${couleur}"
+                        style="width:48px;height:48px;border:2px solid var(--border);border-radius:8px;cursor:pointer;padding:2px;" />
+                      <div>
+                        <div id="colorPreviewLabel" style="font-size:14px;font-weight:600;color:${couleur};">${couleur.toUpperCase()}</div>
+                        <div style="font-size:12px;color:var(--text-muted);">En-têtes, titres de sections</div>
+                        <div id="colorSwatch" style="margin-top:4px;height:8px;width:100px;border-radius:4px;background:${couleur};"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top:20px;">
                 <button type="submit" class="btn btn-primary" id="saveSettingsBtn">
-                  💾 Enregistrer
+                  💾 Enregistrer les paramètres
                 </button>
               </div>
             </form>
           </div>
         </div>
 
+        <!-- ── Info PDF ── -->
         <div class="section-card">
           <div class="section-card-header">
-            <div class="section-card-title">📄 Documents PDF</div>
+            <div class="section-card-title">📄 Documents générés</div>
           </div>
           <div class="section-card-body">
-            <p style="font-size:13.5px;color:var(--text-muted);line-height:1.6;margin:0;">
-              Les informations ci-dessus (nom, SIRET, adresse, N° DA, Qualiopi) apparaissent
-              automatiquement dans tous les documents générés : devis, conventions, feuilles de présence
-              et factures.<br><br>
-              Pour générer un document, ouvrez la <strong>fiche d'un dossier</strong> (bouton 👁️
-              dans la liste des clients) et cliquez sur le document souhaité.
+            <p style="font-size:13.5px;color:var(--text-muted);line-height:1.7;margin:0;">
+              Tous les documents (devis, programme pédagogique, convention, feuilles de présence, facture)
+              utilisent les informations ci-dessus. <strong>Le logo et la couleur principale</strong>
+              personnalisent l'en-tête de chaque PDF.<br><br>
+              Pour générer des documents, créez ou ouvrez une <strong>formation</strong> depuis
+              la page de l'OPCO correspondant.
             </p>
           </div>
         </div>
 
       </div>`;
 
+    // ── Logo events ──
+    document.getElementById('pickLogoBtn')?.addEventListener('click', () =>
+      document.getElementById('logoInput').click()
+    );
+    document.getElementById('logoUploadArea')?.addEventListener('click', () =>
+      document.getElementById('logoInput').click()
+    );
+    document.getElementById('logoInput')?.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.size > 512 * 1024) { Toast.show('Logo trop lourd (max 500 Ko)', 'error'); return; }
+      const reader = new FileReader();
+      reader.onload = ev => {
+        this._logoBase64 = ev.target.result;
+        const preview = document.getElementById('logoPreview');
+        if (preview.tagName === 'IMG') {
+          preview.src = this._logoBase64;
+        } else {
+          preview.outerHTML = `<img id="logoPreview" src="${this._logoBase64}" alt="Logo" style="max-height:60px;max-width:160px;object-fit:contain;" />`;
+        }
+        Toast.show('Logo chargé — enregistrez pour sauvegarder', 'info');
+      };
+      reader.readAsDataURL(file);
+    });
+    document.getElementById('removeLogoBtn')?.addEventListener('click', () => {
+      this._logoBase64 = null;
+      const preview = document.getElementById('logoPreview');
+      if (preview) preview.outerHTML = `<div id="logoPreview" style="color:var(--text-muted);font-size:13px;">Cliquer pour choisir<br><small>PNG, JPG, SVG — max 500 Ko</small></div>`;
+      document.getElementById('removeLogoBtn')?.remove();
+    });
+
+    // ── Color picker live preview ──
+    document.getElementById('colorPicker')?.addEventListener('input', e => {
+      const c = e.target.value;
+      document.getElementById('colorPreviewLabel').textContent = c.toUpperCase();
+      document.getElementById('colorPreviewLabel').style.color = c;
+      document.getElementById('colorSwatch').style.background  = c;
+    });
+
+    // ── Save ──
     document.getElementById('settingsForm').addEventListener('submit', async e => {
       e.preventDefault();
       const form = e.target;
       const btn  = document.getElementById('saveSettingsBtn');
       const data = {
-        organisme:       form.querySelector('[name="organisme"]').value.trim(),
-        siret:           form.querySelector('[name="siret"]').value.trim(),
-        telephone:       form.querySelector('[name="telephone"]').value.trim(),
-        adresse:         form.querySelector('[name="adresse"]').value.trim(),
-        numero_da:       form.querySelector('[name="numero_da"]').value.trim(),
-        numero_qualiopi: form.querySelector('[name="numero_qualiopi"]').value.trim()
+        organisme:        form.querySelector('[name="organisme"]').value.trim(),
+        siret:            form.querySelector('[name="siret"]').value.trim(),
+        telephone:        form.querySelector('[name="telephone"]').value.trim(),
+        adresse:          form.querySelector('[name="adresse"]').value.trim(),
+        numero_da:        form.querySelector('[name="numero_da"]').value.trim(),
+        numero_qualiopi:  form.querySelector('[name="numero_qualiopi"]').value.trim(),
+        couleur_primaire: form.querySelector('[name="couleur_primaire"]').value,
+        logo_base64:      this._logoBase64
       };
       if (!data.organisme) { Toast.show('Le nom de l\'organisme est requis', 'error'); return; }
       btn.disabled = true; btn.textContent = 'Enregistrement…';
@@ -195,7 +286,7 @@ const SettingsPage = {
       } catch (err) {
         Toast.show('Erreur : ' + err.message, 'error');
       }
-      btn.disabled = false; btn.textContent = '💾 Enregistrer';
+      btn.disabled = false; btn.textContent = '💾 Enregistrer les paramètres';
     });
   }
 };
