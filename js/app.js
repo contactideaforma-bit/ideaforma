@@ -325,6 +325,8 @@ const Router = {
 
     if (page === 'dashboard') {
       Dashboard.render();
+    } else if (page === 'journee') {
+      JourneePage.render();
     } else if (page === 'settings') {
       SettingsPage.render();
     } else {
@@ -336,6 +338,21 @@ const Router = {
     }
   }
 };
+
+/* ── Badge « Ma journée » : nombre d'actions en retard ou du jour ── */
+async function updateJourneeBadge() {
+  const badge = document.getElementById('navJourneeBadge');
+  if (!badge) return;
+  try {
+    const actions = await DataStore.getActionsDuJour(0);   // échéance ≤ aujourd'hui
+    if (actions.length) {
+      badge.textContent   = actions.length > 99 ? '99+' : actions.length;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch { badge.style.display = 'none'; }
+}
 
 /* ── Nav dots update ── */
 async function updateNavDots() {
@@ -406,6 +423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Nav dots async init
   updateNavDots();
+  updateJourneeBadge();
 
   // Initial render
   Router.navigate('dashboard');

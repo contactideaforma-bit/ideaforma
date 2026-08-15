@@ -380,5 +380,166 @@ const DataStore = {
 
     if (error) this._handleError(error, 'updateProfile');
     return data;
+  },
+
+  /* ══════════════════════════════════════════════
+     NUMÉROTATION SERVEUR (migration v5)
+  ══════════════════════════════════════════════ */
+
+  /** Numéro continu et atomique : DEV-2026-0001, FAC-2026-0007… */
+  async nextNumero(type) {
+    const { data, error } = await supa.rpc('fn_next_numero', { p_type: type });
+    if (error) this._handleError(error, 'nextNumero');
+    return data;
+  },
+
+  /* ══════════════════════════════════════════════
+     VUES DE PILOTAGE (migration v5 / v6)
+     Les agrégats sont calculés par Postgres, plus dans le navigateur.
+  ══════════════════════════════════════════════ */
+
+  /** Dossiers enrichis : dates, stagiaires, pièces, montants, retards */
+  async getDossiers360({ opco = null, actifs = false, limit = 500 } = {}) {
+    let q = supa.from('v_dossiers_360').select('*').limit(limit);
+    if (opco)   q = q.eq('opco_code', opco);
+    if (actifs) q = q.neq('statut_facturation', 'payee')
+                     .not('statut_commercial', 'in', '("perdu","annule")');
+
+    const { data, error } = await q.order('date_debut', { ascending: true, nullsFirst: false });
+    if (error) this._handleError(error, 'getDossiers360');
+    return data || [];
+  },
+
+  /** Échéances à traiter, déjà triées par criticité puis par date */
+  async getActionsDuJour(horizonJours = null) {
+    let q = supa.from('v_actions_du_jour').select('*');
+    if (horizonJours !== null) {
+      const limite = new Date(Date.now() + horizonJours * 86400000)
+        .toISOString().split('T')[0];
+      q = q.lte('date_echeance', limite);
+    }
+    const { data, error } = await q;
+    if (error) this._handleError(error, 'getActionsDuJour');
+    return data || [];
+  },
+
+  /** Une ligne par journée de formation, pour le calendrier */
+  async getSessionsCalendrier(du, au) {
+    let q = supa.from('v_sessions_calendrier').select('*');
+    if (du) q = q.gte('date_session', du);
+    if (au) q = q.lte('date_session', au);
+
+    const { data, error } = await q.order('date_session', { ascending: true });
+    if (error) this._handleError(error, 'getSessionsCalendrier');
+    return data || [];
+  },
+
+  /** Compte les clients sans rapatrier les lignes */
+  async countClients() {
+    const uid = await this._uid();
+    const { count, error } = await supa
+      .from('clients')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', uid);
+    if (error) this._handleError(error, 'countClients');
+    return count || 0;
+  },
+
+  /** Marque une échéance comme traitée */
+  async faireEcheance(id) {
+    const uid = await this._uid();
+    const { error } = await supa
+      .from('echeances')
+      .update({ statut: 'fait', fait_le: new Date().toISOString() })
+      .eq('id', id)
+      .eq('user_id', uid);
+    if (error) this._handleError(error, 'faireEcheance');
+  },
+
+  /* ══════════════════════════════════════════════
+     PIÈCES JUSTIFICATIVES + Supabase Storage
+     Arborescence imposée par les policies du bucket :
+       documents/<user_id>/<dossier_id>/<fichier>
+  ══════════════════════════════════════════════ */
+
+  BUCKET: 'documents',
+
+  async getPieces(dossierId) {
+    const { data, error } = await supa
+      .from('pieces')
+      .select('*')
+      .eq('dossier_id', dossierId)
+      .order('obligatoire', { ascending: false })
+      .order('libelle',     { ascending: true });
+    if (error) this._handleError(error, 'getPieces');
+    return data || [];
+  },
+
+  /** Téléverse un fichier et rattache la pièce au dossier */
+  async uploadPiece(dossierId, pieceId, file, { source = 'externe', statut = 'recu' } = {}) {
+    const uid  = await this._uid();
+    const safe = file.name.normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${uid}/${dossierId}/${Date.now()}_${safe}`;
+
+    const { error: upErr } = await supa.storage
+      .from(this.BUCKET)
+      .upload(path, file, { upsert: false, contentType: file.type || undefined });
+    if (upErr) this._handleError(upErr, 'uploadPiece');
+
+    const patch = {
+      storage_path:   path,
+      nom_fichier:    file.name,
+      statut,
+      source,
+      date_reception: new Date().toISOString().split('T')[0]
+    };
+
+    const { data, error } = pieceId
+      ? await supa.from('pieces').update(patch).eq('id', pieceId).eq('user_id', uid).select().single()
+      : await supa.from('pieces').insert({
+          ...patch, user_id: uid, dossier_id: dossierId,
+          libelle: file.name, obligatoire: false
+        }).select().single();
+
+    if (error) this._handleError(error, 'uploadPiece.link');
+    return data;
+  },
+
+  /** Lien de téléchargement temporaire (bucket privé) */
+  async getPieceUrl(storagePath, secondes = 300) {
+    const { data, error } = await supa.storage
+      .from(this.BUCKET)
+      .createSignedUrl(storagePath, secondes);
+    if (error) this._handleError(error, 'getPieceUrl');
+    return data?.signedUrl || null;
+  },
+
+  /** Archive un PDF généré par l'application dans le coffre du dossier */
+  async archiverDocument(dossierId, blob, nomFichier, libelle, numero = null) {
+    const uid  = await this._uid();
+    const path = `${uid}/${dossierId}/${Date.now()}_${nomFichier}`;
+
+    const { error: upErr } = await supa.storage
+      .from(this.BUCKET)
+      .upload(path, blob, { upsert: false, contentType: 'application/pdf' });
+    if (upErr) this._handleError(upErr, 'archiverDocument');
+
+    const { error } = await supa.from('pieces').upsert({
+      user_id:     uid,
+      dossier_id:  dossierId,
+      libelle,
+      statut:      'envoye',
+      source:      'genere',
+      obligatoire: true,
+      storage_path: path,
+      nom_fichier:  nomFichier,
+      numero,
+      date_envoi:   new Date().toISOString().split('T')[0]
+    }, { onConflict: 'dossier_id,libelle' });
+
+    if (error) this._handleError(error, 'archiverDocument.link');
+    return path;
   }
 };

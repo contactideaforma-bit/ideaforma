@@ -9,11 +9,21 @@ const Dashboard = {
     document.getElementById('pageHeaderRight').innerHTML = '';
     Loading.show();
 
-    let allClients = [], taches = [];
+    /* Les agrégats viennent désormais de Postgres (vues v_dossiers_360,
+       v_actions_du_jour, v_sessions_calendrier) au lieu d'être recalculés
+       ici sur des objets « client » qui ne portaient ni prix ni statut. */
+    const bornes = d => d.toISOString().split('T')[0];
+    const depuis = bornes(new Date(Date.now() - 365 * 86400000));
+    const jusqua = bornes(new Date(Date.now() + 365 * 86400000));
+
+    let dossiers = [], taches = [], actions = [], sessions = [], nbClients = 0;
     try {
-      [allClients, taches] = await Promise.all([
-        DataStore.getAllClients(),
-        DataStore.getTaches()
+      [dossiers, taches, actions, sessions, nbClients] = await Promise.all([
+        DataStore.getDossiers360(),
+        DataStore.getTaches(),
+        DataStore.getActionsDuJour(30),
+        DataStore.getSessionsCalendrier(depuis, jusqua),
+        DataStore.countClients()
       ]);
     } catch (err) {
       document.getElementById('pageContent').innerHTML =
@@ -25,17 +35,27 @@ const Dashboard = {
       return;
     }
 
-    const upcoming = DataStore.computeUpcoming(allClients, 30);
-    const active   = allClients.filter(c => c.status !== 'paye').length;
-    const totalCA  = allClients.reduce((s, c) => s + (c.price || 0), 0);
-    const paid     = allClients.filter(c => c.status === 'paye').length;
+    const upcoming = this._prochaines(sessions, 30);
+
+    const actifs = dossiers.filter(d =>
+      d.statut_facturation !== 'payee' && !['perdu','annule'].includes(d.statut_commercial));
+    const caSigne = dossiers
+      .filter(d => d.statut_commercial === 'devis_signe')
+      .reduce((s, d) => s + (Number(d.prix) || 0), 0);
+    const aEncaisser = dossiers.reduce((s, d) => s + (Number(d.reste_a_encaisser) || 0), 0);
+    const enRetard   = actions.filter(a => a.horizon === 'en_retard').length;
+    const aujourdhui = actions.filter(a => a.horizon === 'aujourd_hui').length;
 
     document.getElementById('pageContent').innerHTML = `
       <div class="stats-grid">
-        ${this._statCard('blue',   iconGrid(),     'Total clients',      allClients.length, 'tous OPCOs')}
-        ${this._statCard('orange', iconClock(),    'Dossiers en cours',  active,            'non payés')}
-        ${this._statCard('violet', iconCalendar(), 'Formations (30j)',   upcoming.length,   'à venir')}
-        ${this._statCard('green',  iconEuro(),     'CA total',           _fmtEuro(totalCA), paid + ' payés')}
+        ${this._statCard('orange', iconClock(),    'Dossiers en cours', actifs.length,
+                         `${nbClients} client${nbClients > 1 ? 's' : ''} · ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`)}
+        ${this._statCard('green',  iconEuro(),     'CA signé',          _fmtEuro(caSigne),
+                         `${upcoming.length} formation${upcoming.length > 1 ? 's' : ''} sous 30 j`)}
+        ${this._statCard('blue',   iconEuro(),     'Reste à encaisser', _fmtEuro(aEncaisser),
+                         'factures non soldées')}
+        ${this._statCard(enRetard ? 'red' : 'violet', iconClock(), 'Actions en retard', enRetard,
+                         aujourdhui ? `${aujourdhui} à traiter aujourd'hui` : "rien pour aujourd'hui")}
       </div>
 
       <div class="dashboard-grid">
@@ -83,10 +103,11 @@ const Dashboard = {
 
           <div class="section-card">
             <div class="section-card-header">
-              <div class="section-card-title">⚡ Alertes automatiques</div>
+              <div class="section-card-title">⚡ Actions du jour</div>
+              <button class="btn btn-sm btn-secondary" id="voirJourneeBtn">Tout voir (${actions.length})</button>
             </div>
-            <div class="section-card-body">
-              ${this._renderAlerts(allClients, upcoming)}
+            <div class="section-card-body" id="actionsBody">
+              ${this._renderActions(actions)}
             </div>
           </div>
 
@@ -95,7 +116,7 @@ const Dashboard = {
               <div class="section-card-title">Répartition par OPCO</div>
             </div>
             <div class="section-card-body">
-              ${this._renderOpcoBars(allClients)}
+              ${this._renderOpcoBars(dossiers)}
             </div>
           </div>
 
@@ -104,7 +125,7 @@ const Dashboard = {
               <div class="section-card-title">Statuts en cours</div>
             </div>
             <div class="section-card-body">
-              ${this._renderStatusSummary(allClients)}
+              ${this._renderStatusSummary(dossiers)}
             </div>
           </div>
 
@@ -112,19 +133,38 @@ const Dashboard = {
       </div>
     `;
 
-    this._renderCalendar(allClients);
+    this._renderCalendar(sessions);
 
     document.getElementById('calPrev').addEventListener('click', () => {
       this.calendarDate = new Date(this.calendarDate.getFullYear(), this.calendarDate.getMonth() - 1, 1);
-      this._renderCalendar(allClients);
+      this._renderCalendar(sessions);
     });
     document.getElementById('calNext').addEventListener('click', () => {
       this.calendarDate = new Date(this.calendarDate.getFullYear(), this.calendarDate.getMonth() + 1, 1);
-      this._renderCalendar(allClients);
+      this._renderCalendar(sessions);
     });
 
     document.getElementById('addTacheBtn')?.addEventListener('click', () => this._openAddTache(taches));
     this._bindTacheActions(taches);
+    this._bindActions();
+    document.getElementById('voirJourneeBtn')?.addEventListener('click', () => Router.navigate('journee'));
+  },
+
+  /* ── Prochaines formations : une entrée par dossier ── */
+  _prochaines(sessions, jours = 30) {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const limite = new Date(today.getTime() + jours * 86400000);
+    const parDossier = new Map();
+
+    sessions
+      .filter(s => {
+        const d = new Date(s.date_session + 'T00:00:00');
+        return d >= today && d <= limite;
+      })
+      .sort((a, b) => a.date_session.localeCompare(b.date_session))
+      .forEach(s => { if (!parDossier.has(s.dossier_id)) parDossier.set(s.dossier_id, s); });
+
+    return [...parDossier.values()];
   },
 
   /* ── Stats card ── */
@@ -140,8 +180,10 @@ const Dashboard = {
       </div>`;
   },
 
-  /* ── Calendrier ── */
-  _renderCalendar(allClients) {
+  /* ── Calendrier ──
+     Alimenté par v_sessions_calendrier : une ligne = une journée de formation.
+     Plus besoin de dérouler les périodes jsonb côté navigateur. */
+  _renderCalendar(sessions) {
     const year  = this.calendarDate.getFullYear();
     const month = this.calendarDate.getMonth();
 
@@ -153,16 +195,12 @@ const Dashboard = {
       akto: '#10B981', constructys: '#F59E0B', opco_ep: '#EC4899'
     };
 
-    // Construire l'index dateStr → événements
+    // Index dateStr → sessions
     this._eventsByDate = {};
-    DataStore.computeFormationDates(allClients).forEach(fd => {
-      const start = new Date(fd.start + 'T00:00:00');
-      const end   = fd.end ? new Date(fd.end + 'T00:00:00') : start;
-      for (let dt = new Date(start); dt <= end; dt.setDate(dt.getDate() + 1)) {
-        const key = dt.toISOString().split('T')[0];
-        if (!this._eventsByDate[key]) this._eventsByDate[key] = [];
-        this._eventsByDate[key].push(fd);
-      }
+    (sessions || []).forEach(s => {
+      const key = s.date_session;
+      if (!key) return;
+      (this._eventsByDate[key] ||= []).push(s);
     });
 
     const today      = new Date();
@@ -186,7 +224,7 @@ const Dashboard = {
 
       const dots = hasEvent
         ? `<div class="cal-dots">${events.slice(0,3).map(e =>
-            `<div class="cal-dot" style="background:${isToday?'white':(OPCO_COLORS[e.opco]||'var(--primary)')}"></div>`
+            `<div class="cal-dot" style="background:${isToday?'white':(OPCO_COLORS[e.opco_code]||'var(--primary)')}"></div>`
           ).join('')}</div>` : '';
 
       html += `<div class="${cls}"${hasEvent?` data-date="${dateStr}"`:''}>${day}${dots}</div>`;
@@ -207,7 +245,7 @@ const Dashboard = {
     const usedOpcos   = [...new Set(
       Object.entries(this._eventsByDate)
         .filter(([k]) => k.startsWith(monthPfx))
-        .flatMap(([, evts]) => evts.map(e => e.opco))
+        .flatMap(([, evts]) => evts.map(e => e.opco_code))
     )];
     const OPCO_LABELS = { opco_commerce:'OPCO Commerce', opco_mobilite:'OPCO Mobilité',
       akto:'AKTO', constructys:'Constructys', opco_ep:'OPCO EP' };
@@ -233,11 +271,11 @@ const Dashboard = {
        </div>
        ${events.map(e => `
         <div style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border-light);">
-          <div style="width:4px;min-height:44px;border-radius:2px;background:${colors[e.opco]||'var(--primary)'};flex-shrink:0;margin-top:2px;"></div>
+          <div style="width:4px;min-height:44px;border-radius:2px;background:${colors[e.opco_code]||'var(--primary)'};flex-shrink:0;margin-top:2px;"></div>
           <div>
-            <div style="font-weight:600;font-size:14px;color:var(--navy);">${e.companyName}</div>
-            <div style="font-size:13px;color:var(--text-muted);margin-top:3px;">${e.subject}</div>
-            <div style="font-size:12px;font-weight:600;margin-top:5px;color:${colors[e.opco]||'var(--primary)'};">${OPCO_LABELS[e.opco]||e.opco}</div>
+            <div style="font-weight:600;font-size:14px;color:var(--navy);">${e.nom_entreprise}</div>
+            <div style="font-size:13px;color:var(--text-muted);margin-top:3px;">${e.sujet_formation}</div>
+            <div style="font-size:12px;font-weight:600;margin-top:5px;color:${colors[e.opco_code]||'var(--primary)'};">${e.opco_label||OPCO_LABELS[e.opco_code]||e.opco_code}</div>
           </div>
         </div>`).join('')}`,
       [{ label:'Fermer', cls:'btn btn-secondary', action: () => Modal.close() }],
@@ -254,22 +292,78 @@ const Dashboard = {
       akto:'#10B981', constructys:'#F59E0B', opco_ep:'#EC4899' };
 
     return upcoming.slice(0, 8).map(f => {
-      const color    = colors[f.opco] || 'var(--primary)';
-      const daysLeft = Math.ceil((new Date(f.start+'T00:00:00') - new Date()) / 86400000);
+      const color    = f.opco_couleur || colors[f.opco_code] || 'var(--primary)';
+      const daysLeft = Math.ceil((new Date(f.date_session+'T00:00:00') - new Date()) / 86400000);
       const urgentC  = daysLeft <= 3 ? 'var(--danger)' : daysLeft <= 7 ? 'var(--warning)' : 'var(--text)';
+      const nb       = Number(f.nb_stagiaires) || 0;
       return `
         <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border-light);">
           <div style="width:4px;height:40px;border-radius:2px;background:${color};flex-shrink:0;"></div>
           <div style="flex:1;min-width:0;">
-            <div style="font-weight:600;font-size:13px;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.companyName}</div>
-            <div style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.subject}</div>
+            <div style="font-weight:600;font-size:13px;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(f.nom_entreprise || '')}</div>
+            <div style="font-size:12px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(f.sujet_formation || '')}${nb ? ` · ${nb} pers.` : ''}</div>
           </div>
           <div style="text-align:right;flex-shrink:0;">
-            <div style="font-size:13px;font-weight:700;color:${urgentC};">J-${daysLeft}</div>
-            <div style="font-size:11px;color:var(--text-muted);">${_fmtDate(f.start)}</div>
+            <div style="font-size:13px;font-weight:700;color:${urgentC};">${daysLeft <= 0 ? "Aujourd'hui" : 'J-' + daysLeft}</div>
+            <div style="font-size:11px;color:var(--text-muted);">${_fmtDate(f.date_session)}</div>
           </div>
         </div>`;
     }).join('');
+  },
+
+  /* ── Actions du jour ──
+     Alimenté par v_actions_du_jour : rétroplanning OPCO, relances, émargements,
+     facturation. Remplace les deux règles d'alerte calculées côté navigateur. */
+  _renderActions(actions) {
+    if (!actions.length)
+      return `<div class="empty-state"><div class="empty-icon">✅</div>Rien à traiter — tout est à jour</div>`;
+
+    const couleur = {
+      bloquante: 'var(--danger)', haute: 'var(--warning)',
+      normale:   'var(--primary)', basse: 'var(--text-light)'
+    };
+    const echeanceLabel = j =>
+      j < 0 ? `${Math.abs(j)} j de retard` : j === 0 ? "Aujourd'hui" : `J-${j}`;
+
+    return `<div class="tache-list">
+      ${actions.slice(0, 8).map(a => {
+        const j       = Number(a.jours_restants);
+        const retard  = j < 0;
+        const couleurC = retard ? 'var(--danger)' : couleur[a.criticite] || 'var(--text)';
+        return `
+          <div class="tache-item" data-id="${a.id}">
+            <button class="tache-check" data-action="faire-echeance" data-id="${a.id}" title="Marquer comme traité">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </button>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13.5px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(a.libelle || '')}</div>
+              <div style="font-size:11px;margin-top:2px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                ${esc(a.nom_entreprise || '')}${a.opco_label ? ` · ${esc(a.opco_label)}` : ''}
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div style="font-size:12px;font-weight:700;color:${couleurC};">${echeanceLabel(j)}</div>
+              <div style="font-size:11px;color:var(--text-muted);">${_fmtDate(a.date_echeance)}</div>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+  },
+
+  _bindActions() {
+    document.getElementById('actionsBody')?.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-action="faire-echeance"]');
+      if (!btn) return;
+      try {
+        await DataStore.faireEcheance(btn.dataset.id);
+        const fraiches = await DataStore.getActionsDuJour(30);
+        document.getElementById('actionsBody').innerHTML = this._renderActions(fraiches);
+        updateJourneeBadge();
+        Toast.show('Action traitée', 'success');
+      } catch { Toast.show('Erreur', 'error'); }
+    });
   },
 
   /* ── Tâches ── */
@@ -379,47 +473,30 @@ const Dashboard = {
     );
   },
 
-  /* ── Alertes auto ── */
-  _renderAlerts(allClients, upcoming) {
-    const items = [];
-    const soon3 = DataStore.computeUpcoming(allClients, 3);
-    soon3.forEach(f => {
-      const d = Math.ceil((new Date(f.start+'T00:00:00') - new Date()) / 86400000);
-      items.push({ type: d<=1?'urgent':'warning', text:`Formation dans ${d}j — ${f.companyName}`, sub: f.subject });
-    });
-    DataStore.computeAlerts(allClients).forEach(a => items.push({ type: a.type, text: a.msg, sub: a.sub }));
-
-    if (!items.length)
-      return `<div class="empty-state"><div class="empty-icon">✅</div>Aucune alerte en ce moment</div>`;
-
-    return `<div class="alert-list">${items.slice(0,6).map(i => `
-      <div class="alert-item ${i.type}">
-        <div class="alert-dot"></div>
-        <div>
-          <div class="alert-text">${i.text}</div>
-          ${i.sub ? `<div class="alert-sub">${i.sub}</div>` : ''}
-        </div>
-      </div>`).join('')}</div>`;
-  },
-
-  /* ── OPCO bars ── */
-  _renderOpcoBars(clients) {
+  /* ── OPCO bars ──
+     Compte les dossiers (et non les clients) et somme les prix réels. */
+  _renderOpcoBars(dossiers) {
     const labels = { opco_commerce:'OPCO Commerce', opco_mobilite:'OPCO Mobilité',
       akto:'AKTO', constructys:'Constructys', opco_ep:'OPCO EP' };
     const colors = { opco_commerce:'#3B82F6', opco_mobilite:'#8B5CF6',
       akto:'#10B981', constructys:'#F59E0B', opco_ep:'#EC4899' };
-    const rows = DataStore.OPCOS.map(op => ({
-      opco: op,
-      count: clients.filter(c => c.opco === op).length,
-      ca:    clients.filter(c => c.opco === op).reduce((s, c) => s + c.price, 0)
-    }));
+
+    const rows = DataStore.OPCOS.map(op => {
+      const lot = dossiers.filter(d => d.opco_code === op);
+      return {
+        opco:  op,
+        label: lot[0]?.opco_label || labels[op] || op,
+        count: lot.length,
+        ca:    lot.reduce((s, d) => s + (Number(d.prix) || 0), 0)
+      };
+    });
     const max = Math.max(...rows.map(r => r.count), 1);
 
-    return rows.map(({ opco, count, ca }) => `
+    return rows.map(({ opco, label, count, ca }) => `
       <div style="margin-bottom:12px;">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-          <span style="font-size:13px;font-weight:500;color:var(--text);">${labels[opco]}</span>
-          <span style="font-size:12px;color:var(--text-muted);">${count} client${count!==1?'s':''} — ${_fmtEuro(ca)}</span>
+          <span style="font-size:13px;font-weight:500;color:var(--text);">${label}</span>
+          <span style="font-size:12px;color:var(--text-muted);">${count} dossier${count!==1?'s':''} — ${_fmtEuro(ca)}</span>
         </div>
         <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
           <div style="height:100%;width:${count===0?0:Math.max(4,(count/max)*100)}%;background:${colors[opco]};border-radius:3px;transition:width 0.6s;"></div>
@@ -427,28 +504,51 @@ const Dashboard = {
       </div>`).join('');
   },
 
-  /* ── Status summary ── */
-  _renderStatusSummary(clients) {
-    const statuses = [
-      { key:'devis_fait', label:'Devis fait' },
-      { key:'devis_envoye', label:'Devis envoyé' },
-      { key:'devis_signe', label:'Devis signé' },
-      { key:'accepte_opco', label:'Accepté OPCO' },
-      { key:'formation_en_cours', label:'En formation' },
-      { key:'paye', label:'Payé' }
-    ];
-    const rows = statuses
-      .map(s => ({ ...s, count: clients.filter(c => c.status === s.key).length }))
-      .filter(s => s.count > 0);
-
-    if (!rows.length)
+  /* ── Statuts ──
+     Lit les 4 axes de la migration v5 : un dossier peut être « formation
+     terminée » et « facture impayée » en même temps, ce que l'ancien
+     statut unique ne savait pas montrer. */
+  _renderStatusSummary(dossiers) {
+    if (!dossiers.length)
       return `<div class="empty-state"><div class="empty-icon">📋</div>Aucun dossier</div>`;
 
-    return rows.map(s => `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border-light);">
-        <span class="badge badge-${s.key}">${s.label}</span>
-        <span style="font-size:15px;font-weight:700;color:var(--navy);">${s.count}</span>
-      </div>`).join('');
+    const axes = [
+      { titre: 'Commercial', champ: 'statut_commercial', valeurs: {
+          brouillon:'Devis à faire', devis_envoye:'Devis envoyé', devis_signe:'Devis signé',
+          perdu:'Perdu', annule:'Annulé' } },
+      { titre: 'OPCO', champ: 'statut_opco', valeurs: {
+          a_deposer:'À déposer', depose:'Déposé', en_instruction:'En instruction',
+          accepte:'Accepté', refuse:'Refusé', a_completer:'À compléter', non_requis:'Non requis' } },
+      { titre: 'Pédagogique', champ: 'statut_pedagogique', valeurs: {
+          a_planifier:'À planifier', planifiee:'Planifiée', en_cours:'En cours',
+          terminee:'Terminée', abandonnee:'Abandonnée' } },
+      { titre: 'Facturation', champ: 'statut_facturation', valeurs: {
+          non_facturable:'Pas encore', a_facturer:'À facturer', facturee:'Facturée',
+          payee_partiel:'Payée en partie', payee:'Payée', impayee:'Impayée' } }
+    ];
+
+    const alerte = { a_completer:true, refuse:true, impayee:true, perdu:true };
+
+    return axes.map(axe => {
+      const lignes = Object.entries(axe.valeurs)
+        .map(([cle, label]) => ({
+          cle, label,
+          n: dossiers.filter(d => d[axe.champ] === cle).length
+        }))
+        .filter(l => l.n > 0);
+
+      if (!lignes.length) return '';
+
+      return `
+        <div style="margin-bottom:14px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-light);margin-bottom:6px;">${axe.titre}</div>
+          ${lignes.map(l => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border-light);">
+              <span style="font-size:13px;color:${alerte[l.cle] ? 'var(--danger)' : 'var(--text)'};">${l.label}</span>
+              <span style="font-size:14px;font-weight:700;color:var(--navy);">${l.n}</span>
+            </div>`).join('')}
+        </div>`;
+    }).join('');
   }
 };
 

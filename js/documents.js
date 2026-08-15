@@ -12,11 +12,22 @@ const Documents = {
   /* ── Couleur OF (dynamic) ── */
   _c(of) { return of?.color || [30, 41, 59]; },
 
-  /* ── Numéro de document ── */
-  _docNum(prefix) {
-    const d    = new Date();
-    const yymm = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`;
-    return `${prefix}-${yymm}-${Math.floor(Math.random()*900)+100}`;
+  /* ── Numéro de document ──
+     Délégué à la base (fn_next_numero) : séquence continue et atomique par
+     organisme, type et année. L'ancienne version tirait un nombre au hasard,
+     ce qui autorisait les collisions et rendait la numérotation des factures
+     non conforme. Repli local uniquement si la base est injoignable. */
+  DOC_TYPES: { DEV: 'devis', CONV: 'convention', PROG: 'programme', FACT: 'facture' },
+
+  async _docNum(prefix) {
+    try {
+      const numero = await DataStore.nextNumero(this.DOC_TYPES[prefix] || prefix.toLowerCase());
+      if (numero) return numero;
+    } catch (err) {
+      console.warn('[Documents] numérotation serveur indisponible', err);
+    }
+    const d = new Date();
+    return `${prefix}-${d.getFullYear()}-TMP${String(d.getHours())}${String(d.getMinutes()).padStart(2,'0')}`;
   },
 
   /* ── Charger profil OF ── */
@@ -59,7 +70,7 @@ const Documents = {
     const { jsPDF } = window.jspdf;
     const doc       = new jsPDF({ unit:'mm', format:'a4' });
     const of        = await this._getOFProfile();
-    const num       = this._docNum('DEV');
+    const num       = await this._docNum('DEV');
     const today     = new Date().toLocaleDateString('fr-FR');
     const opcoLabel = OpcoPage.CONFIG[dossier.opco]?.label || dossier.opco;
     const duree     = this._calculerDuree(dossier.trainingDates);
@@ -139,7 +150,7 @@ const Documents = {
     const { jsPDF } = window.jspdf;
     const doc       = new jsPDF({ unit:'mm', format:'a4' });
     const of        = await this._getOFProfile();
-    const num       = this._docNum('CONV');
+    const num       = await this._docNum('CONV');
     const today     = new Date().toLocaleDateString('fr-FR');
     const opcoLabel = OpcoPage.CONFIG[dossier.opco]?.label || dossier.opco;
     const duree     = this._calculerDuree(dossier.trainingDates);
@@ -230,7 +241,7 @@ const Documents = {
     const { jsPDF } = window.jspdf;
     const doc       = new jsPDF({ unit:'mm', format:'a4' });
     const of        = await this._getOFProfile();
-    const num       = this._docNum('PROG');
+    const num       = await this._docNum('PROG');
     const today     = new Date().toLocaleDateString('fr-FR');
     const opcoLabel = OpcoPage.CONFIG[dossier.opco]?.label || dossier.opco;
     const duree     = this._calculerDuree(dossier.trainingDates);
@@ -393,7 +404,7 @@ const Documents = {
     const { jsPDF } = window.jspdf;
     const doc       = new jsPDF({ unit:'mm', format:'a4' });
     const of        = await this._getOFProfile();
-    const num       = this._docNum('FACT');
+    const num       = await this._docNum('FACT');
     const today     = new Date().toLocaleDateString('fr-FR');
     const due       = new Date(); due.setDate(due.getDate()+30);
     const dueStr    = due.toLocaleDateString('fr-FR');

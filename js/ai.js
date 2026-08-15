@@ -2,11 +2,19 @@
 
 const AI = {
 
-  /* ── Appel à la serverless function ── */
+  /* ── Appel à la serverless function ──
+     L'endpoint /api/ai exige désormais un jeton Supabase valide : sans lui,
+     n'importe qui pouvait consommer la clé Anthropic. */
   async _call(userPrompt, system = '', maxTokens = 1500) {
+    const { data: { session } } = await supa.auth.getSession();
+    if (!session?.access_token) throw new Error('Session expirée — reconnectez-vous');
+
     const res = await fetch('/api/ai', {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
       body: JSON.stringify({
         messages:   [{ role: 'user', content: userPrompt }],
         system,
@@ -14,7 +22,7 @@ const AI = {
       })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
     return data.text || '';
   },
