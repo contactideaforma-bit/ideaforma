@@ -454,6 +454,23 @@ body {
    Le menu reste le hamburger. On travaille les tailles de touche, la place
    perdue, et les pièges connus d'iOS.
 ═══════════════════════════════════════════════════════════════════════════ */
+/* ── Le tiroir de navigation ──
+   styles.css le masque avec `transform: translateX(-248px)`, une valeur en
+   dur appariée à `width: 248px`. J'avais élargi le tiroir sans toucher à
+   cette valeur : 52 px de menu restaient collés à gauche de l'écran, par
+   dessus la page, et le hamburger semblait cassé.
+
+   On masque désormais par -100 % : la distance suit la largeur, quelle
+   qu'elle soit. La règle vaut sur toute la plage mobile de styles.css
+   (900 px), pas seulement sur la mienne. */
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  /* Le tiroir passe au-dessus de l'en-tête collante */
+  .sidebar { z-index: 120; }
+  .sidebar-backdrop { z-index: 110; }
+}
+
 @media (max-width: 1100px) {
   .hub-grid { grid-template-columns: 1fr; }
 }
