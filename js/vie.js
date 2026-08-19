@@ -118,6 +118,9 @@ Object.assign(DataStore, {
     if (f.etiquetteId) q = q.eq('etiquette_id', f.etiquetteId);
     if (f.dossierId)   q = q.eq('dossier_id', f.dossierId);
     if (f.fait !== undefined && f.fait !== null) q = q.eq('fait', f.fait);
+    // Les tâches abandonnées restent en base mais sortent des listes,
+    // sauf demande explicite : c'est le « ~ » du bullet journal.
+    if (!f.inclureAbandonnees) q = q.eq('abandonnee', false);
     if (f.recherche)   q = q.ilike('description', `%${this._nettoyerRecherche(f.recherche)}%`);
     if (f.horizonJours != null) {
       const limite = Dates.iso(new Date(Date.now() + f.horizonJours * 86400000));
@@ -169,6 +172,14 @@ Object.assign(DataStore, {
     const { data, error } = await supa.from('taches')
       .update(patch).eq('id', id).eq('user_id', uid).select().single();
     if (error) this._handleError(error, 'updateTache');
+    return data;
+  },
+
+  async getTache(id) {
+    const { data, error } = await supa.from('taches')
+      .select('*, listes(nom,couleur,icone), etiquettes(nom,couleur,icone)')
+      .eq('id', id).single();
+    if (error) this._handleError(error, 'getTache');
     return data;
   },
 
@@ -318,6 +329,53 @@ Object.assign(DataStore, {
   },
 
   /* ══════════════════════════════════════════════
+     BULLET JOURNAL
+     Le « rapid logging » : une entrée = un symbole.
+       •  tâche à faire     ✕  faite
+       >  migrée            ~  abandonnée
+       ○  rendez-vous       —  note
+  ══════════════════════════════════════════════ */
+
+  /** Toutes les entrées de carnet entre deux dates (AAAA-MM-JJ inclus) */
+  async getJournal(du, au) {
+    const { data, error } = await supa.from('v_journal_jour')
+      .select('*')
+      .gte('jour', du).lte('jour', au)
+      .order('jour', { ascending: true })
+      .order('heure', { ascending: true, nullsFirst: false })
+      .limit(1000);
+    if (error) this._handleError(error, 'getJournal');
+    return data || [];
+  },
+
+  /** Symbole de rapid logging d'une entrée */
+  symbole(e) {
+    if (e.entree === 'evenement') return '○';
+    if (e.entree === 'note')      return '—';
+    if (e.etat === 'fait')        return '✕';
+    if (e.etat === 'abandonnee')  return '~';
+    return '•';
+  },
+
+  /** Repousse une tâche : incrémente le compteur de migrations et conserve
+      l'échéance d'origine. Le calcul est fait en base, en une seule requête. */
+  async migrerTache(id, nouvelleDate) {
+    const { data, error } = await supa.rpc('fn_migrer_tache', {
+      p_tache: id,
+      p_nouvelle_date: nouvelleDate
+    });
+    if (error) this._handleError(error, 'migrerTache');
+    return data;
+  },
+
+  async abandonnerTache(id, abandonnee = true) {
+    const uid = await this._uid();
+    const { error } = await supa.from('taches')
+      .update({ abandonnee }).eq('id', id).eq('user_id', uid);
+    if (error) this._handleError(error, 'abandonnerTache');
+  },
+
+  /* ══════════════════════════════════════════════
      PENSE-BÊTE
   ══════════════════════════════════════════════ */
   async getNotes({ archivees = false, etiquetteId = null, recherche = '' } = {}) {
@@ -336,6 +394,13 @@ Object.assign(DataStore, {
     return data || [];
   },
 
+  async getNote(id) {
+    const { data, error } = await supa.from('notes')
+      .select('*, etiquettes(nom,couleur,icone)').eq('id', id).single();
+    if (error) this._handleError(error, 'getNote');
+    return data;
+  },
+
   async addNote(d) {
     const uid = await this._uid();
     const { data, error } = await supa.from('notes').insert({
@@ -344,7 +409,8 @@ Object.assign(DataStore, {
       contenu:      d.contenu || '',
       couleur:      d.couleur || '#FEF3C7',
       epinglee:     !!d.epinglee,
-      etiquette_id: d.etiquetteId || null
+      etiquette_id: d.etiquetteId || null,
+      date_jour:    d.dateJour || null
     }).select().single();
     if (error) this._handleError(error, 'addNote');
     return data;
@@ -355,7 +421,8 @@ Object.assign(DataStore, {
     const patch = {};
     const champs = {
       titre: 'titre', contenu: 'contenu', couleur: 'couleur',
-      epinglee: 'epinglee', archivee: 'archivee', etiquetteId: 'etiquette_id'
+      epinglee: 'epinglee', archivee: 'archivee', etiquetteId: 'etiquette_id',
+      dateJour: 'date_jour'
     };
     Object.entries(champs).forEach(([js, col]) => {
       if (d[js] !== undefined) patch[col] = d[js];
@@ -374,18 +441,71 @@ Object.assign(DataStore, {
      COFFRE À DOCUMENTS
      Chemin imposé par les policies Storage : <user_id>/coffre/<fichier>
   ══════════════════════════════════════════════ */
-  CATEGORIES_COFFRE: [
-    { code: 'identite',    label: 'Identité',            icone: '🪪' },
-    { code: 'logement',    label: 'Logement',            icone: '🏠' },
-    { code: 'sante',       label: 'Santé',               icone: '❤️' },
-    { code: 'assurance',   label: 'Assurances',          icone: '🛡️' },
-    { code: 'banque',      label: 'Banque',              icone: '🏦' },
-    { code: 'vehicule',    label: 'Véhicule',            icone: '🚗' },
-    { code: 'entreprise',  label: 'Entreprise',          icone: '🏢' },
-    { code: 'fiscal',      label: 'Impôts / comptable',  icone: '🧾' },
-    { code: 'diplome',     label: 'Diplômes',            icone: '🎓' },
-    { code: 'autre',       label: 'Autre',               icone: '📄' }
+  /* Les catégories vivent en base depuis la v9 : l'utilisateur les crée et les
+     renomme lui-même. Ce tableau ne sert plus que de secours si la migration
+     n'a pas encore été jouée. */
+  CATEGORIES_SECOURS: [
+    { code: 'autre', nom: 'Autre', icone: '📄', couleur: '#64748B', ordre: 99 }
   ],
+
+  _categoriesCache: null,
+
+  async getCoffreCategories(force = false) {
+    if (this._categoriesCache && !force) return this._categoriesCache;
+    const uid = await this._uid();
+    const { data, error } = await supa.from('coffre_categories')
+      .select('*').eq('user_id', uid).order('ordre');
+    if (error) {
+      console.warn('[DataStore] catégories du coffre indisponibles', error);
+      return this.CATEGORIES_SECOURS;
+    }
+    this._categoriesCache = data?.length ? data : this.CATEGORIES_SECOURS;
+    return this._categoriesCache;
+  },
+
+  async addCoffreCategorie(d) {
+    const uid  = await this._uid();
+    // Le code est dérivé du nom : sans accent, sans espace, unique
+    const base = (d.code || d.nom).normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'categorie';
+    const prises = (await this.getCoffreCategories(true)).map(c => c.code);
+    let code = base, n = 2;
+    while (prises.includes(code)) code = `${base}_${n++}`;
+
+    const { data, error } = await supa.from('coffre_categories').insert({
+      user_id: uid, code,
+      nom:     d.nom,
+      icone:   d.icone   || '📄',
+      couleur: d.couleur || '#64748B',
+      ordre:   d.ordre   ?? 50
+    }).select().single();
+    if (error) this._handleError(error, 'addCoffreCategorie');
+    this._categoriesCache = null;
+    return data;
+  },
+
+  async updateCoffreCategorie(id, d) {
+    const uid = await this._uid();
+    const patch = {};
+    ['nom', 'icone', 'couleur', 'ordre'].forEach(k => {
+      if (d[k] !== undefined) patch[k] = d[k];
+    });
+    const { error } = await supa.from('coffre_categories')
+      .update(patch).eq('id', id).eq('user_id', uid);
+    if (error) this._handleError(error, 'updateCoffreCategorie');
+    this._categoriesCache = null;
+  },
+
+  /** Les documents de la catégorie supprimée retombent sur « Autre » :
+      c'est un trigger côté base qui s'en charge. */
+  async deleteCoffreCategorie(id) {
+    const uid = await this._uid();
+    const { error } = await supa.from('coffre_categories')
+      .delete().eq('id', id).eq('user_id', uid);
+    if (error) this._handleError(error, 'deleteCoffreCategorie');
+    this._categoriesCache = null;
+  },
 
   async getCoffre({ categorie = null, etiquetteId = null, recherche = '' } = {}) {
     const uid = await this._uid();

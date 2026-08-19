@@ -137,7 +137,9 @@ const Notes = {
   },
 
   /* ══ Éditeur ══ */
-  ouvrir(n = null) {
+  /** `apres` : voir la remarque équivalente dans js/taches.js.
+      `jour` rattache la note à une journée du carnet (l'entrée « — »). */
+  ouvrir(n = null, apres = null, jour = null) {
     const edition = !!n;
     const couleur = n?.couleur || '#FEF3C7';
 
@@ -155,6 +157,11 @@ const Notes = {
             <button class="note-couleur ${c.hex === couleur ? 'on' : ''}"
                     data-couleur="${c.hex}" style="background:${c.hex}"
                     title="${c.nom}"></button>`).join('')}
+          <label class="note-couleur note-couleur-libre"
+                 title="Choisir n'importe quelle couleur"
+                 style="background:${this.COULEURS.some(c => c.hex === couleur) ? 'conic-gradient(#FCA5A5,#FDE68A,#A7F3D0,#BFDBFE,#DDD6FE,#FCA5A5)' : couleur};">
+            <input type="color" id="nCouleurLibre" value="${couleur}" />
+          </label>
         </div>
         <select class="filter-select" id="nEtiq">
           <option value="">Sans étiquette</option>
@@ -170,32 +177,47 @@ const Notes = {
         { label: n.archivee ? 'Désarchiver' : 'Archiver', cls: 'btn btn-secondary', action: async () => {
             clearTimeout(this._minuteur);
             await DataStore.updateNote(n.id, { archivee: !n.archivee });
-            Modal.close(); await this._charger();
+            Modal.close();
+            if (apres) await apres(); else await this._charger();
           } },
         { label: 'Supprimer', cls: 'btn btn-danger', action: async () => {
             clearTimeout(this._minuteur);
             await DataStore.deleteNote(n.id);
-            Modal.close(); await this._charger();
+            Modal.close();
+            if (apres) await apres(); else await this._charger();
             Toast.show('Note supprimée', 'info');
           } }
       ] : []),
       { label: 'Fermer', cls: 'btn btn-primary', action: async () => {
           clearTimeout(this._minuteur);
           if (this._enCours) { n = await this._enCours; }
-          await this._sauver(n);
+          await this._sauver(n, jour);
           Modal.close();
-          await this._charger();
+          if (apres) await apres(); else await this._charger();
         } }
     ], 'modal-lg');
 
-    /* Couleurs */
+    /* Couleurs : les sept préréglées, plus n'importe quelle autre */
+    const choisirCouleur = hex => {
+      document.querySelectorAll('.note-couleur').forEach(x => x.classList.remove('on'));
+      document.getElementById('noteEditeur').style.background = hex;
+      const preref = document.querySelector(`[data-couleur="${hex}"]`);
+      if (preref) preref.classList.add('on');
+      else {
+        const libre = document.querySelector('.note-couleur-libre');
+        if (libre) { libre.classList.add('on'); libre.style.background = hex; }
+      }
+      this._couleurChoisie = hex;
+    };
+    this._couleurChoisie = couleur;
+
     document.querySelectorAll('[data-couleur]').forEach(b =>
-      b.addEventListener('click', () => {
-        document.querySelectorAll('[data-couleur]').forEach(x => x.classList.remove('on'));
-        b.classList.add('on');
-        document.getElementById('noteEditeur').style.background = b.dataset.couleur;
-      })
+      b.addEventListener('click', () => choisirCouleur(b.dataset.couleur))
     );
+    document.getElementById('nCouleurLibre')?.addEventListener('input', e => {
+      choisirCouleur(e.target.value);
+      auto();
+    });
 
     /* Enregistrement automatique : 900 ms après la dernière frappe.
        `_enCours` empêche deux enregistrements simultanés : sans lui, une
@@ -210,7 +232,7 @@ const Notes = {
       if (etat) etat.textContent = 'Modification…';
       this._minuteur = setTimeout(async () => {
         if (this._enCours) { await this._enCours; }
-        this._enCours = this._sauver(n).then(res => { n = res; this._enCours = null; return res; });
+        this._enCours = this._sauver(n, jour).then(res => { n = res; this._enCours = null; return res; });
         await this._enCours;
         const e2 = document.getElementById('nEtat');
         if (e2) e2.textContent = 'Enregistré ✓';
@@ -225,16 +247,20 @@ const Notes = {
 
   /** Crée ou met à jour, et renvoie la note pour que l'auto-save suivant
       cible la bonne ligne. */
-  async _sauver(n) {
+  async _sauver(n, jour = null) {
     const titre    = document.getElementById('nTitre')?.value.trim()   ?? '';
     const contenu  = document.getElementById('nContenu')?.value        ?? '';
-    const couleur  = document.querySelector('[data-couleur].on')?.dataset.couleur || '#FEF3C7';
+    const couleur  = this._couleurChoisie
+                  || document.querySelector('[data-couleur].on')?.dataset.couleur
+                  || '#FEF3C7';
     const etiq     = document.getElementById('nEtiq')?.value || null;
     const epinglee = document.getElementById('nEpingle')?.checked || false;
 
     if (!titre && !contenu.trim()) return n;   // note vide : rien à enregistrer
 
     const d = { titre: titre || null, contenu, couleur, etiquetteId: etiq, epinglee };
+    // Une note créée depuis le carnet appartient à sa journée (l'entrée « — »)
+    if (jour && !n?.id) d.dateJour = jour;
 
     try {
       if (n?.id) { await DataStore.updateNote(n.id, d); return n; }

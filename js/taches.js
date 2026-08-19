@@ -100,6 +100,9 @@ const Taches = {
             </button>`).join('')}
           <button class="liste-chip liste-chip-plus" id="btnNouvelleListe">＋ Liste</button>
         </div>
+        <div style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 2px;">
+          Astuce : recliquez sur la liste sélectionnée pour la renommer ou la supprimer.
+        </div>
 
         <!-- ── Filtres ── -->
         <div class="taches-filtres">
@@ -113,6 +116,8 @@ const Taches = {
               <option value="${e.id}" ${this.etiqActive === e.id ? 'selected' : ''}>
                 ${e.icone} ${esc(e.nom)}</option>`).join('')}
           </select>
+          <button class="liste-chip liste-chip-plus" id="btnGererEtiquettes"
+                  title="Créer une étiquette">＋ Étiquette</button>
           <label class="taches-switch">
             <input type="checkbox" id="tacheVoirFaites" ${this.voirFaites ? 'checked' : ''} />
             Voir les tâches terminées
@@ -165,8 +170,22 @@ const Taches = {
     page.addEventListener('click', async e => {
       const chip = e.target.closest('[data-liste]');
       if (chip) {
+        // Second clic sur la liste déjà active : on ouvre ses réglages.
+        // C'est le même geste que dans le coffre, pour les catégories.
+        if (this.listeActive === chip.dataset.liste && chip.dataset.liste) {
+          const l = this._listes.find(x => x.id === chip.dataset.liste);
+          if (l) { this._formListe(null, l); return; }
+        }
         this.listeActive = chip.dataset.liste || null;
         await this._charger();
+        return;
+      }
+
+      if (e.target.closest('#btnGererEtiquettes')) {
+        SettingsPage._formEtiquette(null, async () => {
+          this._etiquettes = await DataStore.getEtiquettes(true);
+          await this._charger();
+        });
         return;
       }
 
@@ -255,7 +274,9 @@ const Taches = {
   },
 
   /* ══ Formulaire complet ══ */
-  ouvrirForm(t = null) {
+  /** `apres` permet d'ouvrir ce formulaire depuis une autre page (le carnet)
+      sans qu'il repeigne la page Tâches par-dessus. */
+  ouvrirForm(t = null, apres = null) {
     const edition = !!t;
     const corps = `
       <div class="form-grid">
@@ -334,7 +355,7 @@ const Taches = {
             if (edition) await DataStore.updateTache(t.id, d);
             else         await DataStore.addTacheComplete(d);
             Modal.close();
-            await this._charger();
+            if (apres) await apres(); else await this._charger();
             updateJourneeBadge();
             Toast.show(edition ? 'Tâche modifiée' : 'Tâche créée', 'success');
           } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
@@ -343,36 +364,59 @@ const Taches = {
   },
 
   /* ══ Création d'une liste ══ */
-  _formListe() {
-    const icones = ['📋', '🛒', '💡', '🏠', '💼', '🎯', '📞', '🧾', '🎁', '✈️', '🔧', '📚'];
-    Modal.open('Nouvelle liste', `
+  _formListe(apres = null, l = null) {
+    const edition = !!l;
+    const icones = ['📋', '🛒', '💡', '🏠', '💼', '🎯', '📞', '🧾', '🎁', '✈️', '🔧', '📚',
+                    '🎨', '🏋️', '🍽️', '🌱', '🎵', '🐾'];
+
+    Modal.open(edition ? 'Modifier la liste' : 'Nouvelle liste', `
       <div class="form-grid">
         <div class="field form-col-full">
           <label>Nom de la liste *</label>
-          <input id="lNom" placeholder="Ex. Courses, Maison, Prospection" />
+          <input id="lNom" value="${esc(l?.nom)}" placeholder="Ex. Courses, Maison, Prospection" />
         </div>
         <div class="field">
           <label>Icône</label>
-          <select id="lIcone">${icones.map(i => `<option>${i}</option>`).join('')}</select>
+          <select id="lIcone">
+            ${icones.map(i => `<option ${l?.icone === i ? 'selected' : ''}>${i}</option>`).join('')}
+          </select>
         </div>
         <div class="field">
           <label>Couleur</label>
-          <input type="color" id="lCouleur" value="#3B82F6" style="height:42px;padding:3px;" />
+          <input type="color" id="lCouleur" value="${l?.couleur || '#3B82F6'}"
+                 style="height:42px;padding:3px;" />
         </div>
-      </div>`, [
-      { label: 'Annuler', cls: 'btn btn-secondary', action: () => Modal.close() },
-      { label: 'Créer',   cls: 'btn btn-primary', action: async () => {
-          const nom = document.getElementById('lNom').value.trim();
-          if (!nom) { Toast.show('Un nom est nécessaire', 'error'); return; }
-          await DataStore.addListe({
-            nom,
-            icone:   document.getElementById('lIcone').value,
-            couleur: document.getElementById('lCouleur').value
-          });
+      </div>
+      ${edition ? `
+        <div class="alert-note" style="margin-top:12px;">
+          <span class="alert-note-icon">ℹ️</span>
+          <span>Supprimer une liste ne supprime pas ses tâches : elles rejoignent
+          « Sans liste ».</span>
+        </div>` : ''}`, [
+      ...(edition ? [{
+        label: 'Supprimer', cls: 'btn btn-danger', action: async () => {
+          await DataStore.deleteListe(l.id);
           Modal.close();
           this._listes = await DataStore.getListes();
-          await this._charger();
-          Toast.show('Liste créée', 'success');
+          if (this.listeActive === l.id) this.listeActive = null;
+          if (apres) await apres(); else await this._charger();
+          Toast.show('Liste supprimée · tâches conservées', 'info');
+        }
+      }] : []),
+      { label: 'Annuler', cls: 'btn btn-secondary', action: () => Modal.close() },
+      { label: edition ? 'Enregistrer' : 'Créer', cls: 'btn btn-primary', action: async () => {
+          const d = {
+            nom:     document.getElementById('lNom').value.trim(),
+            icone:   document.getElementById('lIcone').value,
+            couleur: document.getElementById('lCouleur').value
+          };
+          if (!d.nom) { Toast.show('Un nom est nécessaire', 'error'); return; }
+          if (edition) await DataStore.updateListe(l.id, d);
+          else         await DataStore.addListe(d);
+          Modal.close();
+          this._listes = await DataStore.getListes();
+          if (apres) await apres(); else await this._charger();
+          Toast.show(edition ? 'Liste modifiée' : 'Liste créée', 'success');
         } }
     ], 'modal-sm');
   }

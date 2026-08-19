@@ -1,0 +1,547 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   IDEAFORMA — Thème bullet journal
+   Chargé APRÈS styles.css et vie.css : il redéfinit les variables de couleur
+   et ajoute la grammaire du carnet (papier, encres, symboles, spreads).
+
+   Principe : le papier et l'encre remplacent le gris d'interface, mais rien
+   n'est décoratif au point de gêner la lecture. Les symboles de rapid logging
+   ont un sens et un seul :
+
+     •  tâche à faire        ✕  faite
+     >  migrée               ~  abandonnée
+     ○  rendez-vous          —  note
+     ★  priorité
+───────────────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Papier et encres
+═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --papier:        #FAF6EC;   /* la page */
+  --papier-carte:  #FFFDF7;   /* une fiche posée dessus */
+  --papier-creux:  #F2EBDA;   /* un renfoncement, une entête */
+  --pois:          rgba(120, 105, 80, 0.20);
+  --regle:         rgba(120, 105, 80, 0.16);
+
+  --encre:         #2E2A24;
+  --encre-douce:   #6B6252;
+  --encre-pale:    #9C9484;
+
+  --encre-bleue:   #3F5488;
+  --encre-rouge:   #B0453C;
+  --encre-verte:   #4E7A57;
+  --encre-ocre:    #B5822F;
+  --encre-prune:   #7A4E7E;
+
+  --ruban-1: #D98C8C;
+  --ruban-2: #E3B778;
+  --ruban-3: #9BBF95;
+  --ruban-4: #8FA9D0;
+
+  --manuscrit: 'Caveat', 'Segoe Script', cursive;
+  --serif:     'Lora', Georgia, serif;
+
+  /* On remappe les variables de l'application sur la palette carnet, pour
+     que les pages écrites avant ce thème en héritent sans être réécrites. */
+  --bg:            var(--papier);
+  --white:         var(--papier-carte);
+  --text:          var(--encre);
+  --text-muted:    var(--encre-douce);
+  --text-light:    var(--encre-pale);
+  --border:        var(--regle);
+  --border-light:  rgba(120, 105, 80, 0.09);
+  --navy:          #33445F;
+  --primary:       var(--encre-bleue);
+  --primary-hover: #2F4270;
+  --primary-light:   rgba(63, 84, 136, 0.09);
+  --primary-lighter: rgba(63, 84, 136, 0.05);
+  --primary-border:  rgba(63, 84, 136, 0.20);
+  --danger:        var(--encre-rouge);
+  --danger-bg:     rgba(176, 69, 60, 0.09);
+  --success:       var(--encre-verte);
+  --success-bg:    rgba(78, 122, 87, 0.10);
+  --warning:       var(--encre-ocre);
+  --warning-bg:    rgba(181, 130, 47, 0.11);
+  --violet:        var(--encre-prune);
+
+  --shadow-sm: 0 1px 2px rgba(90, 75, 45, 0.06);
+  --shadow:    0 1px 3px rgba(90, 75, 45, 0.08), 0 1px 2px rgba(90, 75, 45, 0.05);
+  --shadow-md: 0 3px 10px rgba(90, 75, 45, 0.10);
+  --shadow-lg: 0 12px 28px rgba(90, 75, 45, 0.14);
+}
+
+[data-theme="dark"] {
+  --papier:       #191712;
+  --papier-carte: #221F19;
+  --papier-creux: #2A251D;
+  --pois:         rgba(220, 200, 160, 0.13);
+  --regle:        rgba(220, 200, 160, 0.13);
+
+  --encre:        #EFE7D6;
+  --encre-douce:  #A99E88;
+  --encre-pale:   #6E6656;
+
+  --encre-bleue:  #93AEE0;
+  --encre-rouge:  #E58C82;
+  --encre-verte:  #96C8A2;
+  --encre-ocre:   #E2B96A;
+  --encre-prune:  #C4A0C8;
+
+  --bg:           var(--papier);
+  --white:        var(--papier-carte);
+  --text:         var(--encre);
+  --text-muted:   var(--encre-douce);
+  --text-light:   var(--encre-pale);
+  --border:       var(--regle);
+  --border-light: rgba(220, 200, 160, 0.07);
+  --navy:         #CFC4AC;
+  --primary:      var(--encre-bleue);
+  --primary-hover:#B4C9EC;
+  --primary-light:   rgba(147, 174, 224, 0.13);
+  --primary-lighter: rgba(147, 174, 224, 0.07);
+  --primary-border:  rgba(147, 174, 224, 0.24);
+  --danger:       var(--encre-rouge);
+  --success:      var(--encre-verte);
+  --warning:      var(--encre-ocre);
+  --violet:       var(--encre-prune);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   La page à pois
+═══════════════════════════════════════════════════════════════════════════ */
+body {
+  background-color: var(--papier);
+  background-image: radial-gradient(circle, var(--pois) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: 11px 11px;
+}
+
+.page-body { background: transparent; }
+
+.sidebar,
+.page-header {
+  background: var(--papier-carte);
+  border-color: var(--regle);
+}
+
+/* Les fiches sont du papier posé sur la page : légèrement plus clair,
+   un trait fin, une ombre courte. Jamais de gris d'interface. */
+.section-card,
+.hub-quick,
+.chat-saisie,
+.doc-carte,
+.hub-tuile {
+  background: var(--papier-carte);
+  border-color: var(--regle);
+}
+
+.section-card-header {
+  background: transparent;
+  border-bottom: 1px solid var(--regle);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Typographie du carnet
+═══════════════════════════════════════════════════════════════════════════ */
+.page-title {
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.page-subtitle { font-family: var(--serif); font-style: italic; }
+
+.section-card-title,
+.modal-title {
+  font-family: var(--serif);
+  font-weight: 600;
+}
+
+.logo-name  { font-family: var(--serif); font-weight: 600; }
+.nav-section {
+  font-family: var(--serif);
+  font-style: italic;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LE CARNET — structure des spreads
+═══════════════════════════════════════════════════════════════════════════ */
+.carnet { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── En-tête manuscrite d'un spread ── */
+.spread-tete {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--encre);
+}
+.spread-titre {
+  font-family: var(--manuscrit);
+  font-size: 34px; font-weight: 700; line-height: 1;
+  color: var(--encre);
+}
+.spread-soustitre {
+  font-family: var(--serif); font-style: italic;
+  font-size: 13.5px; color: var(--encre-douce);
+  margin-top: 3px;
+}
+.spread-actions { display: flex; gap: 8px; align-items: center; }
+
+/* ── Onglets des spreads : des marque-pages ── */
+.marque-pages {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--regle);
+  padding-bottom: 0;
+}
+.marque-page {
+  position: relative;
+  padding: 9px 18px 10px;
+  border: 1px solid var(--regle);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  background: var(--papier-creux);
+  font-family: var(--serif); font-size: 13.5px; font-weight: 500;
+  color: var(--encre-douce);
+  transition: var(--transition);
+  bottom: -1px;
+}
+.marque-page:hover { color: var(--encre); background: var(--papier-carte); }
+.marque-page.active {
+  background: var(--papier-carte);
+  color: var(--encre);
+  font-weight: 600;
+  border-color: var(--regle);
+  box-shadow: 0 -2px 0 var(--ruban) inset;
+}
+.marque-page[data-spread="jour"]        { --ruban: var(--ruban-1); }
+.marque-page[data-spread="mois"]        { --ruban: var(--ruban-2); }
+.marque-page[data-spread="futur"]       { --ruban: var(--ruban-3); }
+.marque-page[data-spread="collections"] { --ruban: var(--ruban-4); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RAPID LOGGING — les entrées du carnet
+═══════════════════════════════════════════════════════════════════════════ */
+.log { display: flex; flex-direction: column; }
+
+.log-entree {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 7px 6px 7px 2px;
+  border-bottom: 1px solid var(--border-light);
+  transition: var(--transition);
+}
+.log-entree:last-child { border-bottom: none; }
+.log-entree:hover { background: var(--primary-lighter); }
+
+/* Le puce cliquable : c'est lui qui porte le symbole */
+.puce {
+  flex-shrink: 0;
+  width: 22px; height: 22px; margin-top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif);
+  font-size: 15px; line-height: 1; font-weight: 600;
+  color: var(--encre);
+  border-radius: 5px;
+  transition: var(--transition);
+}
+.puce:hover { background: var(--papier-creux); }
+
+.puce-tache      { font-size: 19px; }                       /* • */
+.puce-fait       { color: var(--encre-verte); }             /* ✕ */
+.puce-migree     { color: var(--encre-ocre); font-size: 16px; }  /* > */
+.puce-abandonnee { color: var(--encre-pale); }              /* ~ */
+.puce-evenement  { font-size: 14px; }                       /* ○ */
+.puce-note       { color: var(--encre-douce); }             /* — */
+
+.log-corps { flex: 1; min-width: 0; cursor: pointer; }
+.log-texte {
+  font-size: 14.5px; line-height: 1.45; color: var(--encre);
+  font-family: var(--serif);
+}
+.log-entree.est-fait .log-texte,
+.log-entree.est-abandonne .log-texte {
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+  color: var(--encre-pale);
+}
+.log-meta {
+  display: flex; gap: 9px; flex-wrap: wrap; align-items: center;
+  font-size: 11.5px; color: var(--encre-douce); margin-top: 2px;
+}
+.log-heure {
+  font-family: var(--serif); font-weight: 600;
+  font-size: 12px; color: var(--encre-douce);
+  min-width: 42px;
+}
+.log-retard { color: var(--encre-rouge); font-weight: 600; }
+.log-signifiant { color: var(--encre-rouge); font-weight: 700; margin-right: 3px; }
+.log-migrations {
+  font-family: var(--serif); font-size: 11px; font-weight: 600;
+  color: var(--encre-ocre);
+  border: 1px solid currentColor; border-radius: 20px; padding: 0 6px;
+}
+
+/* Boutons d'action, discrets jusqu'au survol */
+.log-outils { display: flex; gap: 2px; opacity: 0; transition: var(--transition); }
+.log-entree:hover .log-outils,
+.log-entree:focus-within .log-outils { opacity: 1; }
+.log-outil {
+  width: 26px; height: 26px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--encre-douce);
+  transition: var(--transition);
+}
+.log-outil:hover { background: var(--papier-creux); color: var(--encre); }
+@media (hover: none) { .log-outils { opacity: 1; } }
+
+/* ── Titre de section manuscrit, souligné à la main ── */
+.log-titre {
+  font-family: var(--manuscrit);
+  font-size: 22px; font-weight: 700; color: var(--encre);
+  margin: 18px 0 4px;
+  display: flex; align-items: baseline; gap: 9px;
+}
+.log-titre:first-child { margin-top: 0; }
+.log-titre::after {
+  content: ''; flex: 1; height: 1px;
+  background: repeating-linear-gradient(90deg,
+    var(--regle) 0 6px, transparent 6px 9px);
+}
+.log-titre-compte {
+  font-family: var(--serif); font-size: 12px; font-weight: 600;
+  color: var(--encre-douce);
+}
+
+/* ── Ligne de saisie rapide, façon crayon ── */
+.log-saisie {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 2px;
+  border-bottom: 1.5px dashed var(--regle);
+}
+.log-saisie-puce {
+  width: 22px; text-align: center;
+  font-size: 19px; color: var(--encre-pale);
+}
+.log-saisie input {
+  flex: 1; border: none; background: transparent; outline: none;
+  font-family: var(--serif); font-size: 14.5px; color: var(--encre);
+  padding: 8px 0;
+}
+.log-saisie input::placeholder { color: var(--encre-pale); font-style: italic; }
+.log-saisie-indice {
+  font-family: var(--serif); font-style: italic;
+  font-size: 11.5px; color: var(--encre-douce);
+  padding: 2px 4px 10px; min-height: 16px;
+}
+
+/* Le groupe saisie + indice + boutons se tient ensemble */
+.log-entete { display: flex; flex-direction: column; gap: 0; }
+.log-entete .log-creer { margin-top: 4px; }
+
+/* ── Les trois boutons de création ── */
+.log-creer { display: flex; gap: 8px; flex-wrap: wrap; }
+.log-creer-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border-radius: 8px;
+  border: 1.5px solid var(--regle); background: var(--papier-carte);
+  font-family: var(--serif); font-size: 13px; font-weight: 500;
+  color: var(--encre-douce); transition: var(--transition);
+}
+.log-creer-btn:hover {
+  border-color: var(--encre); color: var(--encre); transform: translateY(-1px);
+}
+.log-creer-sym { font-size: 16px; font-weight: 700; color: var(--encre); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LOG MENSUEL — la colonne des jours + la colonne des tâches
+═══════════════════════════════════════════════════════════════════════════ */
+.mois-spread { display: grid; grid-template-columns: 1.15fr 1fr; gap: 26px; align-items: start; }
+
+.mois-jours { display: flex; flex-direction: column; }
+.mois-ligne {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 4px 6px 4px 0;
+  border-bottom: 1px solid var(--border-light);
+  min-height: 30px; transition: var(--transition);
+}
+.mois-ligne:hover { background: var(--primary-lighter); }
+.mois-ligne.week-end { background: rgba(120,105,80,0.045); }
+.mois-ligne.aujourdhui { box-shadow: inset 3px 0 0 var(--encre-rouge); }
+.mois-ligne-date {
+  flex-shrink: 0; width: 46px;
+  font-family: var(--serif); font-size: 13px; color: var(--encre-douce);
+  display: flex; gap: 5px; align-items: baseline;
+}
+.mois-ligne-num { font-weight: 700; color: var(--encre); min-width: 18px; text-align: right; }
+.mois-ligne-jour { font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; }
+.mois-ligne.aujourdhui .mois-ligne-num { color: var(--encre-rouge); }
+.mois-ligne-contenu {
+  flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; padding-top: 2px;
+}
+.mois-puce {
+  font-family: var(--serif); font-size: 12.5px; color: var(--encre);
+  display: inline-flex; align-items: center; gap: 4px;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: pointer;
+}
+.mois-puce-sym { font-size: 11px; color: var(--encre-douce); }
+.mois-puce.fait { color: var(--encre-pale); text-decoration: line-through; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FUTURE LOG — six mois en colonnes
+═══════════════════════════════════════════════════════════════════════════ */
+.futur-grille {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px;
+}
+.futur-mois {
+  border: 1px solid var(--regle); border-radius: 10px;
+  background: var(--papier-carte); padding: 14px 16px 16px;
+  min-height: 150px; display: flex; flex-direction: column;
+}
+.futur-mois-titre {
+  font-family: var(--manuscrit); font-size: 21px; font-weight: 700;
+  color: var(--encre); text-transform: capitalize;
+  border-bottom: 1.5px solid var(--encre); padding-bottom: 5px; margin-bottom: 9px;
+}
+.futur-mois-vide {
+  font-family: var(--serif); font-style: italic; font-size: 12.5px;
+  color: var(--encre-pale); margin-top: 6px;
+}
+.futur-entree {
+  display: flex; gap: 7px; align-items: baseline;
+  font-family: var(--serif); font-size: 13px; color: var(--encre);
+  padding: 3px 0; cursor: pointer;
+}
+.futur-entree:hover { color: var(--encre-bleue); }
+.futur-jour {
+  font-weight: 700; font-size: 11.5px; color: var(--encre-douce);
+  min-width: 22px; flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COLLECTIONS — l'index du carnet
+═══════════════════════════════════════════════════════════════════════════ */
+.collections-grille {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px;
+}
+.collection {
+  border: 1px solid var(--regle); border-radius: 10px;
+  background: var(--papier-carte); padding: 15px 16px;
+  cursor: pointer; transition: var(--transition);
+  border-left: 4px solid var(--c, var(--encre-bleue));
+}
+.collection:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.collection-tete { display: flex; align-items: center; gap: 9px; }
+.collection-icone { font-size: 19px; }
+.collection-nom {
+  font-family: var(--serif); font-size: 15px; font-weight: 600; color: var(--encre);
+}
+.collection-compte {
+  margin-left: auto; font-family: var(--serif); font-size: 12px; color: var(--encre-douce);
+}
+.collection-apercu {
+  margin-top: 9px; display: flex; flex-direction: column; gap: 3px;
+}
+.collection-item {
+  font-family: var(--serif); font-size: 12.5px; color: var(--encre-douce);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.collection-vide {
+  font-family: var(--serif); font-style: italic;
+  font-size: 12.5px; color: var(--encre-pale); margin-top: 8px;
+}
+.collection-neuve {
+  border-style: dashed; border-left-style: dashed;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-size: 13.5px; color: var(--encre-douce);
+  min-height: 96px;
+}
+.collection-neuve:hover { color: var(--encre); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Légende des symboles
+═══════════════════════════════════════════════════════════════════════════ */
+.legende {
+  display: flex; flex-wrap: wrap; gap: 4px 18px;
+  padding: 10px 14px; border-radius: 8px;
+  background: var(--papier-creux);
+  font-family: var(--serif); font-size: 12px; color: var(--encre-douce);
+}
+.legende-item { display: inline-flex; align-items: baseline; gap: 6px; }
+.legende-sym { font-weight: 700; color: var(--encre); min-width: 12px; text-align: center; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Retouches sur les composants existants
+═══════════════════════════════════════════════════════════════════════════ */
+.btn {
+  font-family: var(--serif);
+  border-radius: 8px;
+}
+.btn-primary { background: var(--encre-bleue); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-secondary { background: var(--papier-carte); border: 1px solid var(--regle); }
+.btn-secondary:hover { background: var(--papier-creux); }
+
+.liste-chip, .rappel-case, .chat-suggestion, .agenda-filtre {
+  font-family: var(--serif);
+  background: var(--papier-carte);
+  border-color: var(--regle);
+}
+.liste-chip.active { background: var(--encre); border-color: var(--encre); }
+
+.field label {
+  font-family: var(--serif); font-weight: 600;
+  text-transform: none; letter-spacing: 0; font-size: 12.5px;
+}
+.field input, .field select, .field textarea,
+.search-input, .filter-select {
+  background: var(--papier-carte);
+  border-color: var(--regle);
+  color: var(--encre);
+  border-radius: 8px;
+}
+
+.note-carte, .note-mini { border: 1px solid rgba(120,105,80,0.14); }
+.note-titre, .note-editeur-titre { font-family: var(--serif); }
+
+.modal { background: var(--papier-carte); }
+.toast { font-family: var(--serif); }
+
+.empty-state, .empty-table-sub {
+  font-family: var(--serif); font-style: italic; color: var(--encre-douce);
+}
+
+/* Le calendrier de l'agenda prend le papier lui aussi */
+.mois-case { border-color: var(--border-light); }
+.mois-case.hors { background: rgba(120,105,80,0.05); }
+.mois-num, .sem-num { font-family: var(--serif); }
+.agenda-periode { font-family: var(--manuscrit); font-size: 26px; font-weight: 700; }
+.jour-titre, .sem-item-t { font-family: var(--serif); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Responsive
+═══════════════════════════════════════════════════════════════════════════ */
+@media (max-width: 980px) {
+  .mois-spread  { grid-template-columns: 1fr; gap: 22px; }
+  .futur-grille { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 620px) {
+  .futur-grille { grid-template-columns: 1fr; }
+  .spread-titre { font-size: 28px; }
+  .marque-page  { padding: 8px 13px; font-size: 12.5px; }
+  .log-heure    { min-width: 36px; font-size: 11.5px; }
+  .mois-ligne-date { width: 40px; }
+  body { background-size: 20px 20px; }
+}
+
+/* Impression : le carnet mérite de sortir sur du vrai papier */
+@media print {
+  .sidebar, .page-header, .marque-pages, .log-outils,
+  .log-saisie, .log-creer, .spread-actions { display: none !important; }
+  body { background: #fff; }
+  .section-card, .futur-mois, .collection { box-shadow: none; border-color: #ccc; }
+}

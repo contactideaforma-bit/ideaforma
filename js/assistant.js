@@ -68,7 +68,8 @@ const Assistant = {
             titre:     { type: 'string' },
             contenu:   { type: 'string' },
             epinglee:  { type: 'boolean' },
-            etiquette: { type: 'string' }
+            etiquette: { type: 'string' },
+            jour:      { type: 'string', description: "AAAA-MM-JJ pour inscrire la note dans le log du jour du carnet ; omettre pour une note libre" }
           },
           required: ['contenu']
         }
@@ -95,6 +96,27 @@ const Assistant = {
             etiquette:     { type: 'string' },
             horizon_jours: { type: 'integer', description: "N'afficher que les tâches dont l'échéance tombe dans N jours" }
           }
+        }
+      },
+      {
+        name: 'migrer_tache',
+        description: "Repousse une tâche à une autre date (le « › » du bullet journal). Appeler lister_taches d'abord pour l'identifiant.",
+        input_schema: {
+          type: 'object',
+          properties: {
+            id:            { type: 'string' },
+            nouvelle_date: { type: 'string', description: 'AAAA-MM-JJ' }
+          },
+          required: ['id', 'nouvelle_date']
+        }
+      },
+      {
+        name: 'abandonner_tache',
+        description: "Marque une tâche comme abandonnée (le « ~ »). À proposer quand une tâche a déjà été repoussée plusieurs fois.",
+        input_schema: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id']
         }
       },
       {
@@ -189,9 +211,25 @@ const Assistant = {
           titre:       args.titre || null,
           contenu:     args.contenu,
           epinglee:    !!args.epinglee,
-          etiquetteId: idEtiquette(args.etiquette)
+          etiquetteId: idEtiquette(args.etiquette),
+          dateJour:    args.jour || null
         });
-        return { ok: true, id: n.id, message: 'Note enregistrée dans le pense-bête.' };
+        return {
+          ok: true, id: n.id,
+          message: args.jour
+            ? `Note inscrite dans le log du ${args.jour}.`
+            : 'Note enregistrée dans le pense-bête.'
+        };
+      }
+
+      case 'migrer_tache': {
+        await DataStore.migrerTache(args.id, args.nouvelle_date);
+        return { ok: true, message: `Tâche repoussée au ${args.nouvelle_date}.` };
+      }
+
+      case 'abandonner_tache': {
+        await DataStore.abandonnerTache(args.id, true);
+        return { ok: true, message: 'Tâche abandonnée.' };
       }
 
       case 'lister_agenda': {
@@ -307,6 +345,10 @@ ${listes.map(l => `- ${l.nom}`).join('\n') || '- aucune'}
 COMMENT TRAVAILLER
 - Tu as des outils pour lire ET écrire. Utilise-les plutôt que de demander à l'utilisateur de le faire lui-même.
 - Un horaire précis ⇒ creer_evenement. Une chose à faire sans horaire ⇒ creer_tache.
+- L'application est tenue comme un bullet journal : • tâche, ✕ faite, › repoussée,
+  ~ abandonnée, ○ rendez-vous, — note. Emploie ce vocabulaire quand tu en parles.
+- Une tâche déjà repoussée trois fois ou plus : signale-le et propose de
+  l'abandonner ou de la découper, plutôt que de la repousser encore.
 - Programme un rappel par défaut (15 min avant) sauf indication contraire ; pour une échéance importante, propose aussi la veille.
 - Devine l'étiquette d'après le sujet : ce qui touche aux dossiers OPCO, aux clients ou aux formations va sous « IDEAFORMA », le reste sous « Pro » ou « Perso ».
 - Avant de créer quelque chose d'ambigu, pose UNE question courte. Sinon agis, puis dis en une phrase ce que tu as fait.
@@ -467,8 +509,10 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     const l = {
       creer_tache:      `✅ Tâche créée : « ${esc(args.description || '')} »`,
       creer_evenement:  `📅 Rendez-vous créé : « ${esc(args.titre || '')} »`,
-      creer_note:       `📝 Note enregistrée`,
-      terminer_tache:   `✔️ Tâche marquée comme faite`,
+      creer_note:       `— Note enregistrée`,
+      terminer_tache:   `✕ Tâche marquée comme faite`,
+      migrer_tache:     `› Tâche repoussée`,
+      abandonner_tache: `~ Tâche abandonnée`,
       lister_agenda:    `🔍 Lecture de l'agenda`,
       lister_taches:    `🔍 Lecture des tâches`,
       chercher_dossiers:`🔍 Recherche dans les dossiers`,

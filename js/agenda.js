@@ -317,7 +317,8 @@ const Agenda = {
   },
 
   /* ══ Formulaire de rendez-vous ══ */
-  ouvrirForm(ev = null, jourPreselectionne = null) {
+  /** `apres` : voir la remarque équivalente dans js/taches.js. */
+  ouvrirForm(ev = null, jourPreselectionne = null, apres = null) {
     const edition = !!ev;
     const debut = ev ? new Date(ev.debut)
                      : (() => {
@@ -408,7 +409,8 @@ const Agenda = {
       ...(edition ? [{
         label: 'Supprimer', cls: 'btn btn-danger', action: async () => {
           await DataStore.deleteEvenement(ev.id);
-          Modal.close(); this._charger();
+          Modal.close();
+          if (apres) await apres(); else this._charger();
           Toast.show('Rendez-vous supprimé', 'info');
         }
       }] : []),
@@ -440,7 +442,7 @@ const Agenda = {
             if (edition) await DataStore.updateEvenement(ev.id, charge);
             else         await DataStore.addEvenement(charge);
             Modal.close();
-            this._charger();
+            if (apres) await apres(); else this._charger();
             Toast.show(
               rappels.length
                 ? `Rendez-vous enregistré · ${rappels.length} rappel(s) programmé(s)`

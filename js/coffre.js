@@ -12,6 +12,7 @@ const Coffre = {
 
   _docs:       [],
   _etiquettes: [],
+  _cats:       [],      // catégories chargées depuis la base (migration v9)
   categorie:   null,
   recherche:   '',
 
@@ -22,7 +23,10 @@ const Coffre = {
       <button class="btn btn-sm btn-primary" id="btnAjoutDoc">+ Document</button>`;
     Loading.show();
 
-    this._etiquettes = await DataStore.getEtiquettes().catch(() => []);
+    [this._etiquettes, this._cats] = await Promise.all([
+      DataStore.getEtiquettes().catch(() => []),
+      DataStore.getCoffreCategories().catch(() => DataStore.CATEGORIES_SECOURS)
+    ]);
     try { await this._charger(); }
     catch (err) { peindreErreur(err); return; }
 
@@ -38,12 +42,13 @@ const Coffre = {
   },
 
   _peindre() {
-    const cats = DataStore.CATEGORIES_COFFRE;
+    const cats = this._cats;
     const compte = c => this._docs.filter(d => d.categorie === c).length;
     const hui = Dates.aujourdhui();
 
     const carte = d => {
-      const cat = cats.find(c => c.code === d.categorie) || cats[cats.length - 1];
+      const cat = cats.find(c => c.code === d.categorie)
+               || { icone: '📄', nom: 'Sans catégorie', couleur: '#64748B' };
       const expire  = d.date_expiration && d.date_expiration < hui;
       const bientot = d.date_expiration && !expire &&
         d.date_expiration <= Dates.iso(new Date(Date.now() + 60 * 86400000));
@@ -55,7 +60,7 @@ const Coffre = {
               ${d.favori ? '⭐ ' : ''}${esc(d.titre)}
             </div>
             <div class="doc-meta">
-              <span>${cat.label}</span>
+              <span>${esc(cat.nom)}</span>
               <span>${this._taille(d.taille)}</span>
               ${d.date_document ? `<span>du ${Dates.courte(d.date_document)}</span>` : ''}
               ${d.etiquettes ? pucePastille(d.etiquettes) : ''}
@@ -81,10 +86,12 @@ const Coffre = {
             🗄️ Tout <span class="hub-compteur">${this._docs.length}</span>
           </button>
           ${cats.map(c => `
-            <button class="liste-chip ${this.categorie === c.code ? 'active' : ''}" data-cat="${c.code}">
-              ${c.icone} ${c.label}${!this.categorie && compte(c.code)
+            <button class="liste-chip ${this.categorie === c.code ? 'active' : ''}"
+                    data-cat="${c.code}" style="--c:${c.couleur}">
+              ${c.icone} ${esc(c.nom)}${!this.categorie && compte(c.code)
                 ? ` <span class="hub-compteur">${compte(c.code)}</span>` : ''}
             </button>`).join('')}
+          <button class="liste-chip liste-chip-plus" id="btnGererCats">＋ Catégorie</button>
         </div>
 
         <div class="taches-filtres">
@@ -122,8 +129,19 @@ const Coffre = {
     const page = document.querySelector('.coffre-page');
 
     page.addEventListener('click', async e => {
+      if (e.target.closest('#btnGererCats')) { this._gererCategories(); return; }
+
       const cat = e.target.closest('[data-cat]');
-      if (cat) { this.categorie = cat.dataset.cat || null; await this._charger(); return; }
+      if (cat) {
+        // Un second clic sur la catégorie active ouvre sa fiche de réglage
+        if (this.categorie === cat.dataset.cat && cat.dataset.cat) {
+          const c = this._cats.find(x => x.code === cat.dataset.cat);
+          if (c) { this._formCategorie(c); return; }
+        }
+        this.categorie = cat.dataset.cat || null;
+        await this._charger();
+        return;
+      }
 
       const ouvrir = e.target.closest('[data-doc-ouvrir]');
       if (ouvrir) { await this._ouvrirFichier(ouvrir.dataset.docOuvrir); return; }
@@ -180,7 +198,7 @@ const Coffre = {
   },
 
   _champs(d = {}, fichier = null) {
-    const cats = DataStore.CATEGORIES_COFFRE;
+    const cats = this._cats;
     return `
       ${fichier ? `<div class="alert-note" style="margin-bottom:12px;">
         <span class="alert-note-icon">📎</span>
@@ -195,7 +213,7 @@ const Coffre = {
           <label>Catégorie</label>
           <select id="dCat">
             ${cats.map(c => `<option value="${c.code}" ${d.categorie === c.code ? 'selected' : ''}>
-              ${c.icone} ${c.label}</option>`).join('')}
+              ${c.icone} ${esc(c.nom)}</option>`).join('')}
           </select>
         </div>
         <div class="field">
@@ -286,6 +304,104 @@ const Coffre = {
           Toast.show('Document mis à jour', 'success');
         } }
     ]);
+  },
+
+  /* ══ Catégories ══
+     Elles vivent en base depuis la v9 : l'utilisateur les crée et les renomme.
+     Supprimer une catégorie ne supprime aucun document — un trigger côté base
+     les fait retomber sur « Autre ». */
+  _gererCategories() {
+    Modal.open('Catégories du coffre', `
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.6;margin-bottom:14px;">
+        Cliquez sur une catégorie pour la renommer ou la supprimer.
+        Les documents d'une catégorie supprimée retombent sur « Autre »,
+        ils ne sont jamais perdus.
+      </div>
+      <div class="listes-barre" id="catsListe">
+        ${this._cats.map(c => `
+          <button class="liste-chip" data-cat-edit="${c.id}"
+                  style="border-color:${c.couleur};color:${c.couleur};">
+            ${c.icone} ${esc(c.nom)}
+            <span class="hub-compteur">${this._docs.filter(d => d.categorie === c.code).length}</span>
+          </button>`).join('')}
+      </div>`, [
+      { label: 'Fermer', cls: 'btn btn-secondary', action: () => Modal.close() },
+      { label: '＋ Nouvelle', cls: 'btn btn-primary', action: () => this._formCategorie() }
+    ], 'modal-sm');
+
+    document.getElementById('catsListe')?.addEventListener('click', e => {
+      const b = e.target.closest('[data-cat-edit]');
+      if (!b) return;
+      const c = this._cats.find(x => x.id === b.dataset.catEdit);
+      if (c) this._formCategorie(c);
+    });
+  },
+
+  _formCategorie(c = null) {
+    const edition   = !!c;
+    const protegee  = c?.code === 'autre';
+    const icones = ['📄','🪪','🏠','❤️','🛡️','🏦','🚗','🏢','🧾','🎓','✈️','📚',
+                    '🔧','🎨','🍽️','🐾','👶','💍','⚖️','📷'];
+
+    Modal.open(edition ? 'Modifier la catégorie' : 'Nouvelle catégorie', `
+      <div class="form-grid">
+        <div class="field form-col-full">
+          <label>Nom *</label>
+          <input id="cNom" value="${esc(c?.nom)}" placeholder="Ex. Copropriété, Scolarité, Animaux" />
+        </div>
+        <div class="field">
+          <label>Icône</label>
+          <select id="cIcone">
+            ${icones.map(i => `<option ${c?.icone === i ? 'selected' : ''}>${i}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Couleur</label>
+          <input type="color" id="cCouleur" value="${c?.couleur || '#64748B'}"
+                 style="height:42px;padding:3px;" />
+        </div>
+        <div class="field">
+          <label>Ordre d'affichage</label>
+          <input type="number" id="cOrdre" value="${c?.ordre ?? 50}" min="1" max="99" />
+        </div>
+      </div>
+      ${protegee ? `
+        <div class="alert-note" style="margin-top:12px;">
+          <span class="alert-note-icon">🔒</span>
+          <span>« Autre » ne peut pas être supprimée : c'est elle qui recueille
+          les documents des catégories que vous supprimez.</span>
+        </div>` : ''}`, [
+      ...(edition && !protegee ? [{
+        label: 'Supprimer', cls: 'btn btn-danger', action: async () => {
+          try {
+            await DataStore.deleteCoffreCategorie(c.id);
+            Modal.close();
+            this._cats = await DataStore.getCoffreCategories(true);
+            if (this.categorie === c.code) this.categorie = null;
+            await this._charger();
+            Toast.show('Catégorie supprimée · documents déplacés vers « Autre »', 'info', 5000);
+          } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
+        }
+      }] : []),
+      { label: 'Annuler', cls: 'btn btn-secondary', action: () => Modal.close() },
+      { label: edition ? 'Enregistrer' : 'Créer', cls: 'btn btn-primary', action: async () => {
+          const d = {
+            nom:     document.getElementById('cNom').value.trim(),
+            icone:   document.getElementById('cIcone').value,
+            couleur: document.getElementById('cCouleur').value,
+            ordre:   parseInt(document.getElementById('cOrdre').value, 10) || 50
+          };
+          if (!d.nom) { Toast.show('Un nom est nécessaire', 'error'); return; }
+          try {
+            if (edition) await DataStore.updateCoffreCategorie(c.id, d);
+            else         await DataStore.addCoffreCategorie(d);
+            Modal.close();
+            this._cats = await DataStore.getCoffreCategories(true);
+            await this._charger();
+            Toast.show(edition ? 'Catégorie modifiée' : 'Catégorie créée', 'success');
+          } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
+        } }
+    ], 'modal-sm');
   },
 
   _confirmerSuppression(id) {

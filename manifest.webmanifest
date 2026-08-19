@@ -1,7 +1,7 @@
 {
-  "name": "IDEAFORMA — Assistant",
-  "short_name": "IDEAFORMA",
-  "description": "Dossiers OPCO, agenda, tâches, notes et documents au même endroit.",
+  "name": "Mymy",
+  "short_name": "Mymy",
+  "description": "Agenda, tâches, notes, documents et dossiers OPCO au même endroit.",
   "start_url": "/app.html",
   "scope": "/",
   "display": "standalone",
@@ -10,17 +10,76 @@
   "theme_color": "#1E3A5F",
   "lang": "fr",
   "dir": "ltr",
-  "categories": ["productivity", "business"],
+  "categories": [
+    "productivity",
+    "business"
+  ],
   "icons": [
-    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192-maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ],
   "shortcuts": [
-    { "name": "Ma journée",  "url": "/app.html#journee",   "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Agenda",      "url": "/app.html#agenda",    "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Tâches",      "url": "/app.html#taches",    "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
-    { "name": "Assistant",   "url": "/app.html#assistant", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+    {
+      "name": "Ma journée",
+      "url": "/app.html#journee",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Agenda",
+      "url": "/app.html#agenda",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Tâches",
+      "url": "/app.html#taches",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Assistant",
+      "url": "/app.html#assistant",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
   ]
 }

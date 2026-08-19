@@ -277,7 +277,7 @@ const SettingsPage = {
       </div>`;
   },
 
-  _formEtiquette(e = null) {
+  _formEtiquette(e = null, apres = null) {
     const icones = ['🏷️', '💼', '🏡', '🎓', '📁', '❤️', '👨‍👩‍👧', '💰', '🚗', '✈️', '🎯', '🔧'];
     Modal.open(e ? 'Modifier l\'étiquette' : 'Nouvelle étiquette', `
       <div class="form-grid">
@@ -299,7 +299,8 @@ const SettingsPage = {
       ...(e && !e.systeme ? [{
         label: 'Supprimer', cls: 'btn btn-danger', action: async () => {
           await DataStore.deleteEtiquette(e.id);
-          Modal.close(); this.render();
+          Modal.close();
+          if (apres) await apres(); else this.render();
         }
       }] : []),
       { label: 'Annuler', cls: 'btn btn-secondary', action: () => Modal.close() },
@@ -313,7 +314,8 @@ const SettingsPage = {
           try {
             if (e) await DataStore.updateEtiquette(e.id, d);
             else   await DataStore.addEtiquette(d);
-            Modal.close(); this.render();
+            Modal.close();
+            if (apres) await apres(); else this.render();
           } catch (err) {
             Toast.show(/duplicate|unique/i.test(err.message)
               ? 'Cette étiquette existe déjà.' : 'Erreur : ' + esc(err.message), 'error');
