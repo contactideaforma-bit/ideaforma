@@ -707,16 +707,21 @@ Object.assign(DataStore, {
   /* ══════════════════════════════════════════════
      RÉSUMÉ POUR LE TABLEAU DE BORD ET POUR L'IA
   ══════════════════════════════════════════════ */
+  /** Tout ce qu'affiche le tableau de bord, en une seule passe.
+
+      ⚠ Le tableau de bord est PERSONNEL : les échéances de dossiers OPCO en
+      sont volontairement absentes. Elles restent sur « Ma journée ». Ne pas
+      les réintroduire ici sans une demande explicite. */
   async getResumeJour() {
     const debutJour = new Date(); debutJour.setHours(0, 0, 0, 0);
     const finJour   = new Date(debutJour.getTime() + 86400000);
     const fin7      = new Date(debutJour.getTime() + 7 * 86400000);
 
-    const [agenda, taches, notes, actions, expirations] = await Promise.all([
-      this.getAgenda(debutJour.toISOString(), fin7.toISOString()),
+    const [agenda, taches, notes, expirations] = await Promise.all([
+      this.getAgenda(debutJour.toISOString(), fin7.toISOString(),
+                     { types: ['evenement', 'session'] }),
       this.getTachesFiltrees({ fait: false }),
       this.getNotes({ archivees: false }),
-      this.getActionsDuJour(7).catch(() => []),
       this.getCoffreExpirations(60).catch(() => [])
     ]);
 
@@ -731,7 +736,6 @@ Object.assign(DataStore, {
       taches, tachesEnRetard: retard, tachesDuJour: dujour,
       notesEpinglees:   notes.filter(n => n.epinglee),
       notes,
-      actionsOpco:      actions,
       expirations
     };
   }

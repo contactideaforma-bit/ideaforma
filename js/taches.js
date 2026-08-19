@@ -15,30 +15,41 @@ const Taches = {
   voirFaites:  false,
   recherche:   '',
 
-  /* ── Ligne réutilisée par le hub et par cette page ── */
+  /* ── Ligne de carnet, même grammaire que le tableau de bord ──
+       •  à faire   ✕  faite   ~  abandonnée   ›  repoussée   ★  priorité   */
   ligne(t) {
-    const enRetard = t.echeance && !t.fait && t.echeance < Dates.aujourdhui();
-    const etiq = t.etiquettes;
+    const retard  = t.echeance && !t.fait && t.echeance < Dates.aujourdhui();
+    const symbole = t.fait ? '✕' : t.abandonnee ? '~' : '•';
+    const classe  = t.fait ? 'puce-fait' : t.abandonnee ? 'puce-abandonnee' : 'puce-tache';
+
     return `
-      <div class="tache-row ${t.fait ? 'faite' : ''}" data-tache-row="${t.id}">
-        <button class="tache-check ${t.fait ? 'coche' : ''}" data-tache-id="${t.id}"
-                aria-label="${t.fait ? 'Rouvrir' : 'Terminer'}">${t.fait ? '✓' : ''}</button>
-        <div class="tache-corps" data-tache-open="${t.id}">
-          <div class="tache-titre">
-            ${t.priorite === 'haute' ? '<span class="tache-prio">!</span>' : ''}
+      <div class="entree ${t.fait ? 'est-fait' : ''} ${t.abandonnee ? 'est-abandonne' : ''}">
+        <button class="puce ${classe}" data-tache-id="${t.id}"
+                aria-label="${t.fait ? 'Rouvrir' : 'Marquer comme fait'}">${symbole}</button>
+        <span class="entree-corps" data-tache-open="${t.id}">
+          <span class="entree-texte">
+            ${t.priorite === 'haute' ? '<span class="entree-signifiant">★</span>' : ''}
             ${esc(t.description)}
-          </div>
-          <div class="tache-meta">
-            ${t.echeance ? `<span class="${enRetard ? 'tache-retard' : ''}">
-                 📅 ${Dates.relative(t.echeance)}${t.heure ? ' · ' + t.heure.slice(0, 5) : ''}
-               </span>` : ''}
+          </span>
+          <span class="entree-meta">
+            ${t.echeance
+              ? `<span class="${retard ? 'entree-retard' : ''}">${Dates.relative(t.echeance)}${
+                  t.heure ? ' · ' + t.heure.slice(0, 5) : ''}</span>` : ''}
             ${t.rappel_minutes != null ? '<span title="Rappel programmé">🔔</span>' : ''}
+            ${t.migrations > 0
+              ? `<span class="entree-migrations" title="Repoussée ${t.migrations} fois">› ${t.migrations}</span>`
+              : ''}
             ${t.listes ? `<span>${t.listes.icone} ${esc(t.listes.nom)}</span>` : ''}
-            ${etiq ? pucePastille(etiq) : ''}
+            ${t.etiquettes ? pucePastille(t.etiquettes) : ''}
             ${t.dossier_id ? '<span title="Liée à un dossier">🎓</span>' : ''}
-          </div>
-        </div>
-        <button class="btn-icon danger" data-tache-del="${t.id}" title="Supprimer">✕</button>
+          </span>
+        </span>
+        <span class="entree-outils">
+          <button class="entree-outil" data-migrer="${t.id}" title="Repousser à demain">›</button>
+          <button class="entree-outil" data-abandon="${t.id}"
+                  title="${t.abandonnee ? 'Reprendre' : 'Abandonner'}">~</button>
+          <button class="entree-outil" data-tache-del="${t.id}" title="Supprimer">✕</button>
+        </span>
       </div>`;
   },
 
@@ -65,6 +76,7 @@ const Taches = {
       listeId:     this.listeActive,
       etiquetteId: this.etiqActive,
       fait:        this.voirFaites ? undefined : false,
+      inclureAbandonnees: this.voirFaites,
       recherche:   this.recherche || undefined
     });
     this._peindre();
@@ -74,15 +86,15 @@ const Taches = {
     const hui   = Dates.aujourdhui();
     const dans7 = Dates.iso(new Date(Date.now() + 7 * 86400000));
 
-    const enCours = this._taches.filter(t => !t.fait);
-    const faites  = this._taches.filter(t => t.fait);
+    const enCours = this._taches.filter(t => !t.fait && !t.abandonnee);
+    const faites  = this._taches.filter(t => t.fait || t.abandonnee);
 
     const groupes = [
-      { titre: 'En retard',     couleur: '#EF4444', items: enCours.filter(t => t.echeance && t.echeance < hui) },
-      { titre: "Aujourd'hui",   couleur: '#F59E0B', items: enCours.filter(t => t.echeance === hui) },
-      { titre: 'Cette semaine', couleur: '#3B82F6', items: enCours.filter(t => t.echeance > hui && t.echeance <= dans7) },
-      { titre: 'Plus tard',     couleur: '#8B5CF6', items: enCours.filter(t => t.echeance > dans7) },
-      { titre: 'Sans date',     couleur: '#94A3B8', items: enCours.filter(t => !t.echeance) }
+      { titre: 'En retard',     couleur: 'var(--encre-rouge)',  items: enCours.filter(t => t.echeance && t.echeance < hui) },
+      { titre: "Aujourd'hui",   couleur: 'var(--encre-or)',     items: enCours.filter(t => t.echeance === hui) },
+      { titre: 'Cette semaine', couleur: 'var(--encre-rose)',   items: enCours.filter(t => t.echeance > hui && t.echeance <= dans7) },
+      { titre: 'Plus tard',     couleur: 'var(--encre-prune)',  items: enCours.filter(t => t.echeance > dans7) },
+      { titre: 'Sans date',     couleur: 'var(--encre-pale)',   items: enCours.filter(t => !t.echeance) }
     ].filter(g => g.items.length);
 
     document.getElementById('pageContent').innerHTML = `
@@ -120,7 +132,7 @@ const Taches = {
                   title="Créer une étiquette">＋ Étiquette</button>
           <label class="taches-switch">
             <input type="checkbox" id="tacheVoirFaites" ${this.voirFaites ? 'checked' : ''} />
-            Voir les tâches terminées
+            Voir les tâches terminées et abandonnées
           </label>
         </div>
 
@@ -149,7 +161,7 @@ const Taches = {
           <div class="section-card">
             <div class="section-card-header">
               <div class="section-card-title" style="color:var(--text-muted)">
-                Terminées <span class="hub-compteur">${faites.length}</span>
+                Terminées et abandonnées <span class="hub-compteur">${faites.length}</span>
               </div>
               <button class="btn btn-sm btn-secondary" id="btnPurger">Supprimer les terminées</button>
             </div>
@@ -196,6 +208,27 @@ const Taches = {
         const id = check.dataset.tacheId;
         const t  = this._taches.find(x => x.id === id);
         await DataStore.setTacheFait(id, !t.fait);
+        await this._charger();
+        updateJourneeBadge();
+        return;
+      }
+
+      const migrer = e.target.closest('[data-migrer]');
+      if (migrer) {
+        try {
+          await DataStore.migrerTache(migrer.dataset.migrer,
+                                      Dates.iso(new Date(Date.now() + 86400000)));
+          Toast.show('Repoussée à demain', 'info');
+          await this._charger();
+          updateJourneeBadge();
+        } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
+        return;
+      }
+
+      const abandon = e.target.closest('[data-abandon]');
+      if (abandon) {
+        const t = this._taches.find(x => x.id === abandon.dataset.abandon);
+        await DataStore.abandonnerTache(abandon.dataset.abandon, !t?.abandonnee);
         await this._charger();
         updateJourneeBadge();
         return;

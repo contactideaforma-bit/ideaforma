@@ -1,16 +1,15 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   IDEAFORMA — Thème bullet journal
-   Chargé APRÈS styles.css et vie.css : il redéfinit les variables de couleur
-   et ajoute la grammaire du carnet (papier, encres, symboles, spreads).
+   IDEAFORMA — Thème carnet
+   Chargé APRÈS styles.css et vie.css : il remappe les variables de couleur de
+   l'application sur une palette papier / encre, donc les pages écrites avant
+   ce thème en héritent sans avoir été réécrites.
 
-   Principe : le papier et l'encre remplacent le gris d'interface, mais rien
-   n'est décoratif au point de gêner la lecture. Les symboles de rapid logging
-   ont un sens et un seul :
+   Grammaire du bullet journal, un symbole = un sens :
+     •  tâche à faire   ✕  faite   ›  repoussée   ~  abandonnée
+     ○  rendez-vous     —  note    ★  priorité
 
-     •  tâche à faire        ✕  faite
-     >  migrée               ~  abandonnée
-     ○  rendez-vous          —  note
-     ★  priorité
+   Le rose et l'or reprennent le logo Mymy. La règle qu'on ne franchit pas :
+   aucune couleur décorative ne passe sous 4,5:1 de contraste sur du texte.
 ───────────────────────────────────────────────────────────────────────────── */
 
 @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap');
@@ -19,75 +18,76 @@
    Papier et encres
 ═══════════════════════════════════════════════════════════════════════════ */
 :root {
-  --papier:        #FAF6EC;   /* la page */
-  --papier-carte:  #FFFDF7;   /* une fiche posée dessus */
-  --papier-creux:  #F2EBDA;   /* un renfoncement, une entête */
-  --pois:          rgba(120, 105, 80, 0.20);
-  --regle:         rgba(120, 105, 80, 0.16);
+  --papier:        #FDF6F4;   /* la page, rose très pâle */
+  --papier-carte:  #FFFCFB;   /* une fiche posée dessus */
+  --papier-creux:  #F8E8EA;   /* un renfoncement, une entête */
+  --pois:          rgba(196, 130, 150, 0.22);
+  --regle:         rgba(196, 140, 158, 0.24);
 
-  --encre:         #2E2A24;
-  --encre-douce:   #6B6252;
-  --encre-pale:    #9C9484;
+  --encre:         #3A2830;   /* prune très sombre — 12:1 sur le papier */
+  --encre-douce:   #7A5F6A;
+  --encre-pale:    #AE93A0;
 
-  --encre-bleue:   #3F5488;
-  --encre-rouge:   #B0453C;
-  --encre-verte:   #4E7A57;
-  --encre-ocre:    #B5822F;
-  --encre-prune:   #7A4E7E;
+  --encre-rose:    #B84A70;   /* la couleur principale */
+  --encre-rose-vif:#9C3A5E;
+  --encre-prune:   #7E4A85;
+  --encre-or:      #956A24;   /* 4,5:1 sur le papier */
+  --encre-verte:   #487459;   /* 5,0:1 sur le papier */
+  --encre-rouge:   #BC3F52;
 
-  --ruban-1: #D98C8C;
-  --ruban-2: #E3B778;
-  --ruban-3: #9BBF95;
-  --ruban-4: #8FA9D0;
+  --ruban-1: #E9A8BC;
+  --ruban-2: #F0C89A;
+  --ruban-3: #A9CFB4;
+  --ruban-4: #B6AEDC;
 
-  --manuscrit: 'Caveat', 'Segoe Script', cursive;
+  --manuscrit: 'Caveat', 'Snell Roundhand', 'Segoe Script', cursive;
   --serif:     'Lora', Georgia, serif;
 
-  /* On remappe les variables de l'application sur la palette carnet, pour
-     que les pages écrites avant ce thème en héritent sans être réécrites. */
+  /* Remappage des variables de l'application */
   --bg:            var(--papier);
   --white:         var(--papier-carte);
   --text:          var(--encre);
   --text-muted:    var(--encre-douce);
   --text-light:    var(--encre-pale);
   --border:        var(--regle);
-  --border-light:  rgba(120, 105, 80, 0.09);
-  --navy:          #33445F;
-  --primary:       var(--encre-bleue);
-  --primary-hover: #2F4270;
-  --primary-light:   rgba(63, 84, 136, 0.09);
-  --primary-lighter: rgba(63, 84, 136, 0.05);
-  --primary-border:  rgba(63, 84, 136, 0.20);
+  --border-light:  rgba(196, 140, 158, 0.13);
+  --navy:          #6B3A52;
+  --primary:       var(--encre-rose);
+  --primary-hover: var(--encre-rose-vif);
+  --primary-light:   rgba(184, 74, 112, 0.10);
+  --primary-lighter: rgba(184, 74, 112, 0.055);
+  --primary-border:  rgba(184, 74, 112, 0.24);
   --danger:        var(--encre-rouge);
-  --danger-bg:     rgba(176, 69, 60, 0.09);
+  --danger-bg:     rgba(188, 63, 82, 0.09);
   --success:       var(--encre-verte);
-  --success-bg:    rgba(78, 122, 87, 0.10);
-  --warning:       var(--encre-ocre);
-  --warning-bg:    rgba(181, 130, 47, 0.11);
+  --success-bg:    rgba(72, 116, 89, 0.10);
+  --warning:       var(--encre-or);
+  --warning-bg:    rgba(149, 106, 36, 0.11);
   --violet:        var(--encre-prune);
 
-  --shadow-sm: 0 1px 2px rgba(90, 75, 45, 0.06);
-  --shadow:    0 1px 3px rgba(90, 75, 45, 0.08), 0 1px 2px rgba(90, 75, 45, 0.05);
-  --shadow-md: 0 3px 10px rgba(90, 75, 45, 0.10);
-  --shadow-lg: 0 12px 28px rgba(90, 75, 45, 0.14);
+  --shadow-sm: 0 1px 2px rgba(140, 80, 100, 0.06);
+  --shadow:    0 1px 3px rgba(140, 80, 100, 0.08), 0 1px 2px rgba(140, 80, 100, 0.05);
+  --shadow-md: 0 4px 14px rgba(140, 80, 100, 0.11);
+  --shadow-lg: 0 14px 32px rgba(140, 80, 100, 0.16);
 }
 
 [data-theme="dark"] {
-  --papier:       #191712;
-  --papier-carte: #221F19;
-  --papier-creux: #2A251D;
-  --pois:         rgba(220, 200, 160, 0.13);
-  --regle:        rgba(220, 200, 160, 0.13);
+  --papier:       #1B1418;
+  --papier-carte: #241B20;
+  --papier-creux: #2E222A;
+  --pois:         rgba(240, 200, 215, 0.13);
+  --regle:        rgba(240, 200, 215, 0.14);
 
-  --encre:        #EFE7D6;
-  --encre-douce:  #A99E88;
-  --encre-pale:   #6E6656;
+  --encre:        #F4E6EC;
+  --encre-douce:  #B9A0AC;
+  --encre-pale:   #7C6470;
 
-  --encre-bleue:  #93AEE0;
-  --encre-rouge:  #E58C82;
-  --encre-verte:  #96C8A2;
-  --encre-ocre:   #E2B96A;
-  --encre-prune:  #C4A0C8;
+  --encre-rose:    #F0A0BE;
+  --encre-rose-vif:#F7BCD2;
+  --encre-prune:   #CFA8D8;
+  --encre-or:      #E6BE74;
+  --encre-verte:   #9CCCAE;
+  --encre-rouge:   #F0909E;
 
   --bg:           var(--papier);
   --white:        var(--papier-carte);
@@ -95,16 +95,16 @@
   --text-muted:   var(--encre-douce);
   --text-light:   var(--encre-pale);
   --border:       var(--regle);
-  --border-light: rgba(220, 200, 160, 0.07);
-  --navy:         #CFC4AC;
-  --primary:      var(--encre-bleue);
-  --primary-hover:#B4C9EC;
-  --primary-light:   rgba(147, 174, 224, 0.13);
-  --primary-lighter: rgba(147, 174, 224, 0.07);
-  --primary-border:  rgba(147, 174, 224, 0.24);
+  --border-light: rgba(240, 200, 215, 0.08);
+  --navy:         #EBCEDC;
+  --primary:      var(--encre-rose);
+  --primary-hover:var(--encre-rose-vif);
+  --primary-light:   rgba(240, 160, 190, 0.14);
+  --primary-lighter: rgba(240, 160, 190, 0.075);
+  --primary-border:  rgba(240, 160, 190, 0.26);
   --danger:       var(--encre-rouge);
   --success:      var(--encre-verte);
-  --warning:      var(--encre-ocre);
+  --warning:      var(--encre-or);
   --violet:       var(--encre-prune);
 }
 
@@ -117,380 +117,290 @@ body {
   background-size: 22px 22px;
   background-position: 11px 11px;
 }
-
 .page-body { background: transparent; }
 
-.sidebar,
-.page-header {
+.sidebar, .page-header {
   background: var(--papier-carte);
   border-color: var(--regle);
 }
 
-/* Les fiches sont du papier posé sur la page : légèrement plus clair,
-   un trait fin, une ombre courte. Jamais de gris d'interface. */
-.section-card,
-.hub-quick,
-.chat-saisie,
-.doc-carte,
-.hub-tuile {
+.section-card, .doc-carte, .modal {
   background: var(--papier-carte);
   border-color: var(--regle);
+  border-radius: 14px;
 }
-
 .section-card-header {
   background: transparent;
   border-bottom: 1px solid var(--regle);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Typographie du carnet
+   Typographie
 ═══════════════════════════════════════════════════════════════════════════ */
 .page-title {
-  font-family: var(--serif);
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.page-subtitle { font-family: var(--serif); font-style: italic; }
-
-.section-card-title,
-.modal-title {
-  font-family: var(--serif);
-  font-weight: 600;
-}
-
-.logo-name  { font-family: var(--serif); font-weight: 600; }
-.nav-section {
-  font-family: var(--serif);
-  font-style: italic;
-  text-transform: none;
-  letter-spacing: 0;
-  font-size: 12.5px;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   LE CARNET — structure des spreads
-═══════════════════════════════════════════════════════════════════════════ */
-.carnet { display: flex; flex-direction: column; gap: 16px; }
-
-/* ── En-tête manuscrite d'un spread ── */
-.spread-tete {
-  display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 16px; flex-wrap: wrap;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--encre);
-}
-.spread-titre {
   font-family: var(--manuscrit);
-  font-size: 34px; font-weight: 700; line-height: 1;
+  font-size: 30px; font-weight: 700; letter-spacing: 0;
   color: var(--encre);
 }
-.spread-soustitre {
-  font-family: var(--serif); font-style: italic;
-  font-size: 13.5px; color: var(--encre-douce);
-  margin-top: 3px;
+.page-subtitle {
+  font-family: var(--serif); font-style: italic; color: var(--encre-douce);
 }
-.spread-actions { display: flex; gap: 8px; align-items: center; }
+/* Majuscule à l'initiale seulement : « capitalize » écrirait « Mercredi 19 Août » */
+.page-subtitle::first-letter { text-transform: uppercase; }
 
-/* ── Onglets des spreads : des marque-pages ── */
-.marque-pages {
-  display: flex; gap: 4px; flex-wrap: wrap;
-  border-bottom: 1px solid var(--regle);
-  padding-bottom: 0;
+.section-card-title, .modal-title {
+  font-family: var(--serif); font-weight: 600; font-size: 15.5px;
+  color: var(--navy);
 }
-.marque-page {
-  position: relative;
-  padding: 9px 18px 10px;
-  border: 1px solid var(--regle);
-  border-bottom: none;
-  border-radius: 10px 10px 0 0;
-  background: var(--papier-creux);
-  font-family: var(--serif); font-size: 13.5px; font-weight: 500;
-  color: var(--encre-douce);
-  transition: var(--transition);
-  bottom: -1px;
+.logo-name { font-family: var(--serif); font-weight: 600; }
+.nav-section {
+  font-family: var(--serif); font-style: italic;
+  text-transform: none; letter-spacing: 0; font-size: 12.5px;
 }
-.marque-page:hover { color: var(--encre); background: var(--papier-carte); }
-.marque-page.active {
-  background: var(--papier-carte);
-  color: var(--encre);
-  font-weight: 600;
-  border-color: var(--regle);
-  box-shadow: 0 -2px 0 var(--ruban) inset;
-}
-.marque-page[data-spread="jour"]        { --ruban: var(--ruban-1); }
-.marque-page[data-spread="mois"]        { --ruban: var(--ruban-2); }
-.marque-page[data-spread="futur"]       { --ruban: var(--ruban-3); }
-.marque-page[data-spread="collections"] { --ruban: var(--ruban-4); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   RAPID LOGGING — les entrées du carnet
+   TABLEAU DE BORD
+═══════════════════════════════════════════════════════════════════════════ */
+.hub { display: flex; flex-direction: column; gap: 18px; }
+
+/* ── Saisie rapide : une ligne de carnet ── */
+.hub-saisie {
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--papier-carte);
+  border: 1px solid var(--regle);
+  border-radius: 14px;
+  padding: 12px 14px 14px;
+  box-shadow: var(--shadow-sm);
+}
+.hub-saisie-ligne {
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1.5px dashed var(--regle);
+  padding-bottom: 6px;
+}
+.hub-saisie-puce {
+  font-size: 19px; color: var(--encre-rose); line-height: 1;
+  width: 16px; text-align: center; flex-shrink: 0;
+}
+.hub-saisie-ligne input {
+  flex: 1; min-width: 0;
+  border: none; background: transparent; outline: none;
+  font-family: var(--serif); font-size: 16px; color: var(--encre);
+  padding: 10px 0;
+}
+.hub-saisie-ligne input::placeholder { color: var(--encre-pale); font-style: italic; }
+.hub-saisie-etiq {
+  border: 1px solid var(--regle); background: var(--papier);
+  color: var(--encre-douce); border-radius: 8px;
+  padding: 8px 6px; font-family: var(--serif); font-size: 13px;
+  max-width: 130px; flex-shrink: 0;
+}
+.hub-saisie-indice {
+  font-family: var(--serif); font-style: italic; font-size: 12.5px;
+  color: var(--encre-douce); min-height: 17px; padding: 4px 0 0 26px;
+}
+
+.hub-creer { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.hub-creer-btn {
+  flex: 0 1 auto; min-height: 42px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 9px 14px; border-radius: 10px;
+  border: 1.5px solid var(--regle); background: var(--papier);
+  font-family: var(--serif); font-size: 13.5px; font-weight: 500;
+  color: var(--encre-douce); transition: var(--transition);
+}
+.hub-creer-btn:hover {
+  border-color: var(--encre-rose); color: var(--encre-rose);
+  background: var(--primary-lighter);
+}
+.hub-creer-sym { font-size: 17px; font-weight: 700; color: var(--encre-rose); }
+
+/* ── Tuiles ── */
+.hub-tuiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.hub-tuile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  background: var(--papier-carte);
+  border: 1px solid var(--regle);
+  border-left: 4px solid var(--t, var(--encre-rose));
+  border-radius: 12px;
+  padding: 13px 15px; text-align: left;
+  transition: var(--transition); cursor: pointer;
+}
+.hub-tuile:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.hub-tuile-val {
+  font-family: var(--manuscrit); font-size: 30px; font-weight: 700;
+  line-height: 1; color: var(--t, var(--encre-rose));
+}
+.hub-tuile-lbl {
+  font-family: var(--serif); font-size: 12.5px; color: var(--encre-douce);
+}
+.hub-tuile-rose  { --t: var(--encre-rose); }
+.hub-tuile-rouge { --t: var(--encre-rouge); }
+.hub-tuile-or    { --t: var(--encre-or); }
+
+/* ── Grille des blocs ── */
+.hub-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; align-items: start; }
+.hub-col  { display: flex; flex-direction: column; gap: 18px; }
+
+/* ── Titre de groupe, souligné à la main ── */
+.hub-sous-titre {
+  font-family: var(--manuscrit);
+  font-size: 20px; font-weight: 700; letter-spacing: 0;
+  text-transform: none; color: var(--encre);
+  margin: 16px 0 2px; display: flex; align-items: baseline; gap: 9px;
+}
+.hub-sous-titre:first-child { margin-top: 0; }
+.hub-sous-titre::after {
+  content: ''; flex: 1; height: 1px;
+  background: repeating-linear-gradient(90deg, var(--regle) 0 6px, transparent 6px 10px);
+}
+.hub-sous-titre-rouge { color: var(--encre-rouge); }
+.hub-sous-titre-or    { color: var(--encre-or); }
+.hub-sous-titre-rose  { color: var(--encre-rose); }
+.hub-sous-titre-pale  { color: var(--encre-pale); }
+
+.hub-compteur {
+  font-family: var(--serif); font-size: 12px; font-weight: 600;
+  color: var(--encre-douce); background: var(--papier-creux);
+  border-radius: 20px; padding: 1px 8px; min-width: 0;
+}
+
+.hub-vide {
+  font-family: var(--serif); font-style: italic; font-size: 13.5px;
+  color: var(--encre-pale); margin: 0; padding: 14px 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ENTRÉES — la ligne de carnet, partout dans l'application
 ═══════════════════════════════════════════════════════════════════════════ */
 .log { display: flex; flex-direction: column; }
 
-.log-entree {
+.entree {
   display: flex; align-items: flex-start; gap: 10px;
-  padding: 7px 6px 7px 2px;
+  padding: 9px 4px; min-height: 44px;
   border-bottom: 1px solid var(--border-light);
   transition: var(--transition);
 }
-.log-entree:last-child { border-bottom: none; }
-.log-entree:hover { background: var(--primary-lighter); }
+.entree:last-child { border-bottom: none; }
+.entree:hover { background: var(--primary-lighter); }
+.entree-passee { opacity: 0.5; }
 
-/* Le puce cliquable : c'est lui qui porte le symbole */
 .puce {
   flex-shrink: 0;
-  width: 22px; height: 22px; margin-top: 1px;
+  width: 26px; height: 26px; margin-top: -2px;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--serif);
-  font-size: 15px; line-height: 1; font-weight: 600;
-  color: var(--encre);
-  border-radius: 5px;
-  transition: var(--transition);
+  font-family: var(--serif); font-size: 16px; font-weight: 700; line-height: 1;
+  color: var(--encre); background: transparent;
+  border: none; border-radius: 7px;
+  transition: var(--transition); cursor: pointer;
 }
 .puce:hover { background: var(--papier-creux); }
+.puce-tache      { font-size: 21px; color: var(--encre-rose); }
+.puce-fait       { color: var(--encre-verte); }
+.puce-abandonnee { color: var(--encre-pale); }
+.puce-evenement  { font-size: 15px; color: var(--encre-prune); }
+.puce-note       { font-size: 15px; color: var(--encre-or); }
 
-.puce-tache      { font-size: 19px; }                       /* • */
-.puce-fait       { color: var(--encre-verte); }             /* ✕ */
-.puce-migree     { color: var(--encre-ocre); font-size: 16px; }  /* > */
-.puce-abandonnee { color: var(--encre-pale); }              /* ~ */
-.puce-evenement  { font-size: 14px; }                       /* ○ */
-.puce-note       { color: var(--encre-douce); }             /* — */
-
-.log-corps { flex: 1; min-width: 0; cursor: pointer; }
-.log-texte {
-  font-size: 14.5px; line-height: 1.45; color: var(--encre);
-  font-family: var(--serif);
-}
-.log-entree.est-fait .log-texte,
-.log-entree.est-abandonne .log-texte {
-  text-decoration: line-through;
-  text-decoration-thickness: 1.5px;
-  color: var(--encre-pale);
-}
-.log-meta {
-  display: flex; gap: 9px; flex-wrap: wrap; align-items: center;
-  font-size: 11.5px; color: var(--encre-douce); margin-top: 2px;
-}
-.log-heure {
-  font-family: var(--serif); font-weight: 600;
-  font-size: 12px; color: var(--encre-douce);
-  min-width: 42px;
-}
-.log-retard { color: var(--encre-rouge); font-weight: 600; }
-.log-signifiant { color: var(--encre-rouge); font-weight: 700; margin-right: 3px; }
-.log-migrations {
-  font-family: var(--serif); font-size: 11px; font-weight: 600;
-  color: var(--encre-ocre);
-  border: 1px solid currentColor; border-radius: 20px; padding: 0 6px;
-}
-
-/* Boutons d'action, discrets jusqu'au survol */
-.log-outils { display: flex; gap: 2px; opacity: 0; transition: var(--transition); }
-.log-entree:hover .log-outils,
-.log-entree:focus-within .log-outils { opacity: 1; }
-.log-outil {
-  width: 26px; height: 26px; border-radius: 6px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; color: var(--encre-douce);
-  transition: var(--transition);
-}
-.log-outil:hover { background: var(--papier-creux); color: var(--encre); }
-@media (hover: none) { .log-outils { opacity: 1; } }
-
-/* ── Titre de section manuscrit, souligné à la main ── */
-.log-titre {
-  font-family: var(--manuscrit);
-  font-size: 22px; font-weight: 700; color: var(--encre);
-  margin: 18px 0 4px;
-  display: flex; align-items: baseline; gap: 9px;
-}
-.log-titre:first-child { margin-top: 0; }
-.log-titre::after {
-  content: ''; flex: 1; height: 1px;
-  background: repeating-linear-gradient(90deg,
-    var(--regle) 0 6px, transparent 6px 9px);
-}
-.log-titre-compte {
-  font-family: var(--serif); font-size: 12px; font-weight: 600;
+.entree-heure {
+  flex-shrink: 0; min-width: 48px; padding-top: 2px;
+  font-family: var(--serif); font-weight: 600; font-size: 12.5px;
   color: var(--encre-douce);
 }
+.entree-heure-alerte { color: var(--encre-rouge); }
 
-/* ── Ligne de saisie rapide, façon crayon ── */
-.log-saisie {
-  display: flex; align-items: center; gap: 10px;
-  padding: 4px 2px;
-  border-bottom: 1.5px dashed var(--regle);
+.entree-corps { flex: 1; min-width: 0; display: block; cursor: pointer; text-align: left; }
+.entree-texte {
+  display: block;
+  font-family: var(--serif); font-size: 14.5px; line-height: 1.4; color: var(--encre);
 }
-.log-saisie-puce {
-  width: 22px; text-align: center;
-  font-size: 19px; color: var(--encre-pale);
+.entree-signifiant { color: var(--encre-rouge); font-weight: 700; margin-right: 3px; }
+.entree-meta {
+  display: flex; gap: 9px; flex-wrap: wrap; align-items: center;
+  font-size: 11.5px; color: var(--encre-douce); margin-top: 3px;
 }
-.log-saisie input {
-  flex: 1; border: none; background: transparent; outline: none;
-  font-family: var(--serif); font-size: 14.5px; color: var(--encre);
-  padding: 8px 0;
-}
-.log-saisie input::placeholder { color: var(--encre-pale); font-style: italic; }
-.log-saisie-indice {
-  font-family: var(--serif); font-style: italic;
-  font-size: 11.5px; color: var(--encre-douce);
-  padding: 2px 4px 10px; min-height: 16px;
+.entree-retard { color: var(--encre-rouge); font-weight: 600; }
+.entree-migrations {
+  font-family: var(--serif); font-size: 11px; font-weight: 600;
+  color: var(--encre-or); border: 1px solid currentColor;
+  border-radius: 20px; padding: 0 6px;
 }
 
-/* Le groupe saisie + indice + boutons se tient ensemble */
-.log-entete { display: flex; flex-direction: column; gap: 0; }
-.log-entete .log-creer { margin-top: 4px; }
+.est-fait .entree-texte,
+.est-abandonne .entree-texte {
+  text-decoration: line-through; text-decoration-thickness: 1.5px;
+  color: var(--encre-pale);
+}
 
-/* ── Les trois boutons de création ── */
-.log-creer { display: flex; gap: 8px; flex-wrap: wrap; }
-.log-creer-btn {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 8px 14px; border-radius: 8px;
-  border: 1.5px solid var(--regle); background: var(--papier-carte);
-  font-family: var(--serif); font-size: 13px; font-weight: 500;
+.entree-outils { display: flex; gap: 2px; opacity: 0; transition: var(--transition); }
+.entree:hover .entree-outils,
+.entree:focus-within .entree-outils { opacity: 1; }
+.entree-outil {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; color: var(--encre-douce); transition: var(--transition);
+}
+.entree-outil:hover { background: var(--papier-creux); color: var(--encre); }
+@media (hover: none) {
+  /* Sans survol, les outils doivent se voir : on les rend francs plutôt que
+     fantomatiques, sinon on ne sait pas qu'ils existent. */
+  .entree-outils { opacity: 1; }
+  .entree-outil {
+    background: var(--papier-creux); color: var(--encre-douce);
+    border: 1px solid var(--regle);
+  }
+}
+
+/* ── Raccourcis ── */
+.hub-raccourcis { display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.hub-raccourci {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 5px; min-height: 74px; padding: 12px 6px;
+  border-radius: 12px; border: 1px solid var(--regle); background: var(--papier);
+  font-family: var(--serif); font-size: 12.5px; font-weight: 500;
   color: var(--encre-douce); transition: var(--transition);
 }
-.log-creer-btn:hover {
-  border-color: var(--encre); color: var(--encre); transform: translateY(-1px);
+.hub-raccourci:hover {
+  border-color: var(--encre-rose); color: var(--encre-rose);
+  background: var(--primary-lighter); transform: translateY(-1px);
 }
-.log-creer-sym { font-size: 16px; font-weight: 700; color: var(--encre); }
+.hub-raccourci-ic { font-size: 21px; }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   LOG MENSUEL — la colonne des jours + la colonne des tâches
-═══════════════════════════════════════════════════════════════════════════ */
-.mois-spread { display: grid; grid-template-columns: 1.15fr 1fr; gap: 26px; align-items: start; }
-
-.mois-jours { display: flex; flex-direction: column; }
-.mois-ligne {
-  display: flex; align-items: flex-start; gap: 10px;
-  padding: 4px 6px 4px 0;
-  border-bottom: 1px solid var(--border-light);
-  min-height: 30px; transition: var(--transition);
+/* ── Notes miniatures ── */
+.notes-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.note-mini {
+  position: relative; display: block; text-align: left;
+  border: 1px solid rgba(140, 80, 100, 0.13);
+  border-radius: 12px; padding: 11px 12px;
+  color: #3A2830; min-height: 74px; cursor: pointer;
+  transition: var(--transition);
 }
-.mois-ligne:hover { background: var(--primary-lighter); }
-.mois-ligne.week-end { background: rgba(120,105,80,0.045); }
-.mois-ligne.aujourdhui { box-shadow: inset 3px 0 0 var(--encre-rouge); }
-.mois-ligne-date {
-  flex-shrink: 0; width: 46px;
-  font-family: var(--serif); font-size: 13px; color: var(--encre-douce);
-  display: flex; gap: 5px; align-items: baseline;
+.note-mini:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.note-mini-pin { position: absolute; top: 6px; right: 7px; font-size: 11px; opacity: .75; }
+.note-mini-titre {
+  display: block; font-family: var(--serif); font-size: 13px;
+  font-weight: 700; margin-bottom: 3px; padding-right: 16px;
 }
-.mois-ligne-num { font-weight: 700; color: var(--encre); min-width: 18px; text-align: right; }
-.mois-ligne-jour { font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; }
-.mois-ligne.aujourdhui .mois-ligne-num { color: var(--encre-rouge); }
-.mois-ligne-contenu {
-  flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; padding-top: 2px;
+.note-mini-corps {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; font-size: 12px; line-height: 1.45; opacity: 0.82;
 }
-.mois-puce {
-  font-family: var(--serif); font-size: 12.5px; color: var(--encre);
-  display: inline-flex; align-items: center; gap: 4px;
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  cursor: pointer;
-}
-.mois-puce-sym { font-size: 11px; color: var(--encre-douce); }
-.mois-puce.fait { color: var(--encre-pale); text-decoration: line-through; }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   FUTURE LOG — six mois en colonnes
-═══════════════════════════════════════════════════════════════════════════ */
-.futur-grille {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px;
-}
-.futur-mois {
-  border: 1px solid var(--regle); border-radius: 10px;
-  background: var(--papier-carte); padding: 14px 16px 16px;
-  min-height: 150px; display: flex; flex-direction: column;
-}
-.futur-mois-titre {
-  font-family: var(--manuscrit); font-size: 21px; font-weight: 700;
-  color: var(--encre); text-transform: capitalize;
-  border-bottom: 1.5px solid var(--encre); padding-bottom: 5px; margin-bottom: 9px;
-}
-.futur-mois-vide {
-  font-family: var(--serif); font-style: italic; font-size: 12.5px;
-  color: var(--encre-pale); margin-top: 6px;
-}
-.futur-entree {
-  display: flex; gap: 7px; align-items: baseline;
-  font-family: var(--serif); font-size: 13px; color: var(--encre);
-  padding: 3px 0; cursor: pointer;
-}
-.futur-entree:hover { color: var(--encre-bleue); }
-.futur-jour {
-  font-weight: 700; font-size: 11.5px; color: var(--encre-douce);
-  min-width: 22px; flex-shrink: 0;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   COLLECTIONS — l'index du carnet
-═══════════════════════════════════════════════════════════════════════════ */
-.collections-grille {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px;
-}
-.collection {
-  border: 1px solid var(--regle); border-radius: 10px;
-  background: var(--papier-carte); padding: 15px 16px;
-  cursor: pointer; transition: var(--transition);
-  border-left: 4px solid var(--c, var(--encre-bleue));
-}
-.collection:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
-.collection-tete { display: flex; align-items: center; gap: 9px; }
-.collection-icone { font-size: 19px; }
-.collection-nom {
-  font-family: var(--serif); font-size: 15px; font-weight: 600; color: var(--encre);
-}
-.collection-compte {
-  margin-left: auto; font-family: var(--serif); font-size: 12px; color: var(--encre-douce);
-}
-.collection-apercu {
-  margin-top: 9px; display: flex; flex-direction: column; gap: 3px;
-}
-.collection-item {
-  font-family: var(--serif); font-size: 12.5px; color: var(--encre-douce);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.collection-vide {
-  font-family: var(--serif); font-style: italic;
-  font-size: 12.5px; color: var(--encre-pale); margin-top: 8px;
-}
-.collection-neuve {
-  border-style: dashed; border-left-style: dashed;
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--serif); font-size: 13.5px; color: var(--encre-douce);
-  min-height: 96px;
-}
-.collection-neuve:hover { color: var(--encre); }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   Légende des symboles
-═══════════════════════════════════════════════════════════════════════════ */
-.legende {
-  display: flex; flex-wrap: wrap; gap: 4px 18px;
-  padding: 10px 14px; border-radius: 8px;
-  background: var(--papier-creux);
-  font-family: var(--serif); font-size: 12px; color: var(--encre-douce);
-}
-.legende-item { display: inline-flex; align-items: baseline; gap: 6px; }
-.legende-sym { font-weight: 700; color: var(--encre); min-width: 12px; text-align: center; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Retouches sur les composants existants
 ═══════════════════════════════════════════════════════════════════════════ */
-.btn {
-  font-family: var(--serif);
-  border-radius: 8px;
-}
-.btn-primary { background: var(--encre-bleue); }
-.btn-primary:hover { background: var(--primary-hover); }
-.btn-secondary { background: var(--papier-carte); border: 1px solid var(--regle); }
+.btn { font-family: var(--serif); border-radius: 9px; min-height: 38px; }
+.btn-primary { background: var(--encre-rose); }
+.btn-primary:hover { background: var(--encre-rose-vif); }
+.btn-secondary { background: var(--papier); border: 1px solid var(--regle); }
 .btn-secondary:hover { background: var(--papier-creux); }
+.btn-icon { border-radius: 9px; }
 
-.liste-chip, .rappel-case, .chat-suggestion, .agenda-filtre {
+.liste-chip, .rappel-case, .chat-suggestion, .agenda-filtre, .marque-page {
   font-family: var(--serif);
   background: var(--papier-carte);
   border-color: var(--regle);
 }
-.liste-chip.active { background: var(--encre); border-color: var(--encre); }
+.liste-chip.active { background: var(--encre-rose); border-color: var(--encre-rose); color: #fff; }
+.liste-chip { min-height: 38px; }
 
 .field label {
   font-family: var(--serif); font-weight: 600;
@@ -498,50 +408,176 @@ body {
 }
 .field input, .field select, .field textarea,
 .search-input, .filter-select {
-  background: var(--papier-carte);
-  border-color: var(--regle);
-  color: var(--encre);
-  border-radius: 8px;
+  background: var(--papier-carte); border-color: var(--regle);
+  color: var(--encre); border-radius: 9px;
 }
 
-.note-carte, .note-mini { border: 1px solid rgba(120,105,80,0.14); }
+.tache-row .tache-check { border-radius: 7px; }
+.note-carte { border: 1px solid rgba(140, 80, 100, 0.14); }
 .note-titre, .note-editeur-titre { font-family: var(--serif); }
-
-.modal { background: var(--papier-carte); }
 .toast { font-family: var(--serif); }
-
 .empty-state, .empty-table-sub {
   font-family: var(--serif); font-style: italic; color: var(--encre-douce);
 }
 
-/* Le calendrier de l'agenda prend le papier lui aussi */
+/* Agenda */
 .mois-case { border-color: var(--border-light); }
-.mois-case.hors { background: rgba(120,105,80,0.05); }
+.mois-case.hors { background: rgba(196, 140, 158, 0.06); }
 .mois-num, .sem-num { font-family: var(--serif); }
 .agenda-periode { font-family: var(--manuscrit); font-size: 26px; font-weight: 700; }
 .jour-titre, .sem-item-t { font-family: var(--serif); }
 
+/* Légende des symboles, si une page la réutilise */
+.legende {
+  display: flex; flex-wrap: wrap; gap: 4px 18px;
+  padding: 10px 14px; border-radius: 10px; background: var(--papier-creux);
+  font-family: var(--serif); font-size: 12px; color: var(--encre-douce);
+}
+.legende-item { display: inline-flex; align-items: baseline; gap: 6px; }
+.legende-sym { font-weight: 700; color: var(--encre); min-width: 12px; text-align: center; }
+
+/* ── Contraste en mode sombre ──
+   Les encres deviennent claires : du texte blanc posé dessus tomberait à
+   1,6:1. Sur un fond d'accent, on repasse donc en texte sombre. */
+[data-theme="dark"] .btn-primary,
+[data-theme="dark"] .liste-chip.active,
+[data-theme="dark"] .toast.success,
+[data-theme="dark"] .toast.error,
+[data-theme="dark"] .toast.warning,
+[data-theme="dark"] .btn-login {
+  color: #241B20;
+}
+[data-theme="dark"] .btn-primary:hover { color: #241B20; }
+
 /* ═══════════════════════════════════════════════════════════════════════════
-   Responsive
+   TÉLÉPHONE — ergonomie
+   Le menu reste le hamburger. On travaille les tailles de touche, la place
+   perdue, et les pièges connus d'iOS.
 ═══════════════════════════════════════════════════════════════════════════ */
-@media (max-width: 980px) {
-  .mois-spread  { grid-template-columns: 1fr; gap: 22px; }
-  .futur-grille { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 1100px) {
+  .hub-grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 620px) {
-  .futur-grille { grid-template-columns: 1fr; }
-  .spread-titre { font-size: 28px; }
-  .marque-page  { padding: 8px 13px; font-size: 12.5px; }
-  .log-heure    { min-width: 36px; font-size: 11.5px; }
-  .mois-ligne-date { width: 40px; }
+@media (max-width: 760px) {
+  /* Aucun champ sous 16 px : en dessous, Safari zoome à chaque focus et
+     l'utilisateur doit repincer pour revenir. C'est LE réglage qui change
+     tout sur iPhone. */
+  input, select, textarea,
+  .field input, .field select, .field textarea,
+  .search-input, .filter-select, .hub-saisie-etiq {
+    font-size: 16px !important;
+  }
+
+  /* En-tête collante : le titre et le hamburger restent sous le pouce */
+  .page-header {
+    position: sticky; top: 0; z-index: 40;
+    padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+    gap: 8px;
+  }
+  .page-title    { font-size: 25px; }
+  .page-subtitle { font-size: 12px; }
+  .page-body     { padding: 14px 14px calc(24px + env(safe-area-inset-bottom)); }
+
+  /* Cibles de touche : 44 px minimum, la recommandation d'Apple */
+  .hamburger, .dark-toggle, .btn-icon { width: 44px; height: 44px; }
+  .hamburger svg, .dark-toggle svg { width: 21px; height: 21px; }
+  .nav-item { padding: 13px 16px; font-size: 15px; min-height: 48px; }
+  .btn { min-height: 44px; padding: 11px 16px; }
+  .btn-sm { min-height: 40px; padding: 9px 14px; font-size: 13px; }
+
+  /* Menu latéral : un peu plus large, il se lit mieux d'une main */
+  .sidebar { width: min(84vw, 300px); }
+
+  /* Saisie rapide sur deux rangs */
+  .hub-saisie { padding: 12px; }
+  /* Rang 1 : la puce et le champ. Rang 2 : l'étiquette et le bouton.
+     Le min-width sur le champ est ce qui force le retour à la ligne. */
+  .hub-saisie-ligne { flex-wrap: wrap; gap: 8px 10px; }
+  .hub-saisie-puce { order: 0; flex: 0 0 auto; }
+  .hub-saisie-ligne input { order: 1; flex: 1 1 auto; min-width: 60%; padding: 8px 0; }
+  .hub-saisie-etiq { order: 2; flex: 1 1 120px; max-width: none; min-height: 44px; }
+  .hub-saisie-ligne .btn { order: 3; flex: 0 0 auto; }
+  .hub-saisie-indice { padding-left: 0; }
+
+  /* Les trois boutons de création prennent toute la largeur, à parts égales */
+  .hub-creer-btn { flex: 1 1 0; min-width: 0; padding: 10px 6px; font-size: 12.5px; }
+
+  /* Tuiles : trois de front, mais compactes */
+  .hub-tuiles { gap: 8px; }
+  .hub-tuile { padding: 11px 10px; border-left-width: 3px; }
+  .hub-tuile-val { font-size: 26px; }
+  .hub-tuile-lbl { font-size: 11.5px; }
+
+  /* Entrées : plus d'air vertical, outils toujours visibles */
+  /* Le crayon fait doublon sur téléphone : toucher la ligne ouvre déjà la
+     fiche. On garde « › », qui, lui, n'a pas d'équivalent au doigt. */
+  .entree-outil[data-editer-tache] { display: none; }
+  .entree { padding: 11px 2px; gap: 9px; min-height: 48px; }
+  .entree-texte { font-size: 15px; }
+  .entree-heure { min-width: 44px; font-size: 12px; }
+  .puce { width: 30px; height: 30px; }
+  .entree-outil { width: 36px; height: 36px; }
+
+  .hub-raccourcis { grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .hub-raccourci { min-height: 68px; font-size: 11.5px; }
+  .notes-mini { grid-template-columns: 1fr; }
+
+  .section-card-body { padding: 14px 14px; }
+  .hub-sous-titre { font-size: 18px; }
+
+  /* Fenêtres modales : plein écran, actions atteignables au pouce */
+  .modal {
+    max-width: none; width: 100%;
+    max-height: 92vh; border-radius: 18px 18px 0 0;
+    margin-top: auto; margin-bottom: 0;
+  }
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal-body { max-height: calc(92vh - 150px); padding: 16px 16px 8px; }
+  .modal-footer {
+    position: sticky; bottom: 0; background: var(--papier-carte);
+    border-top: 1px solid var(--regle); flex-wrap: wrap; gap: 8px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  }
+  .modal-footer .btn { flex: 1 1 auto; }
+  .form-grid { grid-template-columns: 1fr; }
+
+  /* Barres de filtres : on ne coupe plus les puces */
+  .taches-filtres { gap: 8px; }
+  .listes-barre { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px;
+                  scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .listes-barre::-webkit-scrollbar { display: none; }
+
   body { background-size: 20px 20px; }
+}
+
+/* Sous 470 px, « Rendez-vous » ne tient plus sur une ligne : on abrège
+   plutôt que de laisser le mot se couper en deux. */
+@media (max-width: 470px) {
+  .hub-creer-btn { font-size: 0; gap: 6px; }
+  .hub-creer-sym { font-size: 17px; }
+  .hub-creer-btn::after { font-family: var(--serif); font-size: 13px; font-weight: 500; }
+  .hub-creer-btn[data-creer="tache"]::after     { content: 'Tâche'; }
+  .hub-creer-btn[data-creer="evenement"]::after { content: 'RDV'; }
+  .hub-creer-btn[data-creer="note"]::after      { content: 'Note'; }
+}
+
+/* Application installée : on respecte les encoches */
+@media (display-mode: standalone) {
+  .sidebar     { padding-top: env(safe-area-inset-top); }
+  .page-header { padding-top: calc(12px + env(safe-area-inset-top)); }
+  .page-body   { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 }
 
 /* Impression : le carnet mérite de sortir sur du vrai papier */
 @media print {
-  .sidebar, .page-header, .marque-pages, .log-outils,
-  .log-saisie, .log-creer, .spread-actions { display: none !important; }
+  .sidebar, .page-header, .hub-saisie, .hub-creer,
+  .entree-outils, .hub-raccourcis { display: none !important; }
   body { background: #fff; }
-  .section-card, .futur-mois, .collection { box-shadow: none; border-color: #ccc; }
+  .section-card { box-shadow: none; border-color: #ddd; }
+}
+
+/* Respect du réglage système « animations réduites » */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+  .hub-tuile:hover, .hub-raccourci:hover, .note-mini:hover { transform: none; }
 }
