@@ -5,10 +5,6 @@
    second système.
 ───────────────────────────────────────────────────────────────────────────── */
 
-/* Icônes proposées pour une étiquette, ici comme dans les Paramètres. */
-const ICONES_ETIQUETTE = ['🏷️', '🎓', '💼', '🏡', '👨‍👩‍👧', '💰', '🩺', '🚗', '✈️', '📞',
-                          '🛒', '🎯', '📚', '🔧', '🎨', '🌱', '⚖️', '🐾'];
-
 const Taches = {
 
   _listes:     [],
@@ -25,7 +21,8 @@ const Taches = {
   ligne(t) {
     const retard = t.echeance && !t.fait && t.echeance < Dates.aujourdhui();
     const classeCase = t.abandonnee ? 'case case-abandon' : (t.fait ? 'case cochee' : 'case');
-    const marque     = t.abandonnee ? '~' : '✓';
+    const marque     = t.abandonnee ? Icone('abandonner', { taille: 15 })
+                                    : Icone('check', { taille: 15, trait: 2.6 });
 
     return `
       <div class="entree ${t.fait ? 'est-fait' : ''} ${t.abandonnee ? 'est-abandonne' : ''}">
@@ -35,27 +32,38 @@ const Taches = {
                 title="${t.fait ? 'Rouvrir la tâche' : 'Marquer comme faite'}">${marque}</button>
         <span class="entree-corps" data-tache-open="${t.id}">
           <span class="entree-texte">
-            ${t.priorite === 'haute' ? '<span class="entree-signifiant">★</span>' : ''}
+            ${t.priorite === 'haute'
+               ? `<span class="entree-signifiant" title="Priorité haute">${Icone('etoile', { taille: 14 })}</span>`
+               : ''}
             ${esc(t.description)}
           </span>
           <span class="entree-meta">
             ${t.echeance
               ? `<span class="${retard ? 'entree-retard' : ''}">${Dates.relative(t.echeance)}${
                   t.heure ? ' · ' + t.heure.slice(0, 5) : ''}</span>` : ''}
-            ${t.rappel_minutes != null ? '<span title="Rappel programmé">🔔</span>' : ''}
+            ${t.rappel_minutes != null
+               ? `<span title="Rappel programmé">${Icone('cloche', { taille: 13 })}</span>` : ''}
             ${t.migrations > 0
-              ? `<span class="entree-migrations" title="Repoussée ${t.migrations} fois">› ${t.migrations}</span>`
+              ? `<span class="entree-migrations" title="Repoussée ${t.migrations} fois">${t.migrations}×</span>`
               : ''}
-            ${t.listes ? `<span>${t.listes.icone} ${esc(t.listes.nom)}</span>` : ''}
+            ${t.listes
+               ? `<span>${Icone(t.listes.icone, { taille: 13, defaut: 'liste' })} ${esc(t.listes.nom)}</span>` : ''}
             ${t.etiquettes ? pucePastille(t.etiquettes) : ''}
-            ${t.dossier_id ? '<span title="Liée à un dossier">🎓</span>' : ''}
+            ${t.dossier_id
+               ? `<span title="Liée à un dossier de formation">${Icone('formation', { taille: 13 })}</span>` : ''}
           </span>
         </span>
         <span class="entree-outils">
-          <button class="entree-outil" data-migrer="${t.id}" title="Repousser à demain">›</button>
+          <button class="entree-outil" data-migrer="${t.id}"
+                  title="Repousser à demain" aria-label="Repousser à demain"
+                  >${Icone('migrer', { taille: 17 })}</button>
           <button class="entree-outil" data-abandon="${t.id}"
-                  title="${t.abandonnee ? 'Reprendre' : 'Abandonner'}">~</button>
-          <button class="entree-outil" data-tache-del="${t.id}" title="Supprimer">✕</button>
+                  title="${t.abandonnee ? 'Reprendre la tâche' : 'Abandonner la tâche'}"
+                  aria-label="${t.abandonnee ? 'Reprendre la tâche' : 'Abandonner la tâche'}"
+                  >${Icone('abandonner', { taille: 17 })}</button>
+          <button class="entree-outil danger" data-tache-del="${t.id}"
+                  title="Supprimer" aria-label="Supprimer la tâche"
+                  >${Icone('poubelle', { taille: 16 })}</button>
         </span>
       </div>`;
   },
@@ -64,7 +72,8 @@ const Taches = {
     document.getElementById('pageTitle').textContent    = 'Tâches';
     document.getElementById('pageSubtitle').textContent = 'Tout ce qu\'il y a à faire, pro et perso';
     document.getElementById('pageHeaderRight').innerHTML = `
-      <button class="btn btn-sm btn-primary" id="btnNouvelleTache">+ Tâche</button>`;
+      <button class="btn btn-sm btn-primary" id="btnNouvelleTache"
+              >${Icone('plus', { taille: 16 })} Tâche</button>`;
     Loading.show();
 
     try {
@@ -110,14 +119,16 @@ const Taches = {
         <!-- ── Listes ── -->
         <div class="listes-barre">
           <button class="liste-chip ${!this.listeActive ? 'active' : ''}" data-liste="">
-            📚 Tout <span class="hub-compteur">${enCours.length}</span>
+            ${Icone('taches', { taille: 16 })} Tout
+            <span class="hub-compteur">${enCours.length}</span>
           </button>
           ${this._listes.map(l => `
             <button class="liste-chip ${this.listeActive === l.id ? 'active' : ''}"
-                    data-liste="${l.id}" style="--c:${l.couleur}">
-              ${l.icone} ${esc(l.nom)}
+                    data-liste="${l.id}">
+              ${Icone(l.icone, { taille: 16, defaut: 'liste' })} ${esc(l.nom)}
             </button>`).join('')}
-          <button class="liste-chip liste-chip-plus" id="btnNouvelleListe">＋ Liste</button>
+          <button class="liste-chip liste-chip-plus" id="btnNouvelleListe"
+                  >${Icone('plus', { taille: 16 })} Liste</button>
         </div>
 
         <!-- ── Ajout en une ligne ──
@@ -125,7 +136,7 @@ const Taches = {
              fréquent, il ne doit pas demander de faire défiler la page. -->
         <div class="tache-ajout">
           <input id="tacheFlash" autocomplete="off" enterkeyhint="done"
-                 placeholder="Nouvelle tâche…  « relancer AKTO demain 10h »" />
+                 placeholder="Nouvelle tâche…" />
         </div>
 
         <!-- ── Filtres ── -->
@@ -138,49 +149,43 @@ const Taches = {
             <option value="">Toutes les étiquettes</option>
             ${this._etiquettes.map(e => `
               <option value="${e.id}" ${this.etiqActive === e.id ? 'selected' : ''}>
-                ${e.icone} ${esc(e.nom)}</option>`).join('')}
+                ${esc(e.nom)}</option>`).join('')}
           </select>
           <div class="taches-filtres-bas">
             <button class="liste-chip liste-chip-plus" id="btnGererEtiquettes"
-                    title="Créer une étiquette">＋ Étiquette</button>
+                    title="Créer une étiquette"
+                    >${Icone('plus', { taille: 16 })} Étiquette</button>
             <button class="liste-chip ${this.voirFaites ? 'active' : ''}" id="tacheVoirFaites"
                     aria-pressed="${this.voirFaites ? 'true' : 'false'}"
-                    title="Afficher aussi les tâches terminées et abandonnées">
-              ✓ Terminées
-            </button>
+                    title="Afficher aussi les tâches terminées et abandonnées"
+                    >${Icone('check', { taille: 16 })} Terminées</button>
           </div>
         </div>
-        <p class="taches-astuce">
-          Touchez une seconde fois la liste active pour la renommer ou la supprimer.
-        </p>
 
-        <!-- ── Groupes ── -->
-        ${groupes.length ? groupes.map(g => `
-          <div class="section-card">
-            <div class="section-card-header">
-              <div class="section-card-title" style="color:${g.couleur}">
-                ${g.titre} <span class="hub-compteur">${g.items.length}</span>
-              </div>
-            </div>
-            <div class="section-card-body" style="padding:8px 12px;">
-              ${g.items.map(t => this.ligne(t)).join('')}
-            </div>
-          </div>`).join('')
-          : `<div class="section-card"><div class="section-card-body">
-               <div class="empty-state"><div class="empty-icon">🎉</div>
-                 Rien à faire ici. Profitez-en.</div></div></div>`}
+        <!-- ── Groupes ──
+             Une seule feuille pour tous les groupes : une fiche par groupe
+             multipliait les cadres et donnait une page en accordéon où l'on
+             ne voyait plus la liste, seulement des bordures. -->
+        ${groupes.length ? `
+          <div class="feuille taches-feuille">
+            ${groupes.map(g => `
+              <h2 class="hub-sous-titre" style="color:${g.couleur}">
+                ${g.titre}<span class="hub-compteur">${g.items.length}</span>
+              </h2>
+              <div class="log">${g.items.map(t => this.ligne(t)).join('')}</div>
+            `).join('')}
+          </div>`
+          : `<div class="feuille taches-feuille">
+               <div class="empty-state"><div class="empty-icon">${Icone('check', { taille: 34 })}</div>
+                 Rien à faire ici. Profitez-en.</div></div>`}
 
         ${this.voirFaites && faites.length ? `
-          <div class="section-card">
-            <div class="section-card-header">
-              <div class="section-card-title" style="color:var(--text-muted)">
-                Terminées et abandonnées <span class="hub-compteur">${faites.length}</span>
-              </div>
-              <button class="btn btn-sm btn-secondary" id="btnPurger">Supprimer les terminées</button>
-            </div>
-            <div class="section-card-body" style="padding:8px 12px;">
-              ${faites.slice(0, 100).map(t => this.ligne(t)).join('')}
-            </div>
+          <div class="feuille taches-feuille">
+            <h2 class="hub-sous-titre hub-sous-titre-pale">
+              Terminées et abandonnées<span class="hub-compteur">${faites.length}</span>
+              <button class="btn btn-sm btn-secondary" id="btnPurger">Nettoyer</button>
+            </h2>
+            <div class="log">${faites.slice(0, 100).map(t => this.ligne(t)).join('')}</div>
           </div>` : ''}
       </div>`;
 
@@ -351,7 +356,7 @@ const Taches = {
           <select id="fListe">
             <option value="">Sans liste</option>
             ${this._listes.map(l => `<option value="${l.id}" ${t?.liste_id === l.id ? 'selected' : ''}>
-              ${l.icone} ${esc(l.nom)}</option>`).join('')}
+              ${esc(l.nom)}</option>`).join('')}
           </select>
         </div>
         <div class="field">
@@ -360,20 +365,21 @@ const Taches = {
             <select id="fEtiq">
               <option value="">Aucune</option>
               ${this._etiquettes.map(x => `<option value="${x.id}" ${t?.etiquette_id === x.id ? 'selected' : ''}>
-                ${x.icone} ${esc(x.nom)}</option>`).join('')}
+                ${esc(x.nom)}</option>`).join('')}
             </select>
             <button type="button" class="champ-plus-btn" id="fEtiqPlus"
-                    title="Créer une étiquette" aria-label="Créer une étiquette">＋</button>
+                    title="Créer une étiquette" aria-label="Créer une étiquette"
+                    >${Icone('plus', { taille: 18 })}</button>
           </div>
           <!-- Création sur place : ouvrir une seconde modale par-dessus
                celle-ci perdrait tout ce qui vient d'être saisi. -->
           <div class="etiq-express" id="fEtiqNouvelle" hidden>
-            <input id="fEtiqNom" placeholder="Nom de l'étiquette" maxlength="40" />
-            <select id="fEtiqIcone" aria-label="Icône">
-              ${ICONES_ETIQUETTE.map(i => `<option>${i}</option>`).join('')}
-            </select>
-            <input type="color" id="fEtiqCouleur" value="#B03A63" aria-label="Couleur" />
-            <button type="button" class="btn btn-sm btn-primary" id="fEtiqCreer">Créer</button>
+            <input id="fEtiqNom" placeholder="Nom de la nouvelle étiquette" maxlength="40" />
+            ${grilleIcones('fEtiqIcone', CHOIX_ETIQUETTE, 'etiquette')}
+            <div class="etiq-express-ligne">
+              <input type="color" id="fEtiqCouleur" value="#9E3057" aria-label="Couleur de l'étiquette" />
+              <button type="button" class="btn btn-sm btn-primary" id="fEtiqCreer">Créer l'étiquette</button>
+            </div>
           </div>
         </div>
         <div class="field">
@@ -403,7 +409,7 @@ const Taches = {
         </div>
       </div>
       <div class="alert-note" style="margin-top:12px;">
-        <span class="alert-note-icon">🔔</span>
+        <span class="alert-note-icon">${Icone('cloche', { taille: 17 })}</span>
         <span>Un rappel n'est envoyé que si une <strong>échéance</strong> est renseignée.
         Sans heure précise, il part à 9 h.</span>
       </div>`;
@@ -435,6 +441,7 @@ const Taches = {
     ]);
 
     /* ── Création d'une étiquette sans quitter le formulaire ── */
+    brancherGrilleIcones(document.getElementById('modalBody'));
     const zone = document.getElementById('fEtiqNouvelle');
     const sel  = document.getElementById('fEtiq');
 
@@ -456,7 +463,7 @@ const Taches = {
 
         const opt = document.createElement('option');
         opt.value = nouvelle.id;
-        opt.textContent = `${nouvelle.icone} ${nouvelle.nom}`;
+        opt.textContent = nouvelle.nom;
         sel.appendChild(opt);
         sel.value = nouvelle.id;          // on la choisit : c'est pour ça qu'on l'a créée
 
@@ -474,8 +481,6 @@ const Taches = {
   /* ══ Création d'une liste ══ */
   _formListe(apres = null, l = null) {
     const edition = !!l;
-    const icones = ['📋', '🛒', '💡', '🏠', '💼', '🎯', '📞', '🧾', '🎁', '✈️', '🔧', '📚',
-                    '🎨', '🏋️', '🍽️', '🌱', '🎵', '🐾'];
 
     Modal.open(edition ? 'Modifier la liste' : 'Nouvelle liste', `
       <div class="form-grid">
@@ -484,20 +489,18 @@ const Taches = {
           <input id="lNom" value="${esc(l?.nom)}" placeholder="Ex. Courses, Maison, Prospection" />
         </div>
         <div class="field">
-          <label>Icône</label>
-          <select id="lIcone">
-            ${icones.map(i => `<option ${l?.icone === i ? 'selected' : ''}>${i}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
           <label>Couleur</label>
-          <input type="color" id="lCouleur" value="${l?.couleur || '#3B82F6'}"
+          <input type="color" id="lCouleur" value="${l?.couleur || '#9E3057'}"
                  style="height:42px;padding:3px;" />
+        </div>
+        <div class="field form-col-full">
+          <label>Pictogramme</label>
+          ${grilleIcones('lIcone', CHOIX_LISTE, l?.icone)}
         </div>
       </div>
       ${edition ? `
         <div class="alert-note" style="margin-top:12px;">
-          <span class="alert-note-icon">ℹ️</span>
+          <span class="alert-note-icon">${Icone('info', { taille: 17 })}</span>
           <span>Supprimer une liste ne supprime pas ses tâches : elles rejoignent
           « Sans liste ».</span>
         </div>` : ''}`, [
@@ -527,5 +530,7 @@ const Taches = {
           Toast.show(edition ? 'Liste modifiée' : 'Liste créée', 'success');
         } }
     ], 'modal-sm');
+
+    brancherGrilleIcones(document.getElementById('modalBody'));
   }
 };

@@ -18,7 +18,7 @@ const Agenda = {
     document.getElementById('pageTitle').textContent    = 'Agenda';
     document.getElementById('pageSubtitle').textContent = 'Rendez-vous, formations et échéances';
     document.getElementById('pageHeaderRight').innerHTML = `
-      <button class="btn btn-sm btn-primary" id="btnNouveauRdv">+ Rendez-vous</button>`;
+      <button class="btn btn-sm btn-primary" id="btnNouveauRdv">${Icone('plus', { taille: 16 })} Rendez-vous</button>`;
     Loading.show();
 
     this._etiquettes = await DataStore.getEtiquettes().catch(() => []);
@@ -96,10 +96,10 @@ const Agenda = {
         </div>
 
         <div class="agenda-filtres">
-          ${[['evenement', 'Rendez-vous', '#3B82F6'],
-             ['session',   'Formations',  '#8B5CF6'],
-             ['tache',     'Tâches',      '#F59E0B'],
-             ['echeance',  'Échéances',   '#DC2626']].map(([k, l, c]) => `
+          ${[['evenement', 'Rendez-vous', 'var(--encre-prune)'],
+             ['session',   'Formations',  'var(--encre-rose)'],
+             ['tache',     'Tâches',      'var(--encre-or)'],
+             ['echeance',  'Échéances',   'var(--encre-rouge)']].map(([k, l, c]) => `
             <button class="agenda-filtre ${this._filtres[k] ? 'on' : ''}" data-filtre="${k}"
                     style="--c:${c}"><span class="pastille"></span>${l}</button>`).join('')}
         </div>
@@ -142,10 +142,13 @@ const Agenda = {
              data-jour="${k}">
           <div class="mois-num">${d.getDate()}</div>
           <div class="mois-items">
+            ${it.slice(0, 4).map(i => `
+              <span class="mois-pastille" style="background:${i.couleur}"
+                    title="${esc(i.titre)}"></span>`).join('')}
             ${it.slice(0, 3).map(i => `
               <div class="mois-item ${i.termine ? 'fait' : ''}"
                    data-item-type="${i.type}" data-item-id="${i.id}"
-                   style="background:${teinte(i.couleur, 0.16)};color:${i.couleur};"
+                   style="background:${teinte(i.couleur, 0.18)};border-left:3px solid ${i.couleur};"
                    title="${esc(i.titre)}">
                 ${i.journee_entiere ? '' : `<b>${Dates.heure(i.debut)}</b> `}${esc(i.titre)}
               </div>`).join('')}
@@ -161,6 +164,45 @@ const Agenda = {
             .map(j => `<div>${j}</div>`).join('')}
         </div>
         <div class="mois-grille">${cases}</div>
+      </div>
+      ${this._aVenir()}`;
+  },
+
+  /* ══ Ce qui vient, sous la grille ══
+     Une grille de mois répond à « quand ? », pas à « quoi ? ». Sur téléphone
+     les cases ne portent que des pastilles : sans cette liste, la page ne
+     dirait plus rien de ce qui arrive. */
+  _aVenir(limite = 8) {
+    const maintenant = new Date();
+    const suite = this._items
+      .filter(i => new Date(i.debut) >= maintenant && !i.termine)
+      .slice(0, limite);
+
+    if (!suite.length) {
+      return `<div class="feuille agenda-suite">
+                <h2 class="hub-sous-titre">Ce qui vient</h2>
+                <p class="hub-vide">Rien de prévu sur cette période.</p>
+              </div>`;
+    }
+
+    return `
+      <div class="feuille agenda-suite">
+        <h2 class="hub-sous-titre">Ce qui vient<span class="hub-compteur">${suite.length}</span></h2>
+        <div class="log">
+          ${suite.map(i => `
+            <div class="entree" data-item-type="${i.type}" data-item-id="${i.id}">
+              <span class="puce" style="color:${i.couleur}">${Icone('cercle', { taille: 16 })}</span>
+              <span class="entree-heure">${Dates.relative(i.debut)}</span>
+              <span class="entree-corps">
+                <span class="entree-texte">${esc(i.titre)}</span>
+                <span class="entree-meta">
+                  <span>${i.journee_entiere ? 'journée entière' : Dates.heure(i.debut)}</span>
+                  ${i.lieu ? `<span>${esc(i.lieu)}</span>` : ''}
+                  <span>${Hub._typeLabel(i.type)}</span>
+                </span>
+              </span>
+            </div>`).join('')}
+        </div>
       </div>`;
   },
 
@@ -203,7 +245,7 @@ const Agenda = {
 
     if (!items.length) {
       return `<div class="section-card"><div class="section-card-body">
-        <div class="empty-state"><div class="empty-icon">🌤️</div>
+        <div class="empty-state"><div class="empty-icon">${Icone('agenda', { taille: 34 })}</div>
           Rien de prévu ce jour-là.</div></div></div>`;
     }
 
@@ -256,8 +298,11 @@ const Agenda = {
       // Clic sur une case vide de mois / colonne de semaine → nouveau RDV ce jour
       const jour = e.target.closest('[data-jour]');
       if (jour) {
-        if (this.vue === 'mois' && e.detail === 2) {
-          this.ouvrirForm(null, jour.dataset.jour);
+        // Un seul appui suffit : le double-clic n'existe pas au doigt.
+        if (this.vue === 'mois') {
+          this.curseur = new Date(jour.dataset.jour + 'T12:00:00');
+          this.vue = 'jour';
+          this._charger();
         } else if (this.vue === 'semaine') {
           this.curseur = new Date(jour.dataset.jour + 'T12:00:00');
           this.vue = 'jour';
@@ -403,7 +448,7 @@ const Agenda = {
       </div>
 
       <div class="alert-note" style="margin-top:12px;">
-        <span class="alert-note-icon">🔔</span>
+        <span class="alert-note-icon">${Icone('cloche', { taille: 17 })}</span>
         <span id="eEtatNotif">Vérification des notifications…</span>
       </div>`, [
       ...(edition ? [{
@@ -465,7 +510,7 @@ const Agenda = {
       zone.innerHTML = 'Notifications pas encore activées — <a href="#" id="lienActiverNotif" style="color:var(--primary);font-weight:600;">les activer maintenant</a>.';
       document.getElementById('lienActiverNotif')?.addEventListener('click', async e => {
         e.preventDefault();
-        try { await Notifs.activer(); zone.innerHTML = 'Notifications actives ✓'; }
+        try { await Notifs.activer(); zone.innerHTML = 'Notifications actives.'; }
         catch (err) { zone.innerHTML = esc(err.message); }
       });
     }

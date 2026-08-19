@@ -37,7 +37,7 @@ Object.assign(DataStore, {
       user_id: uid,
       nom:     d.nom,
       couleur: d.couleur || '#3B82F6',
-      icone:   d.icone   || '🏷️',
+      icone:   d.icone   || 'etiquette',
       ordre:   d.ordre   ?? 99
     }).select().single();
     if (error) this._handleError(error, 'addEtiquette');
@@ -79,7 +79,7 @@ Object.assign(DataStore, {
       user_id: uid,
       nom:     d.nom,
       couleur: d.couleur || '#3B82F6',
-      icone:   d.icone   || '📋',
+      icone:   d.icone   || 'liste',
       ordre:   d.ordre   ?? 50
     }).select().single();
     if (error) this._handleError(error, 'addListe');
@@ -331,9 +331,7 @@ Object.assign(DataStore, {
   /* ══════════════════════════════════════════════
      BULLET JOURNAL
      Le « rapid logging » : une entrée = un symbole.
-       •  tâche à faire     ✕  faite
        >  migrée            ~  abandonnée
-       ○  rendez-vous       —  note
   ══════════════════════════════════════════════ */
 
   /** Toutes les entrées de carnet entre deux dates (AAAA-MM-JJ inclus) */
@@ -349,13 +347,6 @@ Object.assign(DataStore, {
   },
 
   /** Symbole de rapid logging d'une entrée */
-  symbole(e) {
-    if (e.entree === 'evenement') return '○';
-    if (e.entree === 'note')      return '—';
-    if (e.etat === 'fait')        return '✕';
-    if (e.etat === 'abandonnee')  return '~';
-    return '•';
-  },
 
   /** Repousse une tâche : incrémente le compteur de migrations et conserve
       l'échéance d'origine. Le calcul est fait en base, en une seule requête. */
@@ -445,7 +436,7 @@ Object.assign(DataStore, {
      renomme lui-même. Ce tableau ne sert plus que de secours si la migration
      n'a pas encore été jouée. */
   CATEGORIES_SECOURS: [
-    { code: 'autre', nom: 'Autre', icone: '📄', couleur: '#64748B', ordre: 99 }
+    { code: 'autre', nom: 'Autre', icone: 'document', couleur: '#6E6E6E', ordre: 99 }
   ],
 
   _categoriesCache: null,
@@ -476,7 +467,7 @@ Object.assign(DataStore, {
     const { data, error } = await supa.from('coffre_categories').insert({
       user_id: uid, code,
       nom:     d.nom,
-      icone:   d.icone   || '📄',
+      icone:   d.icone   || 'document',
       couleur: d.couleur || '#64748B',
       ordre:   d.ordre   ?? 50
     }).select().single();
@@ -752,7 +743,7 @@ Object.assign(DataStore, {
   ══════════════════════════════════════════════ */
   /** Tout ce qu'affiche le tableau de bord, en une seule passe.
 
-      ⚠ Le tableau de bord est PERSONNEL : les échéances de dossiers OPCO en
+      Attention : le tableau de bord est PERSONNEL : les échéances de dossiers OPCO en
       sont volontairement absentes. Elles restent sur « Ma journée ». Ne pas
       les réintroduire ici sans une demande explicite. */
   async getResumeJour() {
@@ -869,7 +860,7 @@ function peindreErreur(err) {
   document.getElementById('pageContent').innerHTML = `
     <div class="section-card"><div class="section-card-body">
       <div class="empty-state">
-        <div class="empty-icon">⚠️</div>
+        <div class="empty-icon">${Icone('alerte', { taille: 34 })}</div>
         Impossible de charger cette page.<br>
         <small style="color:var(--text-muted)">${esc(err?.message || err)}</small><br><br>
         <small>Si le message évoque une table ou une vue absente, la migration
@@ -891,8 +882,8 @@ function pucePastille(etiquette) {
   /* Le texte reste en encre du thème, jamais dans la couleur de l'étiquette :
      une couleur choisie librement (sombre en thème sombre, claire en thème
      clair) tombait sous 2:1 de contraste. La couleur passe dans la pastille. */
-  return `<span class="etiq-chip" style="background:${teinte(etiquette.couleur, 0.16)};">
-            <i class="etiq-point" style="background:${etiquette.couleur};"></i>
-            ${etiquette.icone || ''} ${esc(etiquette.nom)}
+  return `<span class="etiq-chip" style="background:${teinte(etiquette.couleur, 0.18)};">
+            ${Icone(etiquette.icone, { taille: 13, couleur: etiquette.couleur, defaut: 'etiquette' })}
+            ${esc(etiquette.nom)}
           </span>`;
 }

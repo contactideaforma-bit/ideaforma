@@ -20,7 +20,7 @@ const Coffre = {
     document.getElementById('pageTitle').textContent    = 'Coffre';
     document.getElementById('pageSubtitle').textContent = 'Documents importants, pro et perso';
     document.getElementById('pageHeaderRight').innerHTML = `
-      <button class="btn btn-sm btn-primary" id="btnAjoutDoc">+ Document</button>`;
+      <button class="btn btn-sm btn-primary" id="btnAjoutDoc">${Icone('plus', { taille: 16 })} Document</button>`;
     Loading.show();
 
     [this._etiquettes, this._cats] = await Promise.all([
@@ -48,16 +48,17 @@ const Coffre = {
 
     const carte = d => {
       const cat = cats.find(c => c.code === d.categorie)
-               || { icone: '📄', nom: 'Sans catégorie', couleur: '#64748B' };
+               || { icone: 'document', nom: 'Sans catégorie', couleur: '#6E6E6E' };
       const expire  = d.date_expiration && d.date_expiration < hui;
       const bientot = d.date_expiration && !expire &&
         d.date_expiration <= Dates.iso(new Date(Date.now() + 60 * 86400000));
       return `
         <div class="doc-carte" data-doc="${d.id}">
-          <div class="doc-icone">${cat.icone}</div>
+          <div class="doc-icone ic-rond" style="background:${teinte(cat.couleur, 0.16)};color:var(--encre);"
+               >${Icone(cat.icone, { taille: 18, defaut: 'document' })}</div>
           <div class="doc-corps">
             <div class="doc-titre">
-              ${d.favori ? '⭐ ' : ''}${esc(d.titre)}
+              ${d.favori ? Icone('etoile', { taille: 14 }) + ' ' : ''}${esc(d.titre)}
             </div>
             <div class="doc-meta">
               <span>${esc(cat.nom)}</span>
@@ -67,14 +68,19 @@ const Coffre = {
             </div>
             ${d.date_expiration ? `
               <div class="doc-expire ${expire ? 'perime' : bientot ? 'bientot' : ''}">
-                ${expire ? '⚠️ Périmé depuis le' : bientot ? '⏳ Expire le' : 'Valable jusqu\'au'}
+                ${expire ? Icone('alerte', { taille: 14 }) + ' Périmé depuis le'
+                          : bientot ? Icone('sablier', { taille: 14 }) + ' Expire le'
+                                    : 'Valable jusqu\'au'}
                 ${Dates.courte(d.date_expiration)}
               </div>` : ''}
           </div>
           <div class="doc-actions">
-            <button class="btn-icon" data-doc-ouvrir="${d.id}" title="Ouvrir">👁</button>
-            <button class="btn-icon" data-doc-editer="${d.id}" title="Modifier">✎</button>
-            <button class="btn-icon danger" data-doc-suppr="${d.id}" title="Supprimer">✕</button>
+            <button class="btn-icon" data-doc-ouvrir="${d.id}"
+                    title="Ouvrir" aria-label="Ouvrir le document">${Icone('oeil', { taille: 17 })}</button>
+            <button class="btn-icon" data-doc-editer="${d.id}"
+                    title="Modifier" aria-label="Modifier le document">${Icone('crayon', { taille: 16 })}</button>
+            <button class="btn-icon danger" data-doc-suppr="${d.id}"
+                    title="Supprimer" aria-label="Supprimer le document">${Icone('poubelle', { taille: 16 })}</button>
           </div>
         </div>`;
     };
@@ -83,15 +89,17 @@ const Coffre = {
       <div class="coffre-page">
         <div class="listes-barre">
           <button class="liste-chip ${!this.categorie ? 'active' : ''}" data-cat="">
-            🗄️ Tout <span class="hub-compteur">${this._docs.length}</span>
+            ${Icone('coffre', { taille: 16 })} Tout
+            <span class="hub-compteur">${this._docs.length}</span>
           </button>
           ${cats.map(c => `
             <button class="liste-chip ${this.categorie === c.code ? 'active' : ''}"
-                    data-cat="${c.code}" style="--c:${c.couleur}">
-              ${c.icone} ${esc(c.nom)}${!this.categorie && compte(c.code)
+                    data-cat="${c.code}">
+              ${Icone(c.icone, { taille: 16, defaut: 'document' })} ${esc(c.nom)}${!this.categorie && compte(c.code)
                 ? ` <span class="hub-compteur">${compte(c.code)}</span>` : ''}
             </button>`).join('')}
-          <button class="liste-chip liste-chip-plus" id="btnGererCats">＋ Catégorie</button>
+          <button class="liste-chip liste-chip-plus" id="btnGererCats"
+                  >${Icone('plus', { taille: 16 })} Catégorie</button>
         </div>
 
         <div class="taches-filtres">
@@ -108,7 +116,7 @@ const Coffre = {
         ${this._docs.length
           ? `<div class="docs-liste">${this._docs.map(carte).join('')}</div>`
           : `<div class="section-card"><div class="section-card-body">
-               <div class="empty-state"><div class="empty-icon">🗄️</div>
+               <div class="empty-state"><div class="empty-icon">${Icone('coffre', { taille: 34 })}</div>
                  ${this.recherche || this.categorie
                    ? 'Aucun document ici.'
                    : 'Le coffre est vide. Déposez un premier document.'}
@@ -201,7 +209,7 @@ const Coffre = {
     const cats = this._cats;
     return `
       ${fichier ? `<div class="alert-note" style="margin-bottom:12px;">
-        <span class="alert-note-icon">📎</span>
+        <span class="alert-note-icon">${Icone('trombone', { taille: 17 })}</span>
         <span><strong>${esc(fichier.name)}</strong> · ${this._taille(fichier.size)}</span>
       </div>` : ''}
       <div class="form-grid">
@@ -243,7 +251,7 @@ const Coffre = {
         </div>
       </div>
       <div class="alert-note" style="margin-top:12px;">
-        <span class="alert-note-icon">⏳</span>
+        <span class="alert-note-icon">${Icone('sablier', { taille: 17 })}</span>
         <span>Une date d'expiration fait apparaître le document dans
         « Documents à renouveler » sur le tableau de bord, 60 jours avant l'échéance.</span>
       </div>`;
@@ -281,7 +289,7 @@ const Coffre = {
           try {
             await DataStore.uploadCoffre(fichier, meta);
             Modal.close(); await this._charger();
-            Toast.show('Document ajouté au coffre ✓', 'success');
+            Toast.show('Document ajouté au coffre', 'success');
           } catch (err) {
             btn.disabled = false; btn.textContent = 'Ajouter';
             Toast.show(
@@ -320,13 +328,13 @@ const Coffre = {
       <div class="listes-barre" id="catsListe">
         ${this._cats.map(c => `
           <button class="liste-chip" data-cat-edit="${c.id}"
-                  style="border-color:${c.couleur};color:${c.couleur};">
+                  style="border-color:${c.couleur};">
             ${c.icone} ${esc(c.nom)}
             <span class="hub-compteur">${this._docs.filter(d => d.categorie === c.code).length}</span>
           </button>`).join('')}
       </div>`, [
       { label: 'Fermer', cls: 'btn btn-secondary', action: () => Modal.close() },
-      { label: '＋ Nouvelle', cls: 'btn btn-primary', action: () => this._formCategorie() }
+      { label: 'Nouvelle catégorie', cls: 'btn btn-primary', action: () => this._formCategorie() }
     ], 'modal-sm');
 
     document.getElementById('catsListe')?.addEventListener('click', e => {
@@ -340,9 +348,6 @@ const Coffre = {
   _formCategorie(c = null) {
     const edition   = !!c;
     const protegee  = c?.code === 'autre';
-    const icones = ['📄','🪪','🏠','❤️','🛡️','🏦','🚗','🏢','🧾','🎓','✈️','📚',
-                    '🔧','🎨','🍽️','🐾','👶','💍','⚖️','📷'];
-
     Modal.open(edition ? 'Modifier la catégorie' : 'Nouvelle catégorie', `
       <div class="form-grid">
         <div class="field form-col-full">
@@ -350,24 +355,22 @@ const Coffre = {
           <input id="cNom" value="${esc(c?.nom)}" placeholder="Ex. Copropriété, Scolarité, Animaux" />
         </div>
         <div class="field">
-          <label>Icône</label>
-          <select id="cIcone">
-            ${icones.map(i => `<option ${c?.icone === i ? 'selected' : ''}>${i}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
           <label>Couleur</label>
-          <input type="color" id="cCouleur" value="${c?.couleur || '#64748B'}"
+          <input type="color" id="cCouleur" value="${c?.couleur || '#6E6E6E'}"
                  style="height:42px;padding:3px;" />
         </div>
         <div class="field">
           <label>Ordre d'affichage</label>
           <input type="number" id="cOrdre" value="${c?.ordre ?? 50}" min="1" max="99" />
         </div>
+        <div class="field form-col-full">
+          <label>Pictogramme</label>
+          ${grilleIcones('cIcone', CHOIX_COFFRE, c?.icone)}
+        </div>
       </div>
       ${protegee ? `
         <div class="alert-note" style="margin-top:12px;">
-          <span class="alert-note-icon">🔒</span>
+          <span class="alert-note-icon">${Icone('cadenas', { taille: 17 })}</span>
           <span>« Autre » ne peut pas être supprimée : c'est elle qui recueille
           les documents des catégories que vous supprimez.</span>
         </div>` : ''}`, [
@@ -402,6 +405,8 @@ const Coffre = {
           } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
         } }
     ], 'modal-sm');
+
+    brancherGrilleIcones(document.getElementById('modalBody'));
   },
 
   _confirmerSuppression(id) {

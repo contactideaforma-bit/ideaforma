@@ -33,7 +33,10 @@ const Toast = {
     const container = document.getElementById('toastContainer');
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
-    const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+    const icons = { success: Icone('check', { taille: 16 }),
+                    error:   Icone('alerte', { taille: 16 }),
+                    warning: Icone('alerte', { taille: 16 }),
+                    info:    Icone('info',   { taille: 16 }) };
     // Le message peut contenir un peu de mise en forme volontaire (<strong>),
     // mais jamais de contenu tiers non échappé : tous les appels qui insèrent
     // un message d'erreur passent par esc() au point d'appel.
@@ -166,15 +169,15 @@ const SettingsPage = {
     const aVenir    = await DataStore.getRappelsAVenir(5).catch(() => []);
 
     const bandeau = {
-      accorde:      ['ok',      '🔔', 'Les notifications sont autorisées sur cet appareil.'],
-      a_demander:   ['attente', '🔕', 'Les notifications ne sont pas encore activées sur cet appareil.'],
-      refuse:       ['ko',      '🚫', 'Les notifications sont bloquées par le navigateur. Il faut les réautoriser dans ses réglages (cadenas dans la barre d\'adresse → Notifications).'],
-      non_supporte: ['ko',      '⚠️', 'Ce navigateur ne gère pas les notifications poussées.']
+      accorde:      ['ok',      Icone('cloche', { taille: 17 }), 'Les notifications sont autorisées sur cet appareil.'],
+      a_demander:   ['attente', Icone('clocheOff', { taille: 17 }), 'Les notifications ne sont pas encore activées sur cet appareil.'],
+      refuse:       ['ko',      Icone('interdit', { taille: 17 }), 'Les notifications sont bloquées par le navigateur. Il faut les réautoriser dans ses réglages (cadenas dans la barre d\'adresse → Notifications).'],
+      non_supporte: ['ko',      Icone('alerte', { taille: 17 }), 'Ce navigateur ne gère pas les notifications poussées.']
     }[etat];
 
     const conseilIOS = Notifs.estIOS() && !Notifs.estInstallee() ? `
       <div class="alert-note" style="margin-bottom:14px;">
-        <span class="alert-note-icon">📱</span>
+        <span class="alert-note-icon">${Icone('mobile', { taille: 17 })}</span>
         <span><strong>Sur iPhone / iPad</strong>, les notifications n'existent que si
         l'application est installée : bouton <strong>Partager</strong> dans Safari →
         <strong>« Sur l'écran d'accueil »</strong>. Rouvrez ensuite IDEAFORMA depuis
@@ -184,7 +187,7 @@ const SettingsPage = {
     return `
       <div class="section-card">
         <div class="section-card-header">
-          <div class="section-card-title">🔔 Notifications</div>
+          <div class="section-card-title">${Icone('cloche', { taille: 16 })} Notifications</div>
         </div>
         <div class="section-card-body">
           ${conseilIOS}
@@ -219,7 +222,9 @@ const SettingsPage = {
                         a.derniere_utilisation ? ` · dernier envoi ${Dates.relative(a.derniere_utilisation)}` : ''}
                     </div>
                   </div>
-                  <button class="btn-icon danger" data-sub-del="${esc(a.endpoint)}" title="Retirer">✕</button>
+                  <button class="btn-icon danger" data-sub-del="${esc(a.endpoint)}"
+                          title="Retirer" aria-label="Retirer cet appareil"
+                          >${Icone('poubelle', { taille: 16 })}</button>
                 </div>`).join('')}
             </div>` : ''}
 
@@ -257,8 +262,8 @@ const SettingsPage = {
     return `
       <div class="section-card">
         <div class="section-card-header">
-          <div class="section-card-title">🏷️ Étiquettes</div>
-          <button class="btn btn-sm btn-secondary" id="btnAjoutEtiq">+ Étiquette</button>
+          <div class="section-card-title">${Icone('etiquette', { taille: 16 })} Étiquettes</div>
+          <button class="btn btn-sm btn-secondary" id="btnAjoutEtiq">${Icone('plus', { taille: 16 })} Étiquette</button>
         </div>
         <div class="section-card-body">
           <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
@@ -270,7 +275,8 @@ const SettingsPage = {
             ${etiquettes.map(e => `
               <span class="liste-chip" data-etiq="${e.id}"
                     style="border-color:${e.couleur};color:${e.couleur};cursor:pointer;">
-                ${e.icone} ${esc(e.nom)}${e.systeme ? '' : ' ✎'}
+                ${Icone(e.icone, { taille: 15, defaut: 'etiquette' })} ${esc(e.nom)}${
+                  e.systeme ? '' : ' ' + Icone('crayon', { taille: 13 })}
               </span>`).join('') || '<span style="color:var(--text-muted);font-size:13px;">Aucune étiquette.</span>'}
           </div>
         </div>
@@ -278,7 +284,6 @@ const SettingsPage = {
   },
 
   _formEtiquette(e = null, apres = null) {
-    const icones = ['🏷️', '💼', '🏡', '🎓', '📁', '❤️', '👨‍👩‍👧', '💰', '🚗', '✈️', '🎯', '🔧'];
     Modal.open(e ? 'Modifier l\'étiquette' : 'Nouvelle étiquette', `
       <div class="form-grid">
         <div class="field form-col-full">
@@ -286,14 +291,12 @@ const SettingsPage = {
           <input id="etNom" value="${esc(e?.nom)}" placeholder="Ex. Association, Copropriété, Sport" />
         </div>
         <div class="field">
-          <label>Icône</label>
-          <select id="etIcone">
-            ${icones.map(i => `<option ${e?.icone === i ? 'selected' : ''}>${i}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
           <label>Couleur</label>
-          <input type="color" id="etCouleur" value="${e?.couleur || '#3B82F6'}" style="height:42px;padding:3px;" />
+          <input type="color" id="etCouleur" value="${e?.couleur || '#9E3057'}" style="height:42px;padding:3px;" />
+        </div>
+        <div class="field form-col-full">
+          <label>Pictogramme</label>
+          ${grilleIcones('etIcone', CHOIX_ETIQUETTE, e?.icone)}
         </div>
       </div>`, [
       ...(e && !e.systeme ? [{
@@ -322,6 +325,8 @@ const SettingsPage = {
           }
         } }
     ], 'modal-sm');
+
+    brancherGrilleIcones(document.getElementById('modalBody'));
   },
 
   async render() {
@@ -353,7 +358,7 @@ const SettingsPage = {
         <!-- ── Identité organisme ── -->
         <div class="section-card">
           <div class="section-card-header">
-            <div class="section-card-title">🏢 Organisme de formation</div>
+            <div class="section-card-title">${Icone('batiment', { taille: 16 })} Organisme de formation</div>
           </div>
           <div class="section-card-body">
             <form id="settingsForm" novalidate>
@@ -393,7 +398,7 @@ const SettingsPage = {
               <!-- ── Logo et couleur ── -->
               <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:18px;">
                 <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:14px;">
-                  🎨 Personnalisation des documents PDF
+                  ${Icone('palette', { taille: 16 })} Personnalisation des documents PDF
                 </div>
                 <div class="form-grid">
                   <div class="field">
@@ -408,10 +413,10 @@ const SettingsPage = {
                       style="display:none;" />
                     <div style="display:flex;gap:8px;margin-top:6px;">
                       <button type="button" class="btn btn-sm btn-secondary" id="pickLogoBtn">
-                        📁 Choisir un logo
+                        ${Icone('dossier', { taille: 16 })} Choisir un logo
                       </button>
                       ${this._logoBase64
-                        ? `<button type="button" class="btn btn-sm btn-secondary" id="removeLogoBtn" style="color:var(--danger);">✕ Supprimer</button>`
+                        ? `<button type="button" class="btn btn-sm btn-secondary" id="removeLogoBtn" style="color:var(--danger);">${Icone('fermer', { taille: 15 })} Supprimer</button>`
                         : ''}
                     </div>
                   </div>
@@ -448,7 +453,7 @@ const SettingsPage = {
 
               <div style="margin-top:20px;">
                 <button type="submit" class="btn btn-primary" id="saveSettingsBtn">
-                  💾 Enregistrer les paramètres
+                  ${Icone('enregistrer', { taille: 16 })} Enregistrer les paramètres
                 </button>
               </div>
             </form>
@@ -458,7 +463,7 @@ const SettingsPage = {
         <!-- ── Info PDF ── -->
         <div class="section-card">
           <div class="section-card-header">
-            <div class="section-card-title">📄 Documents générés</div>
+            <div class="section-card-title">${Icone('document', { taille: 16 })} Documents générés</div>
           </div>
           <div class="section-card-body">
             <p style="font-size:13.5px;color:var(--text-muted);line-height:1.7;margin:0;">
@@ -474,7 +479,7 @@ const SettingsPage = {
         <!-- ── Sécurité ── -->
         <div class="section-card">
           <div class="section-card-header">
-            <div class="section-card-title">🔒 Sécurité</div>
+            <div class="section-card-title">${Icone('cadenas', { taille: 16 })} Sécurité</div>
           </div>
           <div class="section-card-body">
             <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">
@@ -589,11 +594,12 @@ const SettingsPage = {
       btn.disabled = true; btn.textContent = 'Enregistrement…';
       try {
         await DataStore.updateProfile(data);
-        Toast.show('Paramètres enregistrés ✓', 'success');
+        Toast.show('Paramètres enregistrés', 'success');
       } catch (err) {
         Toast.show('Erreur : ' + esc(err.message), 'error');
       }
-      btn.disabled = false; btn.textContent = '💾 Enregistrer les paramètres';
+      btn.disabled = false;
+      btn.innerHTML = `${Icone('enregistrer', { taille: 16 })} Enregistrer les paramètres`;
     });
   },
 

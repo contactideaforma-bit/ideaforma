@@ -346,8 +346,10 @@ ${listes.map(l => `- ${l.nom}`).join('\n') || '- aucune'}
 COMMENT TRAVAILLER
 - Tu as des outils pour lire ET écrire. Utilise-les plutôt que de demander à l'utilisateur de le faire lui-même.
 - Un horaire précis ⇒ creer_evenement. Une chose à faire sans horaire ⇒ creer_tache.
-- L'application est tenue comme un bullet journal : • tâche, ✕ faite, › repoussée,
-  ~ abandonnée, ○ rendez-vous, — note. Emploie ce vocabulaire quand tu en parles.
+- Vocabulaire de l'interface : une tâche se COCHE quand elle est faite, se
+  REPOUSSE à une autre date, ou s'ABANDONNE quand elle n'a plus lieu d'être.
+  Un rendez-vous se pose dans l'agenda, une note dans le pense-bête.
+  Emploie ces mots-là, pas de jargon.
 - Une tâche déjà repoussée trois fois ou plus : signale-le et propose de
   l'abandonner ou de la découper, plutôt que de la repousser encore.
 - Programme un rappel par défaut (15 min avant) sauf indication contraire ; pour une échéance importante, propose aussi la veille.
@@ -367,7 +369,7 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     document.getElementById('pageSubtitle').textContent = 'Il voit vos données et peut agir';
     document.getElementById('pageHeaderRight').innerHTML = `
       <button class="btn btn-sm btn-secondary" id="btnHistorique">Discussions</button>
-      <button class="btn btn-sm btn-primary" id="btnNouvelleConv">+ Nouvelle</button>`;
+      <button class="btn btn-sm btn-primary" id="btnNouvelleConv">${Icone('plus', { taille: 16 })} Nouvelle</button>`;
 
     document.getElementById('pageContent').innerHTML = `
       <div class="chat-page">
@@ -375,7 +377,8 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
         <div class="chat-saisie">
           <textarea id="chatInput" rows="1"
                     placeholder="Demandez n'importe quoi : « qu'est-ce que j'ai demain ? », « rappelle-moi d'appeler AKTO jeudi 10h », « combien de dossiers en attente ? »"></textarea>
-          <button class="btn btn-primary" id="chatEnvoyer" title="Envoyer">➤</button>
+          <button class="btn btn-primary" id="chatEnvoyer"
+                  title="Envoyer" aria-label="Envoyer">${Icone('envoyer')}</button>
         </div>
       </div>`;
 
@@ -410,7 +413,7 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     ];
     document.getElementById('chatFil').innerHTML = `
       <div class="chat-accueil">
-        <div class="chat-accueil-ic">🤖</div>
+        <div class="chat-accueil-ic">${Icone('assistant', { taille: 38 })}</div>
         <div class="chat-accueil-titre">Que puis-je faire pour vous ?</div>
         <div class="chat-accueil-sous">
           Je vois vos dossiers, votre agenda, vos tâches et vos notes.
@@ -452,7 +455,9 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
               <div class="conv-titre">${esc(c.titre)}</div>
               <div class="conv-date">${Dates.relative(c.modifie_le)}</div>
             </div>
-            <button class="btn-icon danger" data-conv-del="${c.id}">✕</button>
+            <button class="btn-icon danger" data-conv-del="${c.id}"
+                    title="Supprimer" aria-label="Supprimer la discussion"
+                    >${Icone('poubelle', { taille: 16 })}</button>
           </div>`).join('')}
       </div>` : '<div class="empty-state">Aucune discussion enregistrée.</div>', [
       { label: 'Fermer', cls: 'btn btn-secondary', action: () => Modal.close() }
@@ -507,19 +512,20 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
   },
 
   _libelleOutil(nom, args = {}) {
+    const ic = n => Icone(n, { taille: 15 });
     const l = {
-      creer_tache:      `✅ Tâche créée : « ${esc(args.description || '')} »`,
-      creer_evenement:  `📅 Rendez-vous créé : « ${esc(args.titre || '')} »`,
-      creer_note:       `— Note enregistrée`,
-      terminer_tache:   `✕ Tâche marquée comme faite`,
-      migrer_tache:     `› Tâche repoussée`,
-      abandonner_tache: `~ Tâche abandonnée`,
-      lister_agenda:    `🔍 Lecture de l'agenda`,
-      lister_taches:    `🔍 Lecture des tâches`,
-      chercher_dossiers:`🔍 Recherche dans les dossiers`,
-      resume_activite:  `🔍 Analyse de l'activité`
+      creer_tache:      `${ic('taches')} Tâche créée : « ${esc(args.description || '')} »`,
+      creer_evenement:  `${ic('agenda')} Rendez-vous créé : « ${esc(args.titre || '')} »`,
+      creer_note:       `${ic('notes')} Note enregistrée`,
+      terminer_tache:   `${ic('check')} Tâche marquée comme faite`,
+      migrer_tache:     `${ic('migrer')} Tâche repoussée`,
+      abandonner_tache: `${ic('abandonner')} Tâche abandonnée`,
+      lister_agenda:    `${ic('recherche')} Lecture de l'agenda`,
+      lister_taches:    `${ic('recherche')} Lecture des tâches`,
+      chercher_dossiers:`${ic('recherche')} Recherche dans les dossiers`,
+      resume_activite:  `${ic('activite')} Analyse de l'activité`
     };
-    return l[nom] || `⚙️ ${esc(nom)}`;
+    return l[nom] || `${ic('reglages')} ${esc(nom)}`;
   },
 
   /* Markdown minimal : gras, italique, code, listes, sauts de ligne */
@@ -602,7 +608,7 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     } catch (err) {
       this._peindre();
       document.getElementById('chatFil').insertAdjacentHTML('beforeend',
-        `<div class="chat-bulle chat-erreur">⚠️ ${esc(err.message)}</div>`);
+        `<div class="chat-bulle chat-erreur">${Icone('alerte', { taille: 16 })} ${esc(err.message)}</div>`);
     } finally {
       this._occupe = false;
       const b = document.getElementById('chatEnvoyer');

@@ -28,7 +28,7 @@ const Notes = {
     document.getElementById('pageTitle').textContent    = 'Pense-bête';
     document.getElementById('pageSubtitle').textContent = 'Ce qu\'il ne faut pas oublier';
     document.getElementById('pageHeaderRight').innerHTML = `
-      <button class="btn btn-sm btn-primary" id="btnNouvelleNote">+ Note</button>`;
+      <button class="btn btn-sm btn-primary" id="btnNouvelleNote">${Icone('plus', { taille: 16 })} Note</button>`;
     Loading.show();
 
     this._etiquettes = await DataStore.getEtiquettes().catch(() => []);
@@ -54,7 +54,9 @@ const Notes = {
     const carte = n => `
       <div class="note-carte" data-note="${n.id}" style="background:${n.couleur}">
         <button class="note-pin ${n.epinglee ? 'on' : ''}" data-pin="${n.id}"
-                title="${n.epinglee ? 'Désépingler' : 'Épingler'}">📌</button>
+                title="${n.epinglee ? 'Désépingler' : 'Épingler'}"
+                aria-label="${n.epinglee ? 'Désépingler' : 'Épingler'}"
+                >${Icone('epingle', { taille: 16 })}</button>
         ${n.titre ? `<div class="note-titre">${esc(n.titre)}</div>` : ''}
         <div class="note-corps">${esc(n.contenu).replace(/\n/g, '<br>')}</div>
         <div class="note-pied">
@@ -73,7 +75,7 @@ const Notes = {
           <select class="filter-select" id="noteEtiq">
             <option value="">Toutes les étiquettes</option>
             ${this._etiquettes.map(e => `<option value="${e.id}" ${this.etiqActive === e.id ? 'selected' : ''}>
-              ${e.icone} ${esc(e.nom)}</option>`).join('')}
+              ${esc(e.nom)}</option>`).join('')}
           </select>
           <label class="taches-switch">
             <input type="checkbox" id="noteArchivees" ${this.archivees ? 'checked' : ''} />
@@ -83,12 +85,12 @@ const Notes = {
 
         ${!this._notes.length ? `
           <div class="section-card"><div class="section-card-body">
-            <div class="empty-state"><div class="empty-icon">📝</div>
+            <div class="empty-state"><div class="empty-icon">${Icone('notes', { taille: 34 })}</div>
               ${this.recherche ? 'Aucune note ne correspond.' : 'Aucune note pour l\'instant.'}
             </div></div></div>` : ''}
 
         ${epinglees.length ? `
-          <div class="notes-section-titre">📌 Épinglées</div>
+          <div class="notes-section-titre">${Icone('epingle', { taille: 15 })} Épinglées</div>
           <div class="notes-grille">${epinglees.map(carte).join('')}</div>` : ''}
 
         ${autres.length ? `
@@ -166,7 +168,7 @@ const Notes = {
         <select class="filter-select" id="nEtiq">
           <option value="">Sans étiquette</option>
           ${this._etiquettes.map(x => `<option value="${x.id}" ${n?.etiquette_id === x.id ? 'selected' : ''}>
-            ${x.icone} ${esc(x.nom)}</option>`).join('')}
+            ${esc(x.nom)}</option>`).join('')}
         </select>
         <label class="taches-switch">
           <input type="checkbox" id="nEpingle" ${n?.epinglee ? 'checked' : ''} /> Épingler
@@ -235,7 +237,7 @@ const Notes = {
         this._enCours = this._sauver(n, jour).then(res => { n = res; this._enCours = null; return res; });
         await this._enCours;
         const e2 = document.getElementById('nEtat');
-        if (e2) e2.textContent = 'Enregistré ✓';
+        if (e2) e2.textContent = 'Enregistré';
       }, 900);
     };
     document.getElementById('nTitre').addEventListener('input', auto);

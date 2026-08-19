@@ -1,43 +1,50 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   IDEAFORMA — Thème « agenda à points »
+   IDEAFORMA — Thème « carnet »
    Chargé APRÈS styles.css et vie.css : il remappe les variables de couleur de
    l'application, donc les pages écrites avant en héritent sans être réécrites.
 
-   Deux principes tenus d'un bout à l'autre :
+   Trois principes, tenus d'un bout à l'autre :
 
-   1. La PAGE est du papier : blanc, quadrillé de points noirs comme un carnet
-      pointillé. Elle ne porte aucune couleur.
-   2. Les BLOCS sont des post-it : c'est eux qui portent la couleur, en pastel,
-      et chacun est réglable par l'utilisateur.
+   1. Le FOND est du papier pointillé. Il ne porte ni texte ni couleur.
+   2. Tout ce qui se lit est posé sur une SURFACE OPAQUE — post-it pastel ou
+      feuille blanche. Jamais de texte directement sur les points : c'est ce
+      qui rendait l'application fatigante à lire.
+   3. Les symboles sont des PICTOGRAMMES au trait (js/icones.js), jamais des
+      emojis : ils prennent la couleur du texte et restent nets en petit.
 
-   Règle non négociable : aucun texte sous 4,5:1 de contraste sur son fond.
-   Les pastels sont donc clairs et le texte qui s'y pose est presque noir.
+   Contraste : aucun texte sous 4,5:1 sur sa surface réelle, en clair comme en
+   sombre. Les valeurs ci-dessous ont été mesurées, pas estimées.
+
+   Typographie : l'interface est en sans-serif système — c'est elle qui porte
+   la lisibilité. Le serif habille les titres. L'écriture manuscrite ne sert
+   qu'à un seul endroit, en très grand, où elle reste parfaitement lisible.
 ───────────────────────────────────────────────────────────────────────────── */
 
-@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Lora:ital,wght@0,500;0,600;0,700;1,400&display=swap');
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Papier, encres, pastels
+   1. Papier, encres, pastels
 ═══════════════════════════════════════════════════════════════════════════ */
 :root {
   --papier:       #FFFFFF;
-  --papier-creux: #F4F4F2;          /* un renfoncement discret */
-  --pois:         rgba(17, 17, 17, 0.30);   /* les points de l'agenda */
-  --regle:        rgba(17, 17, 17, 0.12);
+  --papier-creux: #F4F4F2;                 /* renfoncement discret */
+  --pois:         rgba(17, 17, 17, 0.26);  /* les points du carnet */
+  --regle:        rgba(17, 17, 17, 0.13);
 
-  --encre:        #171717;          /* 17,4:1 sur blanc */
-  --encre-douce:  #5C5C5C;          /* 6,4:1  */
-  --encre-pale:   #8A8A8A;          /* 3,5:1 — jamais pour du texte courant */
+  /* Encres — ratio indiqué sur blanc, vérifié aussi sur les pastels */
+  --encre:        #171717;   /* 17,4:1 */
+  --encre-douce:  #4F4F4F;   /*  8,2:1 — texte secondaire, toujours lisible */
+  --encre-pale:   #6E6E6E;   /*  5,0:1 — mentions discrètes */
 
-  --encre-rose:   #B03A63;          /* 5,7:1 — couleur d'action */
-  --encre-rose-vif:#8E2B4E;
-  --encre-prune:  #6D3F86;
-  --encre-or:     #8A6111;
-  --encre-verte:  #2F6B46;
-  --encre-rouge:  #B32B3B;
+  --encre-rose:    #9E3057;  /*  7,0:1 — couleur d'action */
+  --encre-rose-vif:#7E1E40;
+  --encre-prune:   #5C3475;  /*  6,5:1 */
+  --encre-or:      #7A5410;  /*  5,1:1 */
+  --encre-verte:   #256B44;  /*  4,8:1 */
+  --encre-rouge:   #A32330;  /*  6,0:1 */
 
-  /* Les huit pastels proposés pour les post-it.
-     Tous tiennent 4,5:1 avec l'encre #171717 posée dessus. */
+  /* Les huit pastels des post-it. Clairs, pour que l'encre presque noire
+     qu'on pose dessus garde au minimum 7:1. */
   --pastel-rose:   #FBDDE4;
   --pastel-peche:  #FDE5D0;
   --pastel-jaune:  #FBF2C0;
@@ -47,8 +54,10 @@
   --pastel-lilas:  #E7DFF6;
   --pastel-gris:   #ECECE8;
 
-  --manuscrit: 'Caveat', 'Snell Roundhand', 'Segoe Script', cursive;
-  --serif:     'Lora', Georgia, serif;
+  --manuscrit: 'Caveat', 'Snell Roundhand', cursive;
+  --serif:     'Lora', Georgia, 'Times New Roman', serif;
+  --sans:      -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI',
+               Roboto, 'Helvetica Neue', Arial, sans-serif;
 
   /* Remappage des variables de l'application */
   --bg:            var(--papier);
@@ -57,38 +66,39 @@
   --text-muted:    var(--encre-douce);
   --text-light:    var(--encre-pale);
   --border:        var(--regle);
-  --border-light:  rgba(17, 17, 17, 0.07);
+  --border-light:  rgba(17, 17, 17, 0.08);
   --navy:          var(--encre);
   --primary:       var(--encre-rose);
   --primary-hover: var(--encre-rose-vif);
-  --primary-light:   rgba(176, 58, 99, 0.09);
-  --primary-lighter: rgba(176, 58, 99, 0.05);
-  --primary-border:  rgba(176, 58, 99, 0.22);
+  --primary-light:   rgba(158, 48, 87, 0.10);
+  --primary-lighter: rgba(158, 48, 87, 0.05);
+  --primary-border:  rgba(158, 48, 87, 0.24);
   --danger:        var(--encre-rouge);
-  --danger-bg:     rgba(179, 43, 59, 0.08);
+  --danger-bg:     rgba(163, 35, 48, 0.09);
   --success:       var(--encre-verte);
-  --success-bg:    rgba(47, 107, 70, 0.09);
+  --success-bg:    rgba(37, 107, 68, 0.10);
   --warning:       var(--encre-or);
-  --warning-bg:    rgba(138, 97, 17, 0.10);
+  --warning-bg:    rgba(122, 84, 16, 0.11);
   --violet:        var(--encre-prune);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
   --shadow:    0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.10);
   --shadow-lg: 0 16px 36px rgba(0, 0, 0, 0.16);
-  /* L'ombre d'un post-it : franche sous le bord bas, diffuse ailleurs */
+  /* L'ombre d'une fiche posée : franche sous le bord bas, diffuse ailleurs */
   --ombre-postit: 0 1px 2px rgba(0,0,0,.10), 0 8px 18px -10px rgba(0,0,0,.35);
+  --ombre-feuille: 0 1px 2px rgba(0,0,0,.06), 0 6px 16px -12px rgba(0,0,0,.30);
 }
 
 [data-theme="dark"] {
   --papier:       #121212;
   --papier-creux: #1E1E1E;
-  --pois:         rgba(255, 255, 255, 0.20);
-  --regle:        rgba(255, 255, 255, 0.13);
+  --pois:         rgba(255, 255, 255, 0.18);
+  --regle:        rgba(255, 255, 255, 0.14);
 
   --encre:        #F2F2F2;
-  --encre-douce:  #A8A8A8;
-  --encre-pale:   #6E6E6E;
+  --encre-douce:  #B4B4B4;
+  --encre-pale:   #8E8E8E;
 
   --encre-rose:   #F09BB6;
   --encre-rose-vif:#F7BCCE;
@@ -97,8 +107,8 @@
   --encre-verte:  #8FC9A5;
   --encre-rouge:  #F0919C;
 
-  /* En sombre, les post-it deviennent des aplats sourds : la teinte reste
-     reconnaissable, mais on ne s'éblouit pas à 23 h. Le texte repasse clair. */
+  /* En sombre les post-it deviennent des aplats sourds : la teinte reste
+     reconnaissable sans éblouir à 23 h, et le texte repasse clair. */
   --pastel-rose:   #3A222A;
   --pastel-peche:  #3A2A1E;
   --pastel-jaune:  #34301B;
@@ -109,32 +119,32 @@
   --pastel-gris:   #262626;
 
   --bg:           var(--papier);
-  --white:        #1A1A1A;
+  --white:        #1B1B1B;
   --text:         var(--encre);
   --text-muted:   var(--encre-douce);
   --text-light:   var(--encre-pale);
   --border:       var(--regle);
-  --border-light: rgba(255, 255, 255, 0.07);
+  --border-light: rgba(255, 255, 255, 0.08);
   --navy:         var(--encre);
   --primary:      var(--encre-rose);
   --primary-hover:var(--encre-rose-vif);
-  --primary-light:   rgba(240, 155, 182, 0.14);
-  --primary-lighter: rgba(240, 155, 182, 0.07);
-  --primary-border:  rgba(240, 155, 182, 0.26);
+  --primary-light:   rgba(240, 155, 182, 0.15);
+  --primary-lighter: rgba(240, 155, 182, 0.08);
+  --primary-border:  rgba(240, 155, 182, 0.28);
   --danger:       var(--encre-rouge);
   --success:      var(--encre-verte);
   --warning:      var(--encre-or);
   --violet:       var(--encre-prune);
 
-  --ombre-postit: 0 1px 2px rgba(0,0,0,.5), 0 8px 18px -10px rgba(0,0,0,.8);
+  --ombre-postit:  0 1px 2px rgba(0,0,0,.55), 0 8px 18px -10px rgba(0,0,0,.85);
+  --ombre-feuille: 0 1px 2px rgba(0,0,0,.45), 0 6px 16px -12px rgba(0,0,0,.7);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   La page pointillée
+   2. Le papier pointillé et les surfaces posées dessus
 ═══════════════════════════════════════════════════════════════════════════ */
-/* styles.css peint « .app-layout » en var(--bg) : ce calque recouvrirait
-   entièrement le fond du body. Les points sont donc posés sur les deux, avec
-   la même origine, pour qu'ils restent alignés d'un calque à l'autre. */
+/* styles.css peint « .app-layout » : ce calque recouvrirait le fond du body.
+   Les points sont donc posés sur les deux, avec la même origine. */
 body,
 .app-layout {
   background-color: var(--papier);
@@ -144,15 +154,30 @@ body,
 }
 .main-content, .page-body { background: transparent; }
 
-.sidebar, .page-header {
-  background: var(--papier);
-  border-color: var(--regle);
+body { font-family: var(--sans); }
+
+/* Rien ne dépasse jamais du cadre, quelle que soit la largeur d'écran. */
+html, body { overflow-x: hidden; }
+.app-layout, .main-content, .page-body { max-width: 100%; min-width: 0; }
+.page-body > * { max-width: 100%; }
+
+/* La FEUILLE : la surface neutre. Toute page qui n'utilise pas de post-it
+   pose son contenu là-dessus, pour ne jamais lire par-dessus les points. */
+.section-card, .doc-carte, .modal, .feuille {
+  background: var(--white);
+  border: 1px solid var(--regle);
+  border-radius: 14px;
+  box-shadow: var(--ombre-feuille);
+}
+.section-card-header {
+  background: transparent;
+  border-bottom: 1px solid var(--regle);
 }
 
+.sidebar, .page-header { background: var(--papier); border-color: var(--regle); }
+
 /* ═══════════════════════════════════════════════════════════════════════════
-   LE POST-IT
-   Une fiche posée sur le papier : pas de trait, une ombre qui décolle le bord
-   bas, et une bande de colle plus soutenue en haut.
+   3. Le post-it
 ═══════════════════════════════════════════════════════════════════════════ */
 .postit {
   position: relative;
@@ -161,8 +186,9 @@ body,
   border-radius: 4px 4px 12px 12px;
   box-shadow: var(--ombre-postit);
   overflow: hidden;
+  min-width: 0;
 }
-.postit::before {                    /* la bande adhésive */
+.postit::before {                       /* la bande adhésive */
   content: '';
   position: absolute; top: 0; left: 0; right: 0; height: 5px;
   background: rgba(0, 0, 0, 0.10);
@@ -171,115 +197,156 @@ body,
 
 .postit-tete {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 15px 16px 9px;
+  padding: 15px 15px 9px;
 }
 .postit-titre {
   flex: 1 1 auto; min-width: 0;
   font-family: var(--serif); font-size: 16px; font-weight: 600;
   color: var(--encre); margin: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.postit-corps { padding: 4px 16px 16px; }
+.postit-corps { padding: 4px 15px 15px; min-width: 0; }
 
-/* Boutons d'un post-it : ils vivent sur du pastel, donc en encre, sans fond */
+/* Boutons d'un post-it : posés sur du pastel, donc en encre, fond très clair */
 .postit-btn {
   flex-shrink: 0;
-  min-width: 34px; height: 34px; padding: 0 10px;
-  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  border-radius: 9px; border: 1px solid rgba(0,0,0,0.14);
-  background: rgba(255, 255, 255, 0.55);
-  font-family: var(--serif); font-size: 13px; font-weight: 600;
+  min-width: 36px; height: 36px; padding: 0 11px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: 9px; border: 1px solid rgba(0,0,0,0.16);
+  background: rgba(255, 255, 255, 0.66);
+  font-family: var(--sans); font-size: 13px; font-weight: 600;
   color: var(--encre); transition: var(--transition);
 }
 [data-theme="dark"] .postit-btn {
-  background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.18);
 }
-.postit-btn:hover { background: rgba(255, 255, 255, 0.9); transform: translateY(-1px); }
-[data-theme="dark"] .postit-btn:hover { background: rgba(255,255,255,0.14); }
-.postit-btn-plus { font-size: 20px; font-weight: 400; line-height: 1; padding: 0 12px; }
+.postit-btn:hover { background: rgba(255, 255, 255, 0.95); }
+[data-theme="dark"] .postit-btn:hover { background: rgba(255,255,255,0.16); }
+.postit-btn-icone { padding: 0; width: 36px; }
 
 /* Choix de la couleur */
 .postit-palette {
-  display: flex; gap: 6px; flex-wrap: wrap;
-  padding: 10px 16px 14px; border-top: 1px solid rgba(0,0,0,0.08);
+  display: flex; gap: 7px; flex-wrap: wrap;
+  padding: 10px 15px 14px; border-top: 1px solid rgba(0,0,0,0.10);
 }
+[data-theme="dark"] .postit-palette { border-top-color: rgba(255,255,255,0.10); }
 .postit-teinte {
-  width: 26px; height: 26px; border-radius: 50%;
-  border: 2px solid rgba(0,0,0,0.12); transition: var(--transition);
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid rgba(0,0,0,0.16); transition: var(--transition);
 }
-.postit-teinte:hover { transform: scale(1.12); }
-.postit-teinte.on { border-color: var(--encre); }
-/* .postit-palette est en display:flex : sans cette règle, l'attribut hidden
+[data-theme="dark"] .postit-teinte { border-color: rgba(255,255,255,0.2); }
+.postit-teinte:hover { transform: scale(1.1); }
+.postit-teinte.on { border-color: var(--encre); border-width: 3px; }
+/* .postit-palette est en display:flex : sans cette règle l'attribut hidden
    n'aurait aucun effet et la palette resterait ouverte en permanence. */
 .postit-palette[hidden] { display: none; }
 
-/* Les fiches qui ne sont pas des post-it (modales, coffre) restent sobres */
-.section-card, .doc-carte, .modal {
-  background: var(--white);
-  border: 1px solid var(--regle);
-  border-radius: 14px;
+/* ═══════════════════════════════════════════════════════════════════════════
+   4. Pictogrammes
+═══════════════════════════════════════════════════════════════════════════ */
+.ic { display: inline-block; vertical-align: -0.22em; flex-shrink: 0; }
+.ic-inline { vertical-align: -0.2em; }
+
+/* Pastille colorée portant un pictogramme (étiquettes, listes, catégories) */
+.ic-rond {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 8px; flex-shrink: 0;
 }
-.section-card-header { background: transparent; border-bottom: 1px solid var(--regle); }
+.ic-rond .ic { vertical-align: 0; }
+
+/* Grille de sélection d'icône dans les formulaires */
+.ic-grille {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px; margin-top: 4px;
+}
+.ic-choix {
+  height: 44px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--regle); background: var(--papier);
+  color: var(--encre-douce); transition: var(--transition);
+}
+.ic-choix:hover { border-color: var(--encre-rose); color: var(--encre-rose); }
+.ic-choix.on {
+  border-color: var(--encre); border-width: 2px;
+  background: var(--primary-lighter); color: var(--encre);
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Typographie
+   5. Typographie et en-tête de page
 ═══════════════════════════════════════════════════════════════════════════ */
-.page-title {
-  font-family: var(--manuscrit);
-  font-size: 32px; font-weight: 700; letter-spacing: 0; color: var(--encre);
+.page-header {
+  height: auto; min-height: 62px;
+  padding: 10px 28px;
+  gap: 12px;
+  display: flex; align-items: center; justify-content: space-between;
 }
-.page-subtitle { font-family: var(--serif); font-style: italic; color: var(--encre-douce); }
-.page-subtitle::first-letter { text-transform: uppercase; }
+.header-start { flex: 1 1 auto; min-width: 0; }
+.header-end   { flex: 0 0 auto; gap: 8px; }
+.page-header-left { min-width: 0; }
+
+.page-title {
+  font-family: var(--serif); font-weight: 700;
+  font-size: 21px; line-height: 1.25; letter-spacing: -0.01em;
+  color: var(--encre);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.page-subtitle {
+  font-family: var(--sans); font-size: 12.5px; color: var(--encre-douce);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .section-card-title, .modal-title {
-  font-family: var(--serif); font-weight: 600; font-size: 15.5px; color: var(--encre);
+  font-family: var(--serif); font-weight: 600; font-size: 15.5px;
+  color: var(--encre); letter-spacing: 0;
 }
 .logo-name { font-family: var(--serif); font-weight: 600; }
 .nav-section {
-  font-family: var(--serif); font-style: italic;
-  text-transform: none; letter-spacing: 0; font-size: 12.5px;
+  font-family: var(--sans); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em; font-size: 10.5px;
+  color: var(--encre-pale);
 }
+.nav-item { font-family: var(--sans); }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   TABLEAU DE BORD
+   6. Tableau de bord
 ═══════════════════════════════════════════════════════════════════════════ */
-.hub { display: flex; flex-direction: column; gap: 16px; }
+.hub { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
 /* ── Tuiles de comptage ── */
 .hub-tuiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .hub-tuile {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 0;
-  background: var(--papier); border: 1.5px solid var(--regle);
-  border-left: 4px solid var(--t, var(--encre));
-  border-radius: 10px; padding: 11px 13px; text-align: left;
-  transition: var(--transition); cursor: pointer;
+  display: flex; flex-direction: column; gap: 1px; min-width: 0;
+  padding: 12px 14px; text-align: left;
+  background: var(--white); border: 1px solid var(--regle);
+  border-left: 4px solid var(--t, var(--encre-rose));
+  border-radius: 12px; box-shadow: var(--ombre-feuille);
+  transition: var(--transition);
 }
-.hub-tuile:hover { border-color: var(--t); box-shadow: var(--shadow-md); }
+.hub-tuile:hover { border-color: var(--t); border-left-color: var(--t); }
 .hub-tuile-val {
-  font-family: var(--manuscrit); font-size: 30px; font-weight: 700;
-  line-height: 1; color: var(--t, var(--encre));
+  font-family: var(--serif); font-size: 27px; font-weight: 700;
+  line-height: 1.05; color: var(--t);
 }
-.hub-tuile-lbl { font-family: var(--serif); font-size: 12.5px; color: var(--encre-douce); }
+.hub-tuile-lbl {
+  font-size: 12px; font-weight: 600; color: var(--encre-douce);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .hub-tuile-rose  { --t: var(--encre-rose); }
 .hub-tuile-rouge { --t: var(--encre-rouge); }
 .hub-tuile-or    { --t: var(--encre-or); }
 
 .hub-grid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; align-items: start; }
-.hub-col  { display: flex; flex-direction: column; gap: 16px; }
+.hub-col  { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 
-/* ── Titres de groupe, soulignés à la main ── */
+/* ── Intertitres de groupe ── */
 .hub-sous-titre {
-  font-family: var(--manuscrit);
-  font-size: 20px; font-weight: 700; letter-spacing: 0;
-  text-transform: none; color: var(--encre);
-  margin: 14px 0 2px; display: flex; align-items: baseline; gap: 8px;
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--serif); font-size: 14px; font-weight: 700;
+  color: var(--encre); margin: 14px 0 2px; letter-spacing: 0;
 }
 .hub-sous-titre:first-child { margin-top: 2px; }
 .hub-sous-titre::after {
-  content: ''; flex: 1; height: 1px;
-  background: repeating-linear-gradient(90deg, rgba(0,0,0,.22) 0 5px, transparent 5px 10px);
-}
-[data-theme="dark"] .hub-sous-titre::after {
-  background: repeating-linear-gradient(90deg, rgba(255,255,255,.24) 0 5px, transparent 5px 10px);
+  content: ''; flex: 1; height: 1px; background: var(--regle);
 }
 .hub-sous-titre-rouge { color: var(--encre-rouge); }
 .hub-sous-titre-or    { color: var(--encre-or); }
@@ -287,58 +354,58 @@ body,
 .hub-sous-titre-pale  { color: var(--encre-douce); }
 
 .hub-compteur {
-  font-family: var(--serif); font-size: 12px; font-weight: 700;
-  color: var(--encre); background: rgba(0,0,0,0.09);
-  border-radius: 20px; padding: 1px 8px;
+  min-width: 20px; padding: 1px 7px; border-radius: 20px;
+  background: rgba(0,0,0,0.09); color: var(--encre);
+  font-family: var(--sans); font-size: 11px; font-weight: 700; text-align: center;
 }
-[data-theme="dark"] .hub-compteur { background: rgba(255,255,255,0.12); }
+[data-theme="dark"] .hub-compteur { background: rgba(255,255,255,0.14); }
 
 .hub-vide {
-  font-family: var(--serif); font-style: italic; font-size: 13.5px;
+  font-family: var(--sans); font-size: 13.5px;
   color: var(--encre-douce); margin: 0; padding: 12px 2px;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   BLOC ASSISTANT
+   7. Bloc assistant
 ═══════════════════════════════════════════════════════════════════════════ */
 .ia-saisie {
-  display: flex; align-items: flex-end; gap: 8px;
-  background: rgba(255,255,255,0.7); border: 1px solid rgba(0,0,0,0.13);
-  border-radius: 12px; padding: 6px 6px 6px 12px;
+  display: flex; align-items: flex-end; gap: 8px; min-width: 0;
+  background: rgba(255,255,255,0.78); border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 12px; padding: 5px 5px 5px 12px;
 }
 [data-theme="dark"] .ia-saisie {
-  background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.18);
 }
 .ia-saisie textarea {
-  flex: 1; min-width: 0; border: none; background: transparent; outline: none;
-  resize: none; font-family: var(--serif); font-size: 16px; line-height: 1.45;
-  color: var(--encre); padding: 9px 0; max-height: 120px;
+  flex: 1 1 auto; min-width: 0; width: 100%;
+  border: none; background: transparent; outline: none; resize: none;
+  font-family: var(--sans); font-size: 15px; line-height: 1.4;
+  color: var(--encre); padding: 11px 0; max-height: 120px;
 }
-.ia-saisie textarea::placeholder { color: var(--encre-douce); font-style: italic; }
+.ia-saisie textarea::placeholder { color: var(--encre-douce); }
 
 .ia-bouton {
   flex-shrink: 0; width: 42px; height: 42px; border-radius: 11px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 18px; transition: var(--transition);
-  border: 1px solid rgba(0,0,0,0.14); background: rgba(255,255,255,0.6);
+  transition: var(--transition);
+  border: 1px solid rgba(0,0,0,0.16); background: rgba(255,255,255,0.7);
   color: var(--encre);
 }
 [data-theme="dark"] .ia-bouton {
-  background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.16);
+  background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.18);
 }
 .ia-bouton:hover { background: #fff; }
-[data-theme="dark"] .ia-bouton:hover { background: rgba(255,255,255,0.14); }
+[data-theme="dark"] .ia-bouton:hover { background: rgba(255,255,255,0.16); }
+/* Le fond doit être redéclaré pour le thème sombre : « [data-theme] .ia-bouton »
+   est plus spécifique que « .ia-bouton-envoi » et effacerait la couleur. */
 .ia-bouton-envoi { background: var(--encre-rose); border-color: var(--encre-rose); color: #fff; }
 .ia-bouton-envoi:hover { background: var(--encre-rose-vif); }
-/* Le fond doit être redéclaré ici : « [data-theme] .ia-bouton » est plus
-   spécifique que « .ia-bouton-envoi » et effacerait le rose en mode sombre. */
 [data-theme="dark"] .ia-bouton-envoi {
-  background: var(--encre-rose); border-color: var(--encre-rose); color: #1A1A1A;
+  background: var(--encre-rose); border-color: var(--encre-rose); color: #17161A;
 }
 [data-theme="dark"] .ia-bouton-envoi:hover { background: var(--encre-rose-vif); }
 .ia-bouton:disabled { opacity: .45; }
-/* display:flex l'emporterait sur l'attribut hidden : le micro resterait
-   affiché sur les navigateurs qui ne savent pas écouter. */
+/* display:flex l'emporterait sur l'attribut hidden */
 .ia-bouton[hidden] { display: none; }
 
 /* Micro en écoute : un halo qui bat */
@@ -346,53 +413,58 @@ body,
   background: var(--encre-rouge); border-color: var(--encre-rouge); color: #fff;
   animation: ecoute 1.4s ease-in-out infinite;
 }
+[data-theme="dark"] .ia-bouton-micro.ecoute {
+  background: var(--encre-rouge); border-color: var(--encre-rouge); color: #17161A;
+}
 @keyframes ecoute {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(179, 43, 59, .45); }
-  50%      { box-shadow: 0 0 0 9px rgba(179, 43, 59, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(163, 35, 48, .45); }
+  50%      { box-shadow: 0 0 0 9px rgba(163, 35, 48, 0); }
 }
 
 .ia-exemples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
 .ia-exemple {
-  padding: 6px 11px; border-radius: 20px;
-  border: 1px solid rgba(0,0,0,0.13); background: rgba(255,255,255,0.5);
-  font-family: var(--serif); font-size: 12.5px; color: var(--encre-douce);
-  transition: var(--transition);
+  max-width: 100%; padding: 7px 12px; border-radius: 20px;
+  border: 1px solid rgba(0,0,0,0.15); background: rgba(255,255,255,0.6);
+  font-family: var(--sans); font-size: 12.5px; font-weight: 500;
+  color: var(--encre-douce); transition: var(--transition);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 [data-theme="dark"] .ia-exemple {
-  background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.16);
 }
 .ia-exemple:hover { color: var(--encre); background: #fff; }
-[data-theme="dark"] .ia-exemple:hover { background: rgba(255,255,255,0.12); }
+[data-theme="dark"] .ia-exemple:hover { background: rgba(255,255,255,0.14); }
 
 .ia-reponse {
   margin-top: 11px; padding: 12px 14px; border-radius: 11px;
-  background: rgba(255,255,255,0.68);
-  font-family: var(--serif); font-size: 14.5px; line-height: 1.6; color: var(--encre);
+  background: rgba(255,255,255,0.82);
+  font-family: var(--sans); font-size: 14.5px; line-height: 1.55;
+  color: var(--encre); overflow-wrap: anywhere;
 }
-[data-theme="dark"] .ia-reponse { background: rgba(255,255,255,0.06); }
+[data-theme="dark"] .ia-reponse { background: rgba(255,255,255,0.08); }
 .ia-reponse[hidden] { display: none; }
 .ia-reponse strong { font-weight: 700; }
 .ia-reponse ul { margin: 6px 0 0; padding-left: 18px; }
 .ia-reponse li { margin-bottom: 3px; }
 
-/* La demande, rappelée au-dessus de la réponse : on doit pouvoir relire ce
-   qu'on a dicté, la reconnaissance vocale se trompant parfois de mot. */
+/* La demande est rappelée au-dessus de la réponse : il faut pouvoir relire
+   ce qu'on a dicté, la reconnaissance vocale se trompant parfois de mot. */
 .ia-demande {
-  font-family: var(--serif); font-style: italic; font-size: 13px;
-  color: var(--encre-douce); margin-bottom: 7px;
-  padding-bottom: 7px; border-bottom: 1px solid rgba(0,0,0,0.09);
+  font-family: var(--serif); font-style: italic; font-size: 13.5px;
+  color: var(--encre-douce); margin-bottom: 8px;
+  padding-bottom: 8px; border-bottom: 1px solid rgba(0,0,0,0.10);
 }
-[data-theme="dark"] .ia-demande { border-bottom-color: rgba(255,255,255,0.10); }
+[data-theme="dark"] .ia-demande { border-bottom-color: rgba(255,255,255,0.12); }
 .ia-etape {
-  font-family: var(--serif); font-size: 12.5px; color: var(--encre-douce);
-  margin-bottom: 5px;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--encre-douce); margin-bottom: 6px;
 }
-
-.ia-actions { display: flex; flex-direction: column; gap: 4px; margin-top: 9px; }
+.ia-actions { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
 .ia-action {
-  font-family: var(--serif); font-size: 12.5px; color: var(--encre-verte); font-weight: 600;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--encre-verte); font-weight: 600;
 }
-.ia-erreur { color: var(--encre-rouge); }
+.ia-erreur { display: flex; align-items: center; gap: 6px; color: var(--encre-rouge); font-weight: 600; }
 
 .ia-points { display: inline-flex; gap: 4px; align-items: center; height: 14px; }
 .ia-points i {
@@ -407,68 +479,69 @@ body,
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   ENTRÉES — la ligne, partout dans l'application
+   8. L'entrée — la ligne, partout dans l'application
 ═══════════════════════════════════════════════════════════════════════════ */
-.log { display: flex; flex-direction: column; }
+.log { display: flex; flex-direction: column; min-width: 0; }
 
 .entree {
   display: flex; align-items: flex-start; gap: 10px;
-  padding: 9px 2px; min-height: 44px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 9px 2px; min-height: 44px; min-width: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.09);
   transition: var(--transition);
 }
-[data-theme="dark"] .entree { border-bottom-color: rgba(255,255,255,0.08); }
+[data-theme="dark"] .entree { border-bottom-color: rgba(255,255,255,0.09); }
 .entree:last-child { border-bottom: none; }
-.entree-passee { opacity: 0.5; }
+.entree-passee { opacity: 0.62; }
 
 /* ── La case à cocher ── */
 .case {
   flex-shrink: 0; margin-top: 1px;
   width: 24px; height: 24px; border-radius: 6px;
-  border: 2px solid var(--encre-douce); background: transparent;
+  border: 2px solid var(--encre-douce); background: var(--papier);
   display: flex; align-items: center; justify-content: center;
-  font-size: 15px; line-height: 1; color: transparent;
-  transition: var(--transition); cursor: pointer;
+  color: transparent; transition: var(--transition); cursor: pointer;
 }
-.case:hover { border-color: var(--encre); background: rgba(0,0,0,0.05); }
+.case:hover { border-color: var(--encre); }
 .case.cochee {
   background: var(--encre-verte); border-color: var(--encre-verte); color: #fff;
 }
-[data-theme="dark"] .case.cochee { color: #121212; }
+[data-theme="dark"] .case.cochee { color: #101010; }
 .case-abandon { border-style: dashed; color: var(--encre-pale); }
+.case .ic { vertical-align: 0; }
 
-/* Puce des rendez-vous et des notes : pas cliquable comme une case */
+/* Puce des rendez-vous et des notes : repère, pas bouton */
 .puce {
   flex-shrink: 0; width: 24px; height: 24px; margin-top: 1px;
   display: flex; align-items: center; justify-content: center;
-  font-family: var(--serif); font-size: 15px; font-weight: 700; line-height: 1;
   background: transparent; border: none; border-radius: 7px;
   transition: var(--transition);
 }
 .puce-evenement { color: var(--encre-prune); }
 .puce-note      { color: var(--encre-or); }
+.puce .ic { vertical-align: 0; }
 
 .entree-heure {
-  flex-shrink: 0; min-width: 46px; padding-top: 3px;
-  font-family: var(--serif); font-weight: 700; font-size: 12.5px; color: var(--encre-douce);
+  flex-shrink: 0; min-width: 48px; padding-top: 3px;
+  font-family: var(--sans); font-weight: 700; font-size: 12.5px;
+  color: var(--encre-douce);
 }
 .entree-heure-alerte { color: var(--encre-rouge); }
 
-.entree-corps { flex: 1; min-width: 0; display: block; cursor: pointer; text-align: left; }
+.entree-corps { flex: 1 1 auto; min-width: 0; display: block; cursor: pointer; text-align: left; }
 .entree-texte {
-  display: block; font-family: var(--serif); font-size: 15px;
-  line-height: 1.4; color: var(--encre);
+  display: block; font-family: var(--sans); font-size: 14.5px; font-weight: 500;
+  line-height: 1.4; color: var(--encre); overflow-wrap: anywhere;
 }
-.entree-signifiant { color: var(--encre-rouge); font-weight: 700; margin-right: 3px; }
+.entree-signifiant { color: var(--encre-rouge); margin-right: 2px; }
 .entree-meta {
-  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
-  font-size: 11.5px; color: var(--encre-douce); margin-top: 3px;
+  display: flex; gap: 4px 9px; flex-wrap: wrap; align-items: center;
+  font-size: 11.5px; color: var(--encre-douce); margin-top: 4px;
 }
+.entree-meta > span { display: inline-flex; align-items: center; gap: 4px; }
 .entree-retard { color: var(--encre-rouge); font-weight: 700; }
 .entree-migrations {
-  font-family: var(--serif); font-size: 11px; font-weight: 700;
-  color: var(--encre-or); border: 1px solid currentColor;
-  border-radius: 20px; padding: 0 6px;
+  font-size: 11px; font-weight: 700; color: var(--encre-or);
+  border: 1px solid currentColor; border-radius: 20px; padding: 0 6px;
 }
 
 .est-fait .entree-texte,
@@ -477,18 +550,19 @@ body,
   color: var(--encre-douce);
 }
 
-.entree-outils { display: flex; gap: 2px; opacity: 0; transition: var(--transition); }
+.entree-outils { display: flex; gap: 2px; opacity: 0; transition: var(--transition); flex-shrink: 0; }
 .entree:hover .entree-outils,
 .entree:focus-within .entree-outils { opacity: 1; }
 .entree-outil {
   width: 32px; height: 32px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; color: var(--encre-douce); transition: var(--transition);
+  color: var(--encre-douce); transition: var(--transition);
 }
-.entree-outil:hover { background: rgba(0,0,0,0.08); color: var(--encre); }
+.entree-outil:hover { background: rgba(0,0,0,0.09); color: var(--encre); }
+.entree-outil.danger:hover { background: var(--danger-bg); color: var(--encre-rouge); }
 @media (hover: none) {
   .entree-outils { opacity: 1; }
-  .entree-outil { background: rgba(0,0,0,0.06); }
+  .entree-outil { background: rgba(0,0,0,0.05); }
   [data-theme="dark"] .entree-outil { background: rgba(255,255,255,0.08); }
 }
 
@@ -496,121 +570,136 @@ body,
 .hub-raccourcis { display: grid !important; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .hub-raccourci {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 5px; min-height: 70px; padding: 11px 6px;
-  border-radius: 11px; border: 1px solid rgba(0,0,0,0.13);
-  background: rgba(255,255,255,0.55);
-  font-family: var(--serif); font-size: 12.5px; font-weight: 500; color: var(--encre);
-  transition: var(--transition);
+  gap: 6px; min-height: 72px; padding: 11px 6px; min-width: 0;
+  border-radius: 11px; border: 1px solid rgba(0,0,0,0.15);
+  background: rgba(255,255,255,0.66);
+  font-family: var(--sans); font-size: 12px; font-weight: 600;
+  color: var(--encre); transition: var(--transition);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 [data-theme="dark"] .hub-raccourci {
-  background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.16);
 }
-.hub-raccourci:hover { background: #fff; transform: translateY(-1px); }
-[data-theme="dark"] .hub-raccourci:hover { background: rgba(255,255,255,0.12); }
-.hub-raccourci-ic { font-size: 20px; }
+.hub-raccourci:hover { background: #fff; }
+[data-theme="dark"] .hub-raccourci:hover { background: rgba(255,255,255,0.15); }
+.hub-raccourci .ic { color: var(--encre-rose); vertical-align: 0; }
 
-/* ── Notes miniatures : de petits post-it dans le grand ── */
+/* ── Aperçu des notes ── */
 .notes-mini { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 .note-mini {
-  position: relative; display: block; text-align: left;
-  border: none; border-radius: 3px 3px 9px 9px;
-  box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 6px 12px -8px rgba(0,0,0,.4);
-  padding: 11px 12px; color: #171717; min-height: 76px; cursor: pointer;
+  position: relative; min-width: 0;
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 11px 12px; border-radius: 3px 3px 10px 10px;
+  box-shadow: var(--ombre-postit); text-align: left;
+  color: #171717;              /* les notes gardent leur pastel clair */
   transition: var(--transition);
 }
-.note-mini:hover { transform: translateY(-2px) rotate(-.6deg); }
-.note-mini-pin { position: absolute; top: 6px; right: 7px; font-size: 11px; opacity: .8; }
+.note-mini:hover { transform: translateY(-2px); }
+.note-mini-pin { position: absolute; top: 7px; right: 8px; opacity: .75; color: #171717; }
 .note-mini-titre {
-  display: block; font-family: var(--serif); font-size: 13px;
-  font-weight: 700; margin-bottom: 3px; padding-right: 16px;
+  font-family: var(--serif); font-weight: 700; font-size: 13.5px;
+  padding-right: 20px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .note-mini-corps {
+  font-size: 12.5px; line-height: 1.45; color: #3A3A3A;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
-  overflow: hidden; font-size: 12px; line-height: 1.45; opacity: 0.85;
+  overflow: hidden;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Retouches sur les composants existants
+   9. Contrôles communs
 ═══════════════════════════════════════════════════════════════════════════ */
-.btn { font-family: var(--serif); border-radius: 9px; min-height: 38px; }
+.btn {
+  font-family: var(--sans); font-weight: 600;
+  border-radius: 9px; min-height: 38px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
 .btn-primary { background: var(--encre-rose); }
 .btn-primary:hover { background: var(--encre-rose-vif); }
-.btn-secondary { background: var(--papier); border: 1px solid var(--regle); }
+.btn-secondary { background: var(--papier); border: 1px solid var(--regle); color: var(--encre); }
 .btn-secondary:hover { background: var(--papier-creux); }
-.btn-icon { border-radius: 9px; }
+.btn-icon {
+  border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--encre-douce);
+}
+.btn-icon:hover { color: var(--encre); }
+.btn-icon.danger:hover { color: var(--encre-rouge); background: var(--danger-bg); }
 
 .liste-chip, .rappel-case, .chat-suggestion, .agenda-filtre {
-  font-family: var(--serif); background: var(--papier); border-color: var(--regle);
+  font-family: var(--sans); font-weight: 600;
+  background: var(--papier); border-color: var(--regle); color: var(--encre);
 }
-.liste-chip { min-height: 38px; }
+.liste-chip {
+  min-height: 38px; display: inline-flex; align-items: center; gap: 6px;
+}
 .liste-chip.active { background: var(--encre); border-color: var(--encre); color: var(--papier); }
+.liste-chip.active .ic { color: var(--papier); }
+.liste-chip.active .hub-compteur { background: rgba(255,255,255,0.22); color: var(--papier); }
 
 .field label {
-  font-family: var(--serif); font-weight: 600;
+  font-family: var(--sans); font-weight: 600; color: var(--encre-douce);
   text-transform: none; letter-spacing: 0; font-size: 12.5px;
 }
 .field input, .field select, .field textarea,
 .search-input, .filter-select {
+  font-family: var(--sans);
   background: var(--papier); border-color: var(--regle);
-  color: var(--encre); border-radius: 9px;
+  color: var(--encre); border-radius: 9px; max-width: 100%;
 }
 
-/* Un champ flanqué d'un bouton « ＋ » (créer une étiquette sans quitter
+/* Un champ flanqué d'un bouton « + » (créer une étiquette sans quitter
    le formulaire) */
-.champ-plus { display: flex; gap: 6px; align-items: stretch; }
-.champ-plus > select { flex: 1; min-width: 0; }
+.champ-plus { display: flex; gap: 6px; align-items: stretch; min-width: 0; }
+.champ-plus > select { flex: 1 1 auto; min-width: 0; }
 .champ-plus-btn {
-  flex-shrink: 0; width: 42px; border-radius: 9px;
+  flex-shrink: 0; width: 44px; border-radius: 9px;
   border: 1px dashed var(--regle); background: var(--papier);
-  font-size: 17px; line-height: 1; color: var(--encre-douce);
-  transition: var(--transition);
+  color: var(--encre-douce); transition: var(--transition);
+  display: flex; align-items: center; justify-content: center;
 }
 .champ-plus-btn:hover {
   border-style: solid; border-color: var(--encre-rose); color: var(--encre-rose);
 }
 
 .etiq-express {
-  display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px;
-  padding: 9px; border-radius: 10px; background: var(--papier-creux);
+  margin-top: 8px; padding: 11px; border-radius: 10px;
+  background: var(--papier-creux); border: 1px solid var(--regle);
 }
 .etiq-express[hidden] { display: none; }
-.etiq-express > input[type="text"], .etiq-express > input:not([type]) {
-  flex: 1 1 130px; min-width: 0;
+.etiq-express-ligne { display: flex; gap: 7px; align-items: center; margin-top: 8px; }
+.etiq-express-ligne > input[type="color"] {
+  flex: 0 0 48px; height: 42px; padding: 3px; border-radius: 9px;
 }
-.etiq-express > select { flex: 0 0 74px; }
-.etiq-express > input[type="color"] {
-  flex: 0 0 46px; height: 40px; padding: 3px; border-radius: 9px;
-}
+.etiq-express-ligne > .btn { flex: 1 1 auto; }
 
-/* Étiquette : encre du thème pour le mot, pastille pour la couleur */
-.etiq-chip { color: var(--encre); }
-.etiq-point {
-  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
-  display: inline-block; box-shadow: 0 0 0 1px rgba(0,0,0,0.15) inset;
+/* Étiquette : encre du thème pour le mot, pastille pour la couleur.
+   Une couleur choisie librement par l'utilisateur tombait sous 2:1 quand on
+   s'en servait aussi comme couleur de texte. */
+.etiq-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 8px; border-radius: 20px; max-width: 100%;
+  font-family: var(--sans); font-size: 11.5px; font-weight: 600;
+  color: var(--encre); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-
-/* ── Page Tâches ── */
-.taches-filtres { align-items: stretch; }
-.taches-filtre-recherche { flex: 1 1 200px; min-width: 0; }
-.taches-filtre-etiq      { flex: 0 1 210px; min-width: 0; }
-.taches-filtres-bas { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.taches-astuce {
-  font-family: var(--serif); font-style: italic; font-size: 11.5px;
-  color: var(--encre-douce); margin: -8px 0 4px;
-}
+.etiq-chip .ic { vertical-align: 0; }
 
 .note-carte { border: none; box-shadow: var(--ombre-postit); border-radius: 3px 3px 12px 12px; }
-.note-titre, .note-editeur-titre { font-family: var(--serif); }
-.toast { font-family: var(--serif); }
-.empty-state, .empty-table-sub {
-  font-family: var(--serif); font-style: italic; color: var(--encre-douce);
-}
+.note-titre, .note-editeur-titre { font-family: var(--serif); font-weight: 600; }
+.toast { font-family: var(--sans); font-weight: 500; }
+.empty-state, .empty-table-sub { font-family: var(--sans); color: var(--encre-douce); }
+.empty-icon { color: var(--encre-pale); }
 
 .mois-case { border-color: var(--border-light); }
 .mois-case.hors { background: rgba(0,0,0,0.03); }
-.mois-num, .sem-num { font-family: var(--serif); }
-.agenda-periode { font-family: var(--manuscrit); font-size: 26px; font-weight: 700; }
-.jour-titre, .sem-item-t { font-family: var(--serif); }
+[data-theme="dark"] .mois-case.hors { background: rgba(255,255,255,0.03); }
+.mois-num, .sem-num { font-family: var(--sans); font-weight: 600; }
+/* Le seul endroit où l'écriture manuscrite reste : très grand, très contrasté. */
+.agenda-periode {
+  font-family: var(--manuscrit); font-size: 27px; font-weight: 700;
+  color: var(--encre); line-height: 1.1;
+}
+.jour-titre, .sem-item-t { font-family: var(--serif); font-weight: 600; }
 
 /* Contraste des accents en mode sombre : les encres deviennent claires,
    du texte blanc posé dessus tomberait à 1,6:1. */
@@ -622,9 +711,35 @@ body,
 [data-theme="dark"] .btn-primary:hover { color: #141414; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Le tiroir de navigation
-   styles.css le masque avec `translateX(-248px)`, une valeur en dur appariée
-   à `width: 248px`. Élargir le tiroir sans y toucher laisserait un bout de
+   10. Page Tâches
+═══════════════════════════════════════════════════════════════════════════ */
+.taches-page, .notes-page, .coffre-page, .agenda-page { min-width: 0; }
+
+.listes-barre { display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.liste-chip-plus { border-style: dashed; color: var(--encre-douce); }
+
+.taches-filtres {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  margin-bottom: 12px; min-width: 0;
+}
+.taches-filtre-recherche { flex: 1 1 210px; min-width: 0; max-width: 100%; }
+.taches-filtre-etiq      { flex: 0 1 210px; min-width: 0; max-width: 100%; }
+.taches-filtres-bas { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-width: 0; }
+.taches-astuce {
+  font-size: 11.5px; color: var(--encre-douce); margin: -6px 0 4px;
+}
+.tache-ajout input {
+  width: 100%; font-family: var(--sans); font-size: 15px;
+  padding: 12px 14px; border-radius: 11px;
+  border: 1px dashed var(--regle); background: var(--white);
+  color: var(--encre); box-shadow: var(--ombre-feuille);
+}
+.tache-ajout input:focus { border-style: solid; border-color: var(--encre-rose); outline: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   11. Le tiroir de navigation
+   styles.css le masque avec « translateX(-248px) », une valeur en dur appariée
+   à « width: 248px ». Élargir le tiroir sans y toucher laisserait un bout de
    menu collé à l'écran. On masque par -100 % : la distance suit la largeur.
 ═══════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 900px) {
@@ -638,44 +753,49 @@ body,
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   TÉLÉPHONE
+   12. Téléphone
 ═══════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 760px) {
   /* Aucun champ sous 16 px : en dessous, Safari zoome à chaque focus et
      l'utilisateur doit repincer pour revenir. */
   input, select, textarea,
   .field input, .field select, .field textarea,
-  .search-input, .filter-select { font-size: 16px !important; }
+  .search-input, .filter-select, .ia-saisie textarea,
+  .tache-ajout input { font-size: 16px !important; }
 
   .page-header {
     position: sticky; top: 0; z-index: 40;
-    padding: calc(10px + env(safe-area-inset-top)) 14px 10px; gap: 8px;
+    min-height: 56px;
+    padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
+    gap: 8px;
   }
-  .page-title    { font-size: 27px; }
-  .page-subtitle { font-size: 12px; }
-  .page-body     { padding: 14px 14px calc(24px + env(safe-area-inset-bottom)); }
+  .page-title { font-size: 19px; }
+  /* Sous 560 px, le sous-titre volait la place des boutons et repoussait
+     le titre sur trois lignes. Il ne porte jamais d'information vitale. */
+  .page-body { padding: 14px 14px calc(24px + env(safe-area-inset-bottom)); }
 
   /* Cibles de touche : 44 px, la recommandation d'Apple */
   .hamburger, .dark-toggle, .btn-icon { width: 44px; height: 44px; }
-  .hamburger svg, .dark-toggle svg { width: 21px; height: 21px; }
   .nav-item { padding: 13px 16px; font-size: 15px; min-height: 48px; }
-  .btn { min-height: 44px; padding: 11px 16px; }
-  .btn-sm { min-height: 40px; padding: 9px 14px; font-size: 13px; }
+  .btn { min-height: 44px; padding: 11px 15px; }
+  .btn-sm { min-height: 40px; padding: 9px 13px; font-size: 13px; }
   .sidebar { width: min(84vw, 300px); }
 
   .hub { gap: 14px; }
   .hub-tuiles { gap: 8px; }
-  .hub-tuile { padding: 10px; border-left-width: 3px; }
-  .hub-tuile-val { font-size: 26px; }
-  .hub-tuile-lbl { font-size: 11.5px; }
+  .hub-tuile { padding: 10px 11px; border-left-width: 3px; }
+  .hub-tuile-val { font-size: 24px; }
+  .hub-tuile-lbl { font-size: 11px; }
 
-  .postit-tete  { padding: 14px 14px 8px; }
-  .postit-corps { padding: 2px 14px 14px; }
-  .postit-btn   { min-width: 40px; height: 40px; }
+  .postit-tete  { padding: 13px 13px 8px; gap: 6px; }
+  .postit-corps { padding: 2px 13px 13px; }
+  .postit-btn   { min-width: 40px; height: 40px; padding: 0 10px; font-size: 12.5px; }
+  .postit-btn-icone { width: 40px; padding: 0; }
+  .postit-titre { font-size: 15.5px; }
 
   .entree { padding: 11px 0; gap: 10px; min-height: 48px; }
-  .entree-texte { font-size: 15.5px; }
-  .entree-heure { min-width: 44px; }
+  .entree-texte { font-size: 15px; }
+  .entree-heure { min-width: 46px; }
   .case  { width: 28px; height: 28px; }
   .puce  { width: 28px; height: 28px; }
   .entree-outil { width: 38px; height: 38px; }
@@ -683,12 +803,11 @@ body,
   .entree-outil[data-editer-tache] { display: none; }
 
   .hub-raccourcis { grid-template-columns: repeat(3, 1fr); gap: 7px; }
-  .hub-raccourci { min-height: 66px; font-size: 11.5px; }
+  .hub-raccourci { min-height: 68px; font-size: 11px; }
   .notes-mini { grid-template-columns: 1fr; }
-  .hub-sous-titre { font-size: 18px; }
 
-  .ia-saisie textarea { font-size: 16px; }
   .ia-bouton { width: 46px; height: 46px; }
+  .ia-saisie { padding: 5px 5px 5px 11px; }
 
   /* Fenêtres modales : feuille remontant du bas, actions au pouce */
   .modal {
@@ -706,55 +825,211 @@ body,
   .form-grid { grid-template-columns: 1fr; }
 
   /* ── Page Tâches en portrait ──
-     Les listes défilent sur une seule ligne au lieu de manger quatre lignes
-     de haut ; les filtres passent en colonne ; les fiches de groupe perdent
-     leur cadre pour laisser toute la largeur au texte. */
+     Les listes défilent sur une seule ligne au lieu d'occuper quatre lignes
+     de haut ; les filtres passent en colonne pleine largeur. Le débordement
+     latéral est compensé par une marge négative pour que la première puce
+     reste alignée sur le texte. */
   .listes-barre {
     overflow-x: auto; flex-wrap: nowrap; padding-bottom: 4px;
     scrollbar-width: none; -webkit-overflow-scrolling: touch;
-    margin: 0 -14px; padding-left: 14px; padding-right: 14px;
+    margin-left: -14px; margin-right: -14px;
+    padding-left: 14px; padding-right: 14px;
   }
   .listes-barre::-webkit-scrollbar { display: none; }
   .liste-chip { flex-shrink: 0; }
 
-  .taches-page, .notes-page, .coffre-page, .agenda-page { gap: 12px; }
   .taches-filtres { flex-direction: column; align-items: stretch; gap: 8px; margin-bottom: 8px; }
   .taches-filtre-recherche, .taches-filtre-etiq { flex: 1 1 auto; width: 100%; }
-  .taches-filtres-bas > .liste-chip { flex: 1 1 auto; justify-content: center; }
-  .taches-astuce { margin: -4px 0 0; }
+  .taches-filtres-bas { flex-wrap: nowrap; }
+  .taches-filtres-bas > .liste-chip { flex: 1 1 0; min-width: 0; justify-content: center; }
+  .taches-astuce { margin: -2px 0 0; }
 
-  .tache-ajout input { font-size: 16px; padding: 13px 14px; }
-
-  .taches-page .section-card {
-    border: none; background: transparent; box-shadow: none; border-radius: 0;
-  }
-  .taches-page .section-card-header {
-    padding: 4px 0 2px; border-bottom: none;
-  }
-  .taches-page .section-card-body { padding: 0 !important; }
-
-  /* Dans une modale étroite, le trio nom / icône / couleur tient encore sur
-     une ligne à condition de rendre le nom prioritaire. */
-  .etiq-express > input[type="text"], .etiq-express > input:not([type]) { flex: 1 1 100%; }
+  .ic-grille { grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); }
+  .etiq-express-ligne { flex-wrap: wrap; }
 
   body { background-size: 22px 22px; }
 }
 
+/* Écrans étroits : le sous-titre laisse la place aux boutons de l'en-tête */
+@media (max-width: 560px) {
+  .page-subtitle { display: none; }
+}
+
 @media (display-mode: standalone) {
   .sidebar     { padding-top: env(safe-area-inset-top); }
-  .page-header { padding-top: calc(12px + env(safe-area-inset-top)); }
+  .page-header { padding-top: calc(10px + env(safe-area-inset-top)); }
   .page-body   { padding-bottom: calc(28px + env(safe-area-inset-bottom)); }
 }
 
 @media print {
   .sidebar, .page-header, .ia-saisie, .ia-exemples,
   .entree-outils, .hub-raccourcis, .postit-palette { display: none !important; }
-  body { background: #fff; }
-  .postit { box-shadow: none; border: 1px solid #ddd; }
+  body, .app-layout { background: #fff; }
+  .postit, .section-card { box-shadow: none; border: 1px solid #ddd; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; animation: none !important; }
-  .hub-tuile:hover, .hub-raccourci:hover, .note-mini:hover,
-  .postit-btn:hover { transform: none; }
+  *, *::before, *::after {
+    animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   13. Reprises page par page — contraste et cibles de touche
+   Chaque règle ci-dessous corrige un défaut mesuré au navigateur, pas
+   supposé : ratio de contraste réel ou hauteur de cible réelle.
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Agenda ── */
+.agenda-vues .sub-nav-item {
+  padding: 8px 15px; font-size: 13px; font-weight: 600; min-height: 34px;
+  display: inline-flex; align-items: center; color: var(--encre-douce);
+  font-family: var(--sans);
+}
+.agenda-vues .sub-nav-item.active {
+  background: var(--encre); color: var(--papier); border-radius: 8px;
+}
+.agenda-filtre { min-height: 32px; padding: 6px 12px; color: var(--encre-douce); }
+.agenda-filtre.on { color: var(--encre); }
+
+.mois-num { font-size: 12px; font-weight: 700; color: var(--encre-douce); }
+.mois-case.aujourdhui .mois-num { color: var(--papier); background: var(--encre-rose); }
+/* La couleur de l'évènement passe dans le liseré : posée sur du texte de 10 px
+   elle tombait à 1,8:1 en thème sombre. */
+.mois-item {
+  color: var(--encre); border-radius: 0 6px 6px 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mois-item b { color: var(--encre); font-weight: 700; }
+.mois-item.fait { text-decoration: line-through; color: var(--encre-douce); }
+.sem-item, .jour-item { color: var(--encre); }
+
+/* ── Pense-bête ── */
+.note-pin {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+  opacity: .55; color: var(--encre);
+}
+.note-pin:hover { opacity: .85; background: rgba(0,0,0,0.07); }
+.note-pin.on { opacity: 1; color: var(--encre-rose); }
+.notes-section-titre {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--serif); font-weight: 600; color: var(--encre);
+}
+
+/* ── Coffre ── */
+.doc-carte { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
+.doc-icone { flex-shrink: 0; }
+.doc-corps { min-width: 0; flex: 1 1 auto; }
+.doc-titre {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--sans); font-weight: 600; color: var(--encre);
+  overflow-wrap: anywhere;
+}
+.doc-meta { color: var(--encre-douce); }
+.doc-expire { display: flex; align-items: center; gap: 5px; color: var(--encre-douce); }
+.doc-expire.perime  { color: var(--encre-rouge); font-weight: 600; }
+.doc-expire.bientot { color: var(--encre-or);   font-weight: 600; }
+.doc-actions { flex-shrink: 0; display: flex; gap: 2px; }
+.coffre-depot {
+  border: 1px dashed var(--regle); border-radius: 11px;
+  padding: 10px 14px; color: var(--encre-douce); font-size: 13px;
+  background: var(--white); min-width: 0;
+}
+
+/* ── Assistant, page complète ── */
+.chat-accueil-ic { color: var(--encre-rose); }
+.chat-accueil-titre { font-family: var(--serif); font-weight: 700; color: var(--encre); }
+.chat-accueil-sous, .chat-suggestion { color: var(--encre-douce); }
+.chat-suggestion { min-height: 36px; }
+.chat-bulle { font-family: var(--sans); }
+.chat-erreur { display: flex; align-items: center; gap: 6px; }
+.chat-saisie textarea { font-family: var(--sans); font-size: 15px; }
+.chat-saisie .btn-primary { display: inline-flex; align-items: center; justify-content: center; }
+
+/* ── Cibles de touche : rien sous 28 px de haut ── */
+.btn-icon { min-width: 34px; min-height: 34px; }
+.case { width: 28px; height: 28px; }
+.ia-exemple { min-height: 34px; display: inline-flex; align-items: center; }
+.liste-chip, .agenda-filtre, .chat-suggestion { min-height: 34px; }
+
+@media (max-width: 760px) {
+  .case { width: 30px; height: 30px; }
+  .btn-icon { min-width: 44px; min-height: 44px; }
+  .agenda-vues .sub-nav-item { min-height: 40px; padding: 9px 14px; }
+  .agenda-filtre { min-height: 38px; }
+  .coffre-depot { width: 100%; }
+  .doc-carte { gap: 10px; }
+}
+
+/* La feuille de la page Tâches : un seul cadre pour tous les groupes.
+   « hub-sous-titre::after » trace le filet qui sépare visuellement les
+   groupes sans multiplier les bordures. */
+.taches-feuille { padding: 6px 16px 14px; }
+.taches-feuille .hub-sous-titre { margin: 16px 0 0; }
+.taches-feuille .hub-sous-titre:first-child { margin-top: 6px; }
+.taches-feuille .hub-sous-titre .btn { margin-left: auto; }
+
+/* Les outils d'une ligne, au doigt : assez contrastés pour être vus, assez
+   discrets pour ne pas concurrencer le texte de la tâche. */
+@media (hover: none) {
+  .entree-outil { background: rgba(0,0,0,0.06); color: var(--encre-douce); }
+  [data-theme="dark"] .entree-outil { background: rgba(255,255,255,0.10); color: var(--encre-douce); }
+  .entree-outil.danger { color: var(--encre-rouge); background: var(--danger-bg); }
+}
+
+@media (max-width: 760px) {
+  .taches-feuille { padding: 4px 14px 12px; }
+}
+
+/* ── Agenda : vue Mois ──
+   Les pastilles ne servent que sur téléphone, où une case fait 40 px de large :
+   un libellé y devient une barre grise illisible. Sur grand écran c'est
+   l'inverse, on garde les libellés et on cache les pastilles. */
+.mois-pastille { display: none; }
+.mois-item { border-left-width: 3px; border-left-style: solid; }
+
+.agenda-filtre .pastille { width: 9px; height: 9px; border-radius: 50%; }
+.agenda-vues {
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--papier-creux); border-radius: 11px;
+  border: 1px solid var(--regle);
+}
+.agenda-vues .sub-nav-item { flex: 1 1 0; justify-content: center; }
+
+@media (max-width: 760px) {
+  .mois-items { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; }
+  .mois-item, .mois-plus { display: none; }
+  .mois-pastille { display: block; width: 6px; height: 6px; border-radius: 50%; }
+  .mois-case { min-height: 52px; padding: 5px 3px; text-align: center; }
+  .mois-num { margin-bottom: 4px; }
+  .agenda-periode { font-size: 24px; }
+  .agenda-filtres { gap: 6px; }
+  .agenda-filtre { font-size: 12.5px; padding: 6px 10px; }
+}
+
+/* La liste « Ce qui vient », sous la grille du mois */
+.agenda-suite { padding: 6px 16px 14px; margin-top: 14px; }
+.agenda-suite .hub-sous-titre:first-child { margin-top: 6px; }
+.mois-items { width: 100%; }
+
+@media (max-width: 760px) {
+  .agenda-suite { padding: 4px 14px 12px; }
+}
+
+/* ── Pense-bête ──
+   La punaise est posée en absolu dans le coin : sans réserve à droite, elle
+   se superposait à la première ligne des notes sans titre. */
+.note-carte { position: relative; color: #171717; }
+.note-titre, .note-corps { padding-right: 34px; }
+.note-corps { color: #2E2E2E; }
+.notes-section-titre { margin: 16px 0 8px; font-size: 14px; }
+
+/* Les notes gardent leur pastel clair même en thème sombre — c'est leur
+   raison d'être — donc leur texte reste sombre, jamais l'encre du thème. */
+[data-theme="dark"] .note-carte,
+[data-theme="dark"] .note-mini { color: #171717; }
+[data-theme="dark"] .note-carte .note-corps { color: #2E2E2E; }
+[data-theme="dark"] .note-carte .note-pin,
+[data-theme="dark"] .note-mini-pin { color: #171717; }

@@ -8,7 +8,7 @@
    Trois choses se font ici sans changer de page :
      – parler à l'assistant, au clavier ou à la voix ;
      – cocher une tâche ;
-     – créer une tâche, un rendez-vous ou une note (bouton ＋ de chaque bloc).
+     – créer une tâche, un rendez-vous ou une note (bouton + de chaque bloc).
 
    Le tableau de bord est PERSONNEL : rien qui touche aux dossiers OPCO n'y
    figure. Les échéances de formation vivent sur « Ma journée ».
@@ -49,7 +49,7 @@ const Hub = {
     document.getElementById('pageSubtitle').textContent = Dates.longue(new Date());
     document.getElementById('pageHeaderRight').innerHTML = `
       <button class="btn-icon" id="hubRefresh" title="Rafraîchir"
-              aria-label="Rafraîchir">↻</button>`;
+              aria-label="Rafraîchir">${Icone('rafraichir')}</button>`;
     Loading.show();
 
     let r;
@@ -110,8 +110,9 @@ const Hub = {
         <header class="postit-tete">
           <h2 class="postit-titre">${titre}</h2>
           ${outils || ''}
-          <button class="postit-btn" data-palette="${cle}"
-                  title="Couleur du bloc" aria-label="Changer la couleur du bloc">🎨</button>
+          <button class="postit-btn postit-btn-icone" data-palette="${cle}"
+                  title="Couleur du bloc" aria-label="Changer la couleur du bloc"
+                  >${Icone('palette', { taille: 18 })}</button>
         </header>
         <div class="postit-corps">${corps}</div>
         <div class="postit-palette" data-palette-pour="${cle}" hidden>
@@ -129,8 +130,8 @@ const Hub = {
     return `<button class="postit-btn" ${attr} title="${titre}" aria-label="${titre}">${libelle}</button>`;
   },
   _btnPlus(type, titre) {
-    return `<button class="postit-btn postit-btn-plus" data-creer="${type}"
-                    title="${titre}" aria-label="${titre}">＋</button>`;
+    return `<button class="postit-btn postit-btn-icone" data-creer="${type}"
+                    title="${titre}" aria-label="${titre}">${Icone('plus', { taille: 19 })}</button>`;
   },
 
   /* ══════════════════════════════════════════════
@@ -167,9 +168,9 @@ const Hub = {
         <textarea id="iaTexte" rows="1" enterkeyhint="send"
                   placeholder="Écrivez ou dictez…"></textarea>
         <button class="ia-bouton ia-bouton-micro" id="iaMicro" hidden
-                title="Dicter" aria-label="Dicter la demande">🎤</button>
+                title="Dicter" aria-label="Dicter la demande">${Icone('micro')}</button>
         <button class="ia-bouton ia-bouton-envoi" id="iaEnvoyer"
-                title="Envoyer" aria-label="Envoyer la demande">➤</button>
+                title="Envoyer" aria-label="Envoyer la demande">${Icone('envoyer')}</button>
       </div>
       <div class="ia-exemples">
         ${exemples.map(e => `<button class="ia-exemple">${esc(e)}</button>`).join('')}
@@ -205,7 +206,7 @@ const Hub = {
         <div class="entree ${a.termine || passe ? 'entree-passee' : ''}"
              data-ouvrir-ev="${a.type === 'evenement' ? a.id : ''}"
              data-type="${a.type}">
-          <span class="puce puce-evenement">○</span>
+          <span class="puce puce-evenement">${Icone('cercle', { taille: 17 })}</span>
           <span class="entree-heure">
             ${relatif ? Dates.relative(a.debut)
                       : (a.journee_entiere ? 'journée' : Dates.heure(d))}
@@ -268,7 +269,8 @@ const Hub = {
     const retard = t.echeance && !t.fait && t.echeance < hui;
 
     const classeCase = t.abandonnee ? 'case case-abandon' : (t.fait ? 'case cochee' : 'case');
-    const marque     = t.abandonnee ? '~' : '✓';
+    const marque     = t.abandonnee ? Icone('abandonner', { taille: 15 })
+                                    : Icone('check', { taille: 15, trait: 2.6 });
 
     return `
       <div class="entree ${t.fait ? 'est-fait' : ''} ${t.abandonnee ? 'est-abandonne' : ''}">
@@ -278,26 +280,32 @@ const Hub = {
                 title="${t.fait ? 'Rouvrir la tâche' : 'Marquer comme faite'}">${marque}</button>
         <span class="entree-corps" data-tache-open="${t.id}">
           <span class="entree-texte">
-            ${t.priorite === 'haute' ? '<span class="entree-signifiant">★</span>' : ''}
+            ${t.priorite === 'haute'
+               ? `<span class="entree-signifiant" title="Priorité haute">${Icone('etoile', { taille: 14 })}</span>`
+               : ''}
             ${esc(t.description)}
           </span>
           <span class="entree-meta">
             ${t.echeance
               ? `<span class="${retard ? 'entree-retard' : ''}">${Dates.relative(t.echeance)}${
                   t.heure ? ' · ' + t.heure.slice(0, 5) : ''}</span>` : ''}
-            ${t.rappel_minutes != null ? '<span title="Rappel programmé">🔔</span>' : ''}
+            ${t.rappel_minutes != null
+               ? `<span title="Rappel programmé">${Icone('cloche', { taille: 13 })}</span>` : ''}
             ${t.migrations > 0
-              ? `<span class="entree-migrations" title="Repoussée ${t.migrations} fois">› ${t.migrations}</span>`
+              ? `<span class="entree-migrations" title="Repoussée ${t.migrations} fois">${t.migrations}×</span>`
               : ''}
-            ${t.listes ? `<span>${t.listes.icone} ${esc(t.listes.nom)}</span>` : ''}
+            ${t.listes
+               ? `<span>${Icone(t.listes.icone, { taille: 13, defaut: 'liste' })} ${esc(t.listes.nom)}</span>` : ''}
             ${t.etiquettes ? pucePastille(t.etiquettes) : ''}
           </span>
         </span>
         <span class="entree-outils">
           <button class="entree-outil" data-migrer="${t.id}"
-                  title="Repousser à demain" aria-label="Repousser à demain">›</button>
+                  title="Repousser à demain" aria-label="Repousser à demain"
+                  >${Icone('migrer', { taille: 17 })}</button>
           <button class="entree-outil" data-editer-tache="${t.id}"
-                  title="Modifier" aria-label="Modifier la tâche">✎</button>
+                  title="Modifier" aria-label="Modifier la tâche"
+                  >${Icone('crayon', { taille: 16 })}</button>
         </span>
       </div>`;
   },
@@ -320,7 +328,7 @@ const Hub = {
         ${notes.map(n => `
           <button class="note-mini" style="background:${esc(n.couleur)}"
                   data-note-id="${n.id}">
-            ${n.epinglee ? '<span class="note-mini-pin">📌</span>' : ''}
+            ${n.epinglee ? `<span class="note-mini-pin">${Icone('epingle', { taille: 14 })}</span>` : ''}
             ${n.titre ? `<span class="note-mini-titre">${esc(n.titre)}</span>` : ''}
             <span class="note-mini-corps">${esc((n.contenu || '').slice(0, 150))}</span>
           </button>`).join('')}
@@ -333,15 +341,15 @@ const Hub = {
   _blocRaccourcis() {
     const r = (page, icone, label) =>
       `<button class="hub-raccourci" data-goto="${page}">
-         <span class="hub-raccourci-ic">${icone}</span>${label}</button>`;
+         ${Icone(icone, { taille: 22 })}${label}</button>`;
     return this._postit('raccourcis', 'Aller à', '',
       `<div class="hub-raccourcis">
-         ${r('agenda',    '📅', 'Agenda')}
-         ${r('taches',    '✓',  'Tâches')}
-         ${r('notes',     '📝', 'Pense-bête')}
-         ${r('coffre',    '🗄️', 'Coffre')}
-         ${r('journee',   '🎓', 'Ma journée')}
-         ${r('settings',  '⚙️', 'Réglages')}
+         ${r('agenda',   'agenda',    'Agenda')}
+         ${r('taches',   'taches',    'Tâches')}
+         ${r('notes',    'notes',     'Pense-bête')}
+         ${r('coffre',   'coffre',    'Coffre')}
+         ${r('journee',  'formation', 'Ma journée')}
+         ${r('settings', 'reglages',  'Réglages')}
        </div>`);
   },
 
@@ -361,7 +369,7 @@ const Hub = {
       <div class="log">
         ${r.expirations.slice(0, 5).map(d => `
           <div class="entree" data-goto="coffre">
-            <span class="puce puce-note">—</span>
+            <span class="puce puce-note">${Icone('sablier', { taille: 17 })}</span>
             <span class="entree-heure entree-heure-alerte">${Dates.relative(d.date_expiration)}</span>
             <span class="entree-corps">
               <span class="entree-texte">${esc(d.titre)}</span>
@@ -555,7 +563,7 @@ const Hub = {
 
     } catch (err) {
       zone.innerHTML = entete +
-        `<span class="ia-erreur">⚠️ ${esc(err.message)}</span>`;
+        `<span class="ia-erreur">${Icone('alerte', { taille: 16 })} ${esc(err.message)}</span>`;
     } finally {
       this._iaOccupe = false;
       const b = document.getElementById('iaEnvoyer');
