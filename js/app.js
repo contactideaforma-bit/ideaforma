@@ -34,6 +34,9 @@ const Toast = {
     const toast = document.createElement('div');
     toast.className = `toast ${type}`;
     const icons = { success: '✓', error: '✕', warning: '⚠', info: 'ℹ' };
+    // Le message peut contenir un peu de mise en forme volontaire (<strong>),
+    // mais jamais de contenu tiers non échappé : tous les appels qui insèrent
+    // un message d'erreur passent par esc() au point d'appel.
     toast.innerHTML = `<span>${icons[type] || ''}</span> ${message}`;
     container.appendChild(toast);
     setTimeout(() => {
@@ -101,9 +104,227 @@ const SettingsPage = {
 
   _logoBase64: null, // cache local du logo
 
+  /* ── Changement de mot de passe ── */
+  _bindPasswordForm() {
+    const form = document.getElementById('passwordForm');
+    if (!form) return;
+
+    const msg = document.getElementById('pwdMessage');
+    const afficher = (texte, type) => {
+      msg.textContent = texte;
+      msg.style.display    = 'block';
+      msg.style.background = type === 'ok' ? 'rgba(16,185,129,.10)' : 'rgba(239,68,68,.10)';
+      msg.style.color      = type === 'ok' ? '#059669' : '#DC2626';
+    };
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const actuel   = document.getElementById('pwdCurrent').value;
+      const nouveau  = document.getElementById('pwdNew').value;
+      const confirme = document.getElementById('pwdConfirm').value;
+      const btn      = document.getElementById('savePwdBtn');
+
+      msg.style.display = 'none';
+
+      if (!actuel)                 return afficher('Saisissez votre mot de passe actuel.', 'ko');
+      if (nouveau.length < 8)      return afficher('Le nouveau mot de passe doit contenir au moins 8 caractères.', 'ko');
+      if (nouveau !== confirme)    return afficher('Les deux nouveaux mots de passe ne correspondent pas.', 'ko');
+      if (nouveau === actuel)      return afficher('Le nouveau mot de passe doit être différent de l\'actuel.', 'ko');
+
+      btn.disabled    = true;
+      btn.textContent = 'Modification…';
+
+      const res = await Auth.changePassword(actuel, nouveau);
+
+      if (res.success) {
+        form.reset();
+        afficher('Mot de passe modifié. Il sera demandé à votre prochaine connexion.', 'ok');
+        Toast.show('Mot de passe modifié', 'success');
+      } else if (res.code === 'current') {
+        afficher('Mot de passe actuel incorrect.', 'ko');
+        document.getElementById('pwdCurrent').value = '';
+        document.getElementById('pwdCurrent').focus();
+      } else if (res.code === 'session') {
+        afficher('Session expirée. Reconnectez-vous et réessayez.', 'ko');
+      } else {
+        afficher(/weak|should be/i.test(res.error || '')
+          ? 'Mot de passe trop simple. Ajoutez des chiffres ou des caractères.'
+          : 'Impossible de modifier le mot de passe. Réessayez.', 'ko');
+      }
+
+      btn.disabled    = false;
+      btn.textContent = 'Changer le mot de passe';
+    });
+  },
+
+  /* ══════════════════════════════════════════════
+     NOTIFICATIONS
+  ══════════════════════════════════════════════ */
+  async _blocNotifications() {
+    const etat      = Notifs.etat();
+    const appareils = await DataStore.getPushSubscriptions().catch(() => []);
+    const aVenir    = await DataStore.getRappelsAVenir(5).catch(() => []);
+
+    const bandeau = {
+      accorde:      ['ok',      '🔔', 'Les notifications sont autorisées sur cet appareil.'],
+      a_demander:   ['attente', '🔕', 'Les notifications ne sont pas encore activées sur cet appareil.'],
+      refuse:       ['ko',      '🚫', 'Les notifications sont bloquées par le navigateur. Il faut les réautoriser dans ses réglages (cadenas dans la barre d\'adresse → Notifications).'],
+      non_supporte: ['ko',      '⚠️', 'Ce navigateur ne gère pas les notifications poussées.']
+    }[etat];
+
+    const conseilIOS = Notifs.estIOS() && !Notifs.estInstallee() ? `
+      <div class="alert-note" style="margin-bottom:14px;">
+        <span class="alert-note-icon">📱</span>
+        <span><strong>Sur iPhone / iPad</strong>, les notifications n'existent que si
+        l'application est installée : bouton <strong>Partager</strong> dans Safari →
+        <strong>« Sur l'écran d'accueil »</strong>. Rouvrez ensuite IDEAFORMA depuis
+        l'icône, puis revenez ici pour activer les notifications.</span>
+      </div>` : '';
+
+    return `
+      <div class="section-card">
+        <div class="section-card-header">
+          <div class="section-card-title">🔔 Notifications</div>
+        </div>
+        <div class="section-card-body">
+          ${conseilIOS}
+          <div class="notif-etat ${bandeau[0]}">
+            <span class="notif-etat-ic">${bandeau[1]}</span>
+            <span>${bandeau[2]}</span>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${etat === 'accorde'
+              ? `<button class="btn btn-sm btn-secondary" id="btnTestNotif">Tester tout de suite</button>
+                 <button class="btn btn-sm btn-secondary" id="btnTestChaine">Tester le rappel serveur (1 min)</button>
+                 <button class="btn btn-sm btn-secondary" id="btnCouperNotif" style="color:var(--danger);">
+                   Désactiver sur cet appareil</button>`
+              : `<button class="btn btn-sm btn-primary" id="btnActiverNotif"
+                   ${etat === 'non_supporte' || etat === 'refuse' ? 'disabled' : ''}>
+                   Activer les notifications</button>`}
+          </div>
+
+          ${appareils.length ? `
+            <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;
+                          letter-spacing:.5px;color:var(--text-muted);margin-bottom:6px;">
+                Appareils abonnés
+              </div>
+              ${appareils.map(a => `
+                <div class="appareil-ligne">
+                  <div>
+                    <div class="appareil-nom">${esc(a.appareil || 'Appareil')} ${a.actif ? '' : '· inactif'}</div>
+                    <div class="appareil-date">
+                      inscrit ${Dates.relative(a.cree_le)}${
+                        a.derniere_utilisation ? ` · dernier envoi ${Dates.relative(a.derniere_utilisation)}` : ''}
+                    </div>
+                  </div>
+                  <button class="btn-icon danger" data-sub-del="${esc(a.endpoint)}" title="Retirer">✕</button>
+                </div>`).join('')}
+            </div>` : ''}
+
+          ${aVenir.length ? `
+            <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;
+                          letter-spacing:.5px;color:var(--text-muted);margin-bottom:6px;">
+                Prochains rappels programmés
+              </div>
+              ${aVenir.map(r => `
+                <div class="appareil-ligne">
+                  <div class="appareil-nom">${esc(r.titre)}</div>
+                  <div class="appareil-date">
+                    ${Dates.relative(r.envoyer_a)} à ${Dates.heure(r.envoyer_a)}
+                  </div>
+                </div>`).join('')}
+            </div>` : ''}
+
+          <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;
+                      font-size:12.5px;color:var(--text-muted);line-height:1.6;">
+            Un rappel part à l'heure programmée même si l'application est fermée,
+            à condition que la migration <strong>setup_update8.sql</strong> ait été jouée
+            et que les variables VAPID soient renseignées dans Vercel.
+            Sans cela, seuls les rappels internes fonctionnent, application ouverte.
+          </div>
+        </div>
+      </div>`;
+  },
+
+  /* ══════════════════════════════════════════════
+     ÉTIQUETTES
+  ══════════════════════════════════════════════ */
+  async _blocEtiquettes() {
+    const etiquettes = await DataStore.getEtiquettes(true).catch(() => []);
+    return `
+      <div class="section-card">
+        <div class="section-card-header">
+          <div class="section-card-title">🏷️ Étiquettes</div>
+          <button class="btn btn-sm btn-secondary" id="btnAjoutEtiq">+ Étiquette</button>
+        </div>
+        <div class="section-card-body">
+          <div style="font-size:12.5px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
+            Les étiquettes classent tâches, rendez-vous, notes et documents dans un
+            seul et même espace : c'est ce qui sépare le professionnel du personnel
+            sans avoir à changer d'application.
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            ${etiquettes.map(e => `
+              <span class="liste-chip" data-etiq="${e.id}"
+                    style="border-color:${e.couleur};color:${e.couleur};cursor:pointer;">
+                ${e.icone} ${esc(e.nom)}${e.systeme ? '' : ' ✎'}
+              </span>`).join('') || '<span style="color:var(--text-muted);font-size:13px;">Aucune étiquette.</span>'}
+          </div>
+        </div>
+      </div>`;
+  },
+
+  _formEtiquette(e = null) {
+    const icones = ['🏷️', '💼', '🏡', '🎓', '📁', '❤️', '👨‍👩‍👧', '💰', '🚗', '✈️', '🎯', '🔧'];
+    Modal.open(e ? 'Modifier l\'étiquette' : 'Nouvelle étiquette', `
+      <div class="form-grid">
+        <div class="field form-col-full">
+          <label>Nom *</label>
+          <input id="etNom" value="${esc(e?.nom)}" placeholder="Ex. Association, Copropriété, Sport" />
+        </div>
+        <div class="field">
+          <label>Icône</label>
+          <select id="etIcone">
+            ${icones.map(i => `<option ${e?.icone === i ? 'selected' : ''}>${i}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Couleur</label>
+          <input type="color" id="etCouleur" value="${e?.couleur || '#3B82F6'}" style="height:42px;padding:3px;" />
+        </div>
+      </div>`, [
+      ...(e && !e.systeme ? [{
+        label: 'Supprimer', cls: 'btn btn-danger', action: async () => {
+          await DataStore.deleteEtiquette(e.id);
+          Modal.close(); this.render();
+        }
+      }] : []),
+      { label: 'Annuler', cls: 'btn btn-secondary', action: () => Modal.close() },
+      { label: e ? 'Enregistrer' : 'Créer', cls: 'btn btn-primary', action: async () => {
+          const d = {
+            nom:     document.getElementById('etNom').value.trim(),
+            icone:   document.getElementById('etIcone').value,
+            couleur: document.getElementById('etCouleur').value
+          };
+          if (!d.nom) { Toast.show('Un nom est nécessaire', 'error'); return; }
+          try {
+            if (e) await DataStore.updateEtiquette(e.id, d);
+            else   await DataStore.addEtiquette(d);
+            Modal.close(); this.render();
+          } catch (err) {
+            Toast.show(/duplicate|unique/i.test(err.message)
+              ? 'Cette étiquette existe déjà.' : 'Erreur : ' + esc(err.message), 'error');
+          }
+        } }
+    ], 'modal-sm');
+  },
+
   async render() {
     document.getElementById('pageTitle').textContent    = 'Paramètres';
-    document.getElementById('pageSubtitle').textContent = 'Informations de votre organisme';
+    document.getElementById('pageSubtitle').textContent = 'Organisme, notifications, sécurité';
     document.getElementById('pageHeaderRight').innerHTML = '';
     Loading.show();
 
@@ -112,9 +333,20 @@ const SettingsPage = {
 
     this._logoBase64 = profile.logo_base64 || null;
     const couleur    = profile.couleur_primaire || '#1E2D4B';
+    /* profiles.email peut être vide sur les comptes créés avant le trigger :
+       on retombe sur l'adresse de la session. */
+    const emailCompte = profile.email || (await Auth.getUser())?.email || '';
+
+    const [blocNotifs, blocEtiquettes] = await Promise.all([
+      this._blocNotifications().catch(() => ''),
+      this._blocEtiquettes().catch(() => '')
+    ]);
 
     document.getElementById('pageContent').innerHTML = `
       <div style="max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:20px;">
+
+        ${blocNotifs}
+        ${blocEtiquettes}
 
         <!-- ── Identité organisme ── -->
         <div class="section-card">
@@ -237,7 +469,58 @@ const SettingsPage = {
           </div>
         </div>
 
+        <!-- ── Sécurité ── -->
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">🔒 Sécurité</div>
+          </div>
+          <div class="section-card-body">
+            <div style="font-size:13px;color:var(--text-muted);margin-bottom:14px;line-height:1.6;">
+              Compte connecté : <strong style="color:var(--text);">${esc(emailCompte)}</strong>
+            </div>
+
+            <form id="passwordForm" novalidate>
+              <div class="form-grid">
+                <div class="field form-col-full">
+                  <label>Mot de passe actuel</label>
+                  <input type="password" id="pwdCurrent" autocomplete="current-password"
+                         placeholder="••••••••••" required />
+                </div>
+                <div class="field">
+                  <label>Nouveau mot de passe</label>
+                  <input type="password" id="pwdNew" autocomplete="new-password"
+                         placeholder="8 caractères minimum" required minlength="8" />
+                </div>
+                <div class="field">
+                  <label>Confirmer</label>
+                  <input type="password" id="pwdConfirm" autocomplete="new-password"
+                         placeholder="••••••••••" required />
+                </div>
+              </div>
+
+              <div id="pwdMessage" style="display:none;font-size:13px;margin-top:12px;padding:10px 12px;border-radius:8px;"></div>
+
+              <div style="margin-top:16px;">
+                <button type="submit" class="btn btn-secondary" id="savePwdBtn">
+                  Changer le mot de passe
+                </button>
+              </div>
+            </form>
+
+            <div style="border-top:1px solid var(--border);margin-top:18px;padding-top:14px;
+                        font-size:12.5px;color:var(--text-muted);line-height:1.6;">
+              Mot de passe oublié ? Déconnectez-vous, puis utilisez le lien
+              <em>« Mot de passe oublié ? »</em> sur la page de connexion : vous recevrez
+              un lien de réinitialisation valable 1 heure.
+            </div>
+          </div>
+        </div>
+
       </div>`;
+
+    this._bindPasswordForm();
+    this._bindNotifications();
+    this._bindEtiquettes();
 
     // ── Logo events ──
     document.getElementById('pickLogoBtn')?.addEventListener('click', () =>
@@ -306,10 +589,57 @@ const SettingsPage = {
         await DataStore.updateProfile(data);
         Toast.show('Paramètres enregistrés ✓', 'success');
       } catch (err) {
-        Toast.show('Erreur : ' + err.message, 'error');
+        Toast.show('Erreur : ' + esc(err.message), 'error');
       }
       btn.disabled = false; btn.textContent = '💾 Enregistrer les paramètres';
     });
+  },
+
+  _bindNotifications() {
+    const essai = async (fn, succes) => {
+      try { await fn(); if (succes) Toast.show(succes, 'success'); }
+      catch (err) { Toast.show(esc(err.message), 'error', 7000); }
+    };
+
+    document.getElementById('btnActiverNotif')?.addEventListener('click', async () => {
+      await essai(() => Notifs.activer());
+      this.render();
+    });
+
+    document.getElementById('btnCouperNotif')?.addEventListener('click', async () => {
+      await essai(() => Notifs.desactiver());
+      this.render();
+    });
+
+    document.getElementById('btnTestNotif')?.addEventListener('click', () =>
+      essai(() => Notifs.tester()));
+
+    document.getElementById('btnTestChaine')?.addEventListener('click', async () => {
+      try {
+        const quand = await Notifs.testerChaineComplete();
+        Toast.show(`Rappel programmé pour ${Dates.heure(quand)} — fermez l'application et attendez.`,
+                   'info', 8000);
+        this.render();
+      } catch (err) { Toast.show(esc(err.message), 'error'); }
+    });
+
+    document.querySelectorAll('[data-sub-del]').forEach(b =>
+      b.addEventListener('click', async () => {
+        await DataStore.deletePushSubscription(b.dataset.subDel);
+        this.render();
+      })
+    );
+  },
+
+  _bindEtiquettes() {
+    document.getElementById('btnAjoutEtiq')?.addEventListener('click', () => this._formEtiquette());
+    document.querySelectorAll('[data-etiq]').forEach(el =>
+      el.addEventListener('click', async () => {
+        const liste = await DataStore.getEtiquettes();
+        const e = liste.find(x => x.id === el.dataset.etiq);
+        if (e) this._formEtiquette(e);
+      })
+    );
   }
 };
 
@@ -317,41 +647,67 @@ const SettingsPage = {
 const Router = {
   currentPage: 'dashboard',
 
-  navigate(page) {
+  PAGES: {
+    dashboard: () => Hub.render(),
+    assistant: () => Assistant.render(),
+    agenda:    () => Agenda.render(),
+    taches:    () => Taches.render(),
+    notes:     () => Notes.render(),
+    coffre:    () => Coffre.render(),
+    journee:   () => JourneePage.render(),
+    activite:  () => Dashboard.render(),
+    settings:  () => SettingsPage.render()
+  },
+
+  navigate(page, sansHistorique = false) {
     this.currentPage = page;
     document.querySelectorAll('.nav-item').forEach(el =>
       el.classList.toggle('active', el.dataset.page === page)
     );
 
-    if (page === 'dashboard') {
-      Dashboard.render();
-    } else if (page === 'journee') {
-      JourneePage.render();
-    } else if (page === 'settings') {
-      SettingsPage.render();
-    } else {
-      OpcoPage.currentTab    = 'clients';
-      OpcoPage.searchQuery   = '';
-      OpcoPage.filterStatus  = '';
-      OpcoPage._cachedClients = [];
-      OpcoPage.render(page);
+    if (!sansHistorique && location.hash.slice(1) !== page) {
+      history.replaceState(null, '', '#' + page);
     }
+
+    const rendu = this.PAGES[page];
+    if (rendu) { rendu(); return; }
+
+    // Tout le reste : une page OPCO
+    OpcoPage.currentTab    = 'clients';
+    OpcoPage.searchQuery   = '';
+    OpcoPage.filterStatus  = '';
+    OpcoPage._cachedClients = [];
+    OpcoPage.render(page);
   }
 };
 
-/* ── Badge « Ma journée » : nombre d'actions en retard ou du jour ── */
+/* ── Badges de la barre latérale ── */
 async function updateJourneeBadge() {
-  const badge = document.getElementById('navJourneeBadge');
-  if (!badge) return;
+  const pastille = (id, n) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (n > 0) { el.textContent = n > 99 ? '99+' : n; el.style.display = 'inline-block'; }
+    else       { el.style.display = 'none'; }
+  };
+
   try {
     const actions = await DataStore.getActionsDuJour(0);   // échéance ≤ aujourd'hui
-    if (actions.length) {
-      badge.textContent   = actions.length > 99 ? '99+' : actions.length;
-      badge.style.display = 'inline-block';
-    } else {
-      badge.style.display = 'none';
-    }
-  } catch { badge.style.display = 'none'; }
+    pastille('navJourneeBadge', actions.length);
+  } catch { pastille('navJourneeBadge', 0); }
+
+  try {
+    const hui    = Dates.aujourdhui();
+    const taches = await DataStore.getTachesFiltrees({ fait: false, horizonJours: 0 });
+    pastille('navTachesBadge', taches.filter(t => t.echeance && t.echeance <= hui).length);
+  } catch { pastille('navTachesBadge', 0); }
+
+  try {
+    const j0 = new Date(); j0.setHours(0, 0, 0, 0);
+    const j1 = new Date(j0.getTime() + 86400000);
+    const items = await DataStore.getAgenda(new Date().toISOString(), j1.toISOString(),
+                                            { types: ['evenement', 'session'] });
+    pastille('navAgendaBadge', items.length);
+  } catch { pastille('navAgendaBadge', 0); }
 }
 
 /* ── Nav dots update ── */
@@ -371,6 +727,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Dark mode first (avoid flash)
   DarkMode.init();
+
+  // Service worker : installation de l'app + réception des notifications.
+  // Enregistré avant toute autre chose pour que l'app soit installable dès
+  // la première visite.
+  Notifs.initServiceWorker();
 
   // Check Supabase session
   const session = await Auth.getSession();
@@ -416,6 +777,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     MobileNav.close();
   });
 
+  // Retour arrière du navigateur / lien de notification (#agenda, #taches…)
+  window.addEventListener('hashchange', () => {
+    const page = location.hash.slice(1);
+    const connue = Router.PAGES[page] || DataStore.OPCOS.includes(page);
+    if (page && connue && page !== Router.currentPage) Router.navigate(page, true);
+  });
+
   // Keyboard
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') { Modal.close(); MobileNav.close(); }
@@ -425,6 +793,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   updateNavDots();
   updateJourneeBadge();
 
-  // Initial render
-  Router.navigate('dashboard');
+  // Surveillance des rendez-vous imminents tant que l'onglet est ouvert
+  Notifs.demarrerVeille();
+
+  // Rafraîchissement des pastilles toutes les 5 minutes
+  setInterval(updateJourneeBadge, 300000);
+
+  // Page initiale : celle demandée dans l'URL, sinon le tableau de bord
+  const depart = location.hash.slice(1);
+  Router.navigate(depart && (Router.PAGES[depart] || DataStore.OPCOS.includes(depart))
+    ? depart : 'dashboard', true);
 });

@@ -1,0 +1,12 @@
+{
+  "name": "ideaforma",
+  "version": "8.0.0",
+  "private": true,
+  "description": "IDEAFORMA — suivi des dossiers OPCO et assistant du quotidien. Front vanilla, fonctions serverless Vercel.",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "web-push": "^3.6.7"
+  }
+}

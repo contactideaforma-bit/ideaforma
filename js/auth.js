@@ -52,6 +52,31 @@ const Auth = {
     return { success: true, user: data.user };
   },
 
+  /* Changement de mot de passe depuis l'application.
+     Supabase n'exige pas le mot de passe actuel pour updateUser : on le
+     vérifie donc explicitement par une reconnexion, sinon une session
+     laissée ouverte sur un poste partagé suffirait à changer le mot de passe. */
+  async changePassword(currentPassword, newPassword) {
+    const user = await this.getUser();
+    if (!user?.email) return { success: false, code: 'session' };
+
+    const { error: authErr } = await supa.auth.signInWithPassword({
+      email:    user.email,
+      password: currentPassword
+    });
+    if (authErr) {
+      console.warn('[Auth] Mot de passe actuel incorrect');
+      return { success: false, code: 'current' };
+    }
+
+    const { error } = await supa.auth.updateUser({ password: newPassword });
+    if (error) {
+      console.error('[Auth] Échec changePassword:', error);
+      return { success: false, code: 'update', error: error.message };
+    }
+    return { success: true };
+  },
+
   async logout() {
     await supa.auth.signOut();
     window.location.href = 'index.html';

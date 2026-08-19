@@ -8,12 +8,23 @@
 
    Sans jeton Supabase valide, l'endpoint répond 401 : la clé Anthropic n'est
    plus consommable par un tiers qui connaîtrait l'URL.
+
+   v8 : la fonction relaie aussi les outils (tool use). L'assistant peut donc
+   demander la création d'une tâche ou d'un rendez-vous ; l'exécution reste
+   faite par le navigateur avec la session de l'utilisateur, donc sous RLS.
 ─────────────────────────────────────────────────────────────────────────────── */
 
-const MAX_BODY_CHARS   = 20000;   // garde-fou sur la taille du prompt
-const MAX_TOKENS_LIMIT = 2048;
-const RATE_LIMIT       = 30;      // requêtes par utilisateur…
+const MAX_BODY_CHARS   = 120000;  // l'historique + les résultats d'outils tiennent large
+const MAX_TOKENS_LIMIT = 4096;
+const RATE_LIMIT       = 60;      // requêtes par utilisateur…
 const RATE_WINDOW_MS   = 60000;   // …par minute
+
+/* Modèles autorisés : on ne laisse pas le client choisir n'importe quoi */
+const MODELES = {
+  rapide:  'claude-haiku-4-5-20251001',
+  complet: 'claude-sonnet-4-5-20250929'
+};
+const MODELE_DEFAUT = MODELES.rapide;
 
 /* Compteur en mémoire — remis à zéro à chaque démarrage d'instance.
    Suffisant pour freiner une boucle accidentelle ; pour une vraie limite
@@ -100,14 +111,31 @@ module.exports = async function handler(req, res) {
   }
 
   /* ── Validation de la charge utile ── */
-  const { messages, system, max_tokens = 1500 } = req.body || {};
+  const {
+    messages, system, max_tokens = 1500,
+    tools, tool_choice, profil
+  } = req.body || {};
+
   if (!Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ error: 'messages requis' });
   }
 
-  const taille = JSON.stringify(messages).length + (system || '').length;
+  const taille = JSON.stringify(messages).length
+               + JSON.stringify(system || '').length
+               + JSON.stringify(tools || '').length;
   if (taille > MAX_BODY_CHARS) {
-    return res.status(413).json({ error: 'Requête trop volumineuse' });
+    return res.status(413).json({ error: 'Conversation trop longue — ouvrez une nouvelle discussion' });
+  }
+
+  const corps = {
+    model:      MODELES[profil] || MODELE_DEFAUT,
+    max_tokens: Math.min(Number(max_tokens) || 1500, MAX_TOKENS_LIMIT),
+    system:     typeof system === 'string' ? system : '',
+    messages
+  };
+  if (Array.isArray(tools) && tools.length) {
+    corps.tools = tools.slice(0, 20);
+    if (tool_choice) corps.tool_choice = tool_choice;
   }
 
   try {
@@ -118,12 +146,7 @@ module.exports = async function handler(req, res) {
         'anthropic-version': '2023-06-01',
         'content-type':      'application/json'
       },
-      body: JSON.stringify({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: Math.min(Number(max_tokens) || 1500, MAX_TOKENS_LIMIT),
-        system:     typeof system === 'string' ? system : '',
-        messages
-      })
+      body: JSON.stringify(corps)
     });
 
     const data = await response.json();
@@ -135,7 +158,17 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    return res.status(200).json({ text: data.content?.[0]?.text || '' });
+    /* « text » est conservé pour les appels historiques (génération de
+       programme, reformulation) ; « content » sert à la boucle d'outils. */
+    const blocsTexte = (data.content || [])
+      .filter(b => b.type === 'text').map(b => b.text).join('\n');
+
+    return res.status(200).json({
+      text:        blocsTexte,
+      content:     data.content || [],
+      stop_reason: data.stop_reason || null,
+      usage:       data.usage || null
+    });
 
   } catch (err) {
     console.error('[ai.js]', err);

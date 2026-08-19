@@ -2,8 +2,19 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Connexion — Ideaforma</title>
+
+  <!-- ─── PWA : l'application est installable dès la page de connexion ─── -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#1E3A5F" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="IDEAFORMA" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
   <link rel="stylesheet" href="css/styles.css" />
   <style>
     /* ── Onglets ── */
@@ -95,7 +106,7 @@
     <div class="login-card">
 
       <div class="login-logo">
-        <img src="logo_ideaforma.png" alt="Ideaforma"
+        <img src="logo-ideaforma.png" alt="Ideaforma"
              onerror="this.style.display='none'; document.getElementById('logo-fallback').style.display='flex';" />
         <div class="login-logo-fallback" id="logo-fallback" style="display:none;">
           <div class="login-logo-icon">I</div>
@@ -412,13 +423,24 @@
 
       if (success) {
         document.getElementById('forgotForm').style.display = 'none';
-        infoEl.innerHTML = `
-          <strong>Email envoyé !</strong><br>
-          Si l'adresse <strong>${email}</strong> correspond à un compte, vous recevrez un lien de réinitialisation dans quelques instants.
-        `;
+        // textContent plutôt qu'innerHTML : l'adresse saisie ne doit pas
+        // pouvoir être interprétée comme du HTML.
+        infoEl.textContent = '';
+        const titre = document.createElement('strong');
+        titre.textContent = 'Email envoyé !';
+        const suite = document.createTextNode(
+          ` Si l'adresse ${email} correspond à un compte, vous recevrez un lien de réinitialisation dans quelques instants. Le lien est valable 1 heure.`
+        );
+        infoEl.append(titre, suite);
         infoEl.classList.add('visible');
       } else {
-        errEl.textContent = error || "Erreur lors de l'envoi. Réessayez.";
+        const brut = String(error || '');
+        errEl.textContent =
+          /rate limit|too many|429/i.test(brut)
+            ? "Trop de demandes envoyées. Patientez quelques minutes avant de réessayer."
+          : /invalid.*email|email.*invalid/i.test(brut)
+            ? "Adresse email invalide."
+          : "Erreur lors de l'envoi. Vérifiez votre connexion et réessayez.";
         errEl.classList.add('visible');
         btn.disabled    = false;
         btn.textContent = 'Envoyer le lien';
@@ -429,6 +451,15 @@
     document.querySelectorAll('.login-form input').forEach(input => {
       input.addEventListener('input', clearErrors);
     });
+
+    /* ── Service worker ──
+       Enregistré ici aussi pour que le navigateur propose l'installation
+       avant même la connexion (indispensable sur iPhone : sans installation,
+       pas de notifications). */
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' })
+        .catch(err => console.warn('[sw]', err));
+    }
   </script>
 </body>
 </html>
