@@ -1,14 +1,17 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    IDEAFORMA — Tableau de bord
 
-   Le tableau de bord d'origine, en blocs, habillé en carnet : mêmes repères
-   qu'avant, mais avec la grammaire du bullet journal.
+   La page est du papier pointillé ; les blocs sont des post-it pastel dont on
+   choisit la couleur (rangée dans profiles.preferences, donc identique sur le
+   téléphone et sur l'ordinateur).
 
-     •  tâche à faire   ✕  faite   ›  repoussée   ~  abandonnée
-     ○  rendez-vous     —  note    ★  priorité
+   Trois choses se font ici sans changer de page :
+     – parler à l'assistant, au clavier ou à la voix ;
+     – cocher une tâche ;
+     – créer une tâche, un rendez-vous ou une note (bouton ＋ de chaque bloc).
 
-   Il est PERSONNEL : rien qui touche aux dossiers OPCO n'y figure. Les
-   échéances de formation vivent sur « Ma journée ».
+   Le tableau de bord est PERSONNEL : rien qui touche aux dossiers OPCO n'y
+   figure. Les échéances de formation vivent sur « Ma journée ».
 ───────────────────────────────────────────────────────────────────────────── */
 
 const Hub = {
@@ -16,6 +19,21 @@ const Hub = {
   _resume:     null,
   _etiquettes: [],
   _listes:     [],
+  _prefs:      {},
+  _iaOccupe:   false,
+  _reco:       null,     // reconnaissance vocale en cours
+
+  /* Les huit pastels, dans l'ordre où ils sont proposés. On enregistre la
+     CLÉ et non la couleur : le thème sombre remplace la valeur derrière. */
+  PASTELS: ['rose', 'peche', 'jaune', 'vert', 'menthe', 'ciel', 'lilas', 'gris'],
+  NOM_PASTEL: {
+    rose: 'Rose', peche: 'Pêche', jaune: 'Jaune', vert: 'Vert',
+    menthe: 'Menthe', ciel: 'Ciel', lilas: 'Lilas', gris: 'Gris'
+  },
+  TEINTE_DEFAUT: {
+    assistant: 'lilas', agenda: 'ciel', taches: 'vert',
+    notes: 'jaune', raccourcis: 'gris', coffre: 'peche'
+  },
 
   /* Utilisé aussi par js/agenda.js pour nommer un type d'entrée. */
   _typeLabel(type) {
@@ -36,18 +54,20 @@ const Hub = {
 
     let r;
     try {
-      [r, this._etiquettes, this._listes] = await Promise.all([
+      [r, this._etiquettes, this._listes, this._prefs] = await Promise.all([
         DataStore.getResumeJour(),
         DataStore.getEtiquettes(),
-        DataStore.getListes()
+        DataStore.getListes(),
+        DataStore.getPreferences().catch(() => ({}))
       ]);
       this._resume = r;
     } catch (err) { peindreErreur(err); return; }
 
     document.getElementById('pageContent').innerHTML = `
       <div class="hub">
-        ${this._barreSaisie()}
-        ${this._tuiles(r)}
+        <div class="hub-tuiles">${this._tuilesCorps(r)}</div>
+
+        ${this._blocAssistant()}
 
         <div class="hub-grid">
           <div class="hub-col">
@@ -55,8 +75,8 @@ const Hub = {
             ${this._blocTaches(r)}
           </div>
           <div class="hub-col">
-            ${this._blocRaccourcis()}
             ${this._blocNotes(r)}
+            ${this._blocRaccourcis()}
             ${this._blocExpirations(r)}
           </div>
         </div>
@@ -64,8 +84,6 @@ const Hub = {
 
     this._bind();
   },
-
-  _rafraichir() { return this.render(); },
 
   _salutation() {
     const h = new Date().getHours();
@@ -75,37 +93,50 @@ const Hub = {
     return 'Bonsoir';
   },
 
-  /* ══ Saisie rapide + création directe ══════════════════════════════════
-     « Rappeler le comptable demain 14h » devient une tâche datée, avec son
-     rappel. On analyse le texte dans le navigateur ; l'IA n'est là que pour
-     les tournures que QuickParse ne sait pas lire. */
-  _barreSaisie() {
-    return `
-      <div class="hub-saisie">
-        <div class="hub-saisie-ligne">
-          <span class="hub-saisie-puce">•</span>
-          <input id="quickInput" autocomplete="off"
-                 placeholder="Noter vite…  •  tâche   ○  rendez-vous   —  note" />
-          <select id="quickEtiq" class="hub-saisie-etiq" aria-label="Étiquette">
-            <option value="">Étiquette</option>
-            ${this._etiquettes.map(e =>
-              `<option value="${e.id}">${e.icone} ${esc(e.nom)}</option>`).join('')}
-          </select>
-          <button class="btn btn-primary btn-sm" id="quickAdd">Ajouter</button>
-        </div>
-        <div class="hub-saisie-indice" id="quickHint"></div>
-        <div class="hub-creer">
-          <button class="hub-creer-btn" data-creer="tache">
-            <span class="hub-creer-sym">•</span> Tâche</button>
-          <button class="hub-creer-btn" data-creer="evenement">
-            <span class="hub-creer-sym">○</span> Rendez-vous</button>
-          <button class="hub-creer-btn" data-creer="note">
-            <span class="hub-creer-sym">—</span> Note</button>
-        </div>
-      </div>`;
+  /* ══════════════════════════════════════════════
+     LE POST-IT — enveloppe commune à tous les blocs
+  ══════════════════════════════════════════════ */
+  _teinte(cle) {
+    const choix = this._prefs?.blocs?.[cle];
+    return this.PASTELS.includes(choix) ? choix : (this.TEINTE_DEFAUT[cle] || 'gris');
   },
 
-  _tuiles(r) {
+  /** cle : identifiant du bloc — sert de clé de préférence ET de cible de
+      rafraîchissement. outils : boutons posés dans l'en-tête. */
+  _postit(cle, titre, outils, corps) {
+    const t = this._teinte(cle);
+    return `
+      <section class="postit" data-bloc="${cle}" style="--pastel: var(--pastel-${t});">
+        <header class="postit-tete">
+          <h2 class="postit-titre">${titre}</h2>
+          ${outils || ''}
+          <button class="postit-btn" data-palette="${cle}"
+                  title="Couleur du bloc" aria-label="Changer la couleur du bloc">🎨</button>
+        </header>
+        <div class="postit-corps">${corps}</div>
+        <div class="postit-palette" data-palette-pour="${cle}" hidden>
+          ${this.PASTELS.map(p => `
+            <button class="postit-teinte ${p === t ? 'on' : ''}"
+                    style="background: var(--pastel-${p});"
+                    data-teinte="${p}" data-cle="${cle}"
+                    title="${this.NOM_PASTEL[p]}"
+                    aria-label="${this.NOM_PASTEL[p]}"></button>`).join('')}
+        </div>
+      </section>`;
+  },
+
+  _btn(attr, libelle, titre) {
+    return `<button class="postit-btn" ${attr} title="${titre}" aria-label="${titre}">${libelle}</button>`;
+  },
+  _btnPlus(type, titre) {
+    return `<button class="postit-btn postit-btn-plus" data-creer="${type}"
+                    title="${titre}" aria-label="${titre}">＋</button>`;
+  },
+
+  /* ══════════════════════════════════════════════
+     TUILES DE COMPTAGE
+  ══════════════════════════════════════════════ */
+  _tuilesCorps(r) {
     const t = (val, label, teinteNom, page) => `
       <button class="hub-tuile hub-tuile-${teinteNom}" data-goto="${page}">
         <span class="hub-tuile-val">${val}</span>
@@ -113,16 +144,55 @@ const Hub = {
       </button>`;
 
     return `
-      <div class="hub-tuiles">
-        ${t(r.agendaAujourdhui.filter(a => !a.termine).length, "aujourd'hui", 'rose',  'agenda')}
-        ${t(r.tachesEnRetard.length,                            'en retard',   'rouge', 'taches')}
-        ${t(r.tachesDuJour.length,                              'à faire',     'or',    'taches')}
-      </div>`;
+      ${t(r.agendaAujourdhui.filter(a => !a.termine).length, "aujourd'hui", 'rose',  'agenda')}
+      ${t(r.tachesEnRetard.length,                            'en retard',   'rouge', 'taches')}
+      ${t(r.tachesDuJour.length,                              'à faire',     'or',    'taches')}`;
   },
 
-  /* ══ Rendez-vous du jour ══ */
+  /* ══════════════════════════════════════════════
+     BLOC ASSISTANT
+     Écrit ou dicté. La réponse s'affiche sur place ; si l'assistant a créé
+     quelque chose, les autres blocs se remettent à jour sans effacer la
+     conversation en cours.
+  ══════════════════════════════════════════════ */
+  _blocAssistant() {
+    const exemples = [
+      "Qu'est-ce que j'ai demain ?",
+      'Rappelle-moi d’appeler le comptable jeudi 10h',
+      'Mes tâches en retard'
+    ];
+
+    const corps = `
+      <div class="ia-saisie">
+        <textarea id="iaTexte" rows="1" enterkeyhint="send"
+                  placeholder="Écrivez ou dictez…"></textarea>
+        <button class="ia-bouton ia-bouton-micro" id="iaMicro" hidden
+                title="Dicter" aria-label="Dicter la demande">🎤</button>
+        <button class="ia-bouton ia-bouton-envoi" id="iaEnvoyer"
+                title="Envoyer" aria-label="Envoyer la demande">➤</button>
+      </div>
+      <div class="ia-exemples">
+        ${exemples.map(e => `<button class="ia-exemple">${esc(e)}</button>`).join('')}
+      </div>
+      <div class="ia-reponse" id="iaReponse" hidden></div>`;
+
+    return this._postit('assistant', 'Assistant',
+      this._btn('data-goto="assistant"', 'Discussion', 'Ouvrir la discussion complète'),
+      corps);
+  },
+
+  /* ══════════════════════════════════════════════
+     BLOC AGENDA
+  ══════════════════════════════════════════════ */
   _blocAgenda(r) {
-    const finJour = new Date(); finJour.setHours(23, 59, 59, 999);
+    return this._postit('agenda', "Aujourd'hui",
+      this._btnPlus('evenement', 'Nouveau rendez-vous') +
+      this._btn('data-goto="agenda"', 'Agenda', "Ouvrir l'agenda"),
+      this._corpsAgenda(r));
+  },
+
+  _corpsAgenda(r) {
+    const finJour    = new Date(); finJour.setHours(23, 59, 59, 999);
     const maintenant = new Date();
     const suite = r.agendaSemaine
       .filter(a => new Date(a.debut) > finJour && !a.termine)
@@ -152,25 +222,25 @@ const Hub = {
     };
 
     return `
-      <section class="section-card">
-        <header class="section-card-header">
-          <h2 class="section-card-title">Aujourd'hui</h2>
-          <button class="btn btn-sm btn-secondary" data-goto="agenda">Agenda</button>
-        </header>
-        <div class="section-card-body">
-          ${r.agendaAujourdhui.length
-            ? `<div class="log">${r.agendaAujourdhui.map(a => ligne(a)).join('')}</div>`
-            : `<p class="hub-vide">Rien de programmé aujourd'hui.</p>`}
-
-          ${suite.length ? `
-            <h3 class="hub-sous-titre">À venir cette semaine</h3>
-            <div class="log">${suite.map(a => ligne(a, true)).join('')}</div>` : ''}
-        </div>
-      </section>`;
+      ${r.agendaAujourdhui.length
+        ? `<div class="log">${r.agendaAujourdhui.map(a => ligne(a)).join('')}</div>`
+        : `<p class="hub-vide">Rien de programmé aujourd'hui.</p>`}
+      ${suite.length ? `
+        <h3 class="hub-sous-titre">Cette semaine</h3>
+        <div class="log">${suite.map(a => ligne(a, true)).join('')}</div>` : ''}`;
   },
 
-  /* ══ Tâches ══ */
+  /* ══════════════════════════════════════════════
+     BLOC TÂCHES
+  ══════════════════════════════════════════════ */
   _blocTaches(r) {
+    return this._postit('taches', 'Mes tâches',
+      this._btnPlus('tache', 'Nouvelle tâche') +
+      this._btn('data-goto="taches"', 'Toutes', 'Voir toutes les tâches'),
+      this._corpsTaches(r));
+  },
+
+  _corpsTaches(r) {
     const hui   = Dates.aujourdhui();
     const dans7 = Dates.iso(new Date(Date.now() + 7 * 86400000));
 
@@ -181,35 +251,31 @@ const Hub = {
       { titre: 'Sans date',     cls: 'pale',  items: r.taches.filter(t => !t.echeance).slice(0, 6) }
     ].filter(g => g.items.length);
 
-    return `
-      <section class="section-card">
-        <header class="section-card-header">
-          <h2 class="section-card-title">Mes tâches</h2>
-          <button class="btn btn-sm btn-secondary" data-goto="taches">Toutes</button>
-        </header>
-        <div class="section-card-body">
-          ${groupes.length ? groupes.map(g => `
-            <h3 class="hub-sous-titre hub-sous-titre-${g.cls}">
-              ${g.titre}<span class="hub-compteur">${g.items.length}</span>
-            </h3>
-            <div class="log">${g.items.slice(0, 8).map(t => this.ligneTache(t)).join('')}</div>
-          `).join('')
-          : `<p class="hub-vide">Aucune tâche en attente. Profitez-en.</p>`}
-        </div>
-      </section>`;
+    if (!groupes.length) {
+      return `<p class="hub-vide">Aucune tâche en attente. Profitez-en.</p>`;
+    }
+    return groupes.map(g => `
+      <h3 class="hub-sous-titre hub-sous-titre-${g.cls}">
+        ${g.titre}<span class="hub-compteur">${g.items.length}</span>
+      </h3>
+      <div class="log">${g.items.slice(0, 8).map(t => this.ligneTache(t)).join('')}</div>
+    `).join('');
   },
 
-  /** Une tâche, dans la grammaire du carnet. Réutilisée par la page Tâches. */
+  /** Une tâche : case à cocher, texte, repères. Réutilisée par la page Tâches. */
   ligneTache(t) {
-    const hui     = Dates.aujourdhui();
-    const retard  = t.echeance && !t.fait && t.echeance < hui;
-    const symbole = t.fait ? '✕' : t.abandonnee ? '~' : '•';
-    const classe  = t.fait ? 'puce-fait' : t.abandonnee ? 'puce-abandonnee' : 'puce-tache';
+    const hui    = Dates.aujourdhui();
+    const retard = t.echeance && !t.fait && t.echeance < hui;
+
+    const classeCase = t.abandonnee ? 'case case-abandon' : (t.fait ? 'case cochee' : 'case');
+    const marque     = t.abandonnee ? '~' : '✓';
 
     return `
       <div class="entree ${t.fait ? 'est-fait' : ''} ${t.abandonnee ? 'est-abandonne' : ''}">
-        <button class="puce ${classe}" data-tache-id="${t.id}"
-                aria-label="${t.fait ? 'Rouvrir' : 'Marquer comme fait'}">${symbole}</button>
+        <button class="${classeCase}" data-tache-id="${t.id}" role="checkbox"
+                aria-checked="${t.fait ? 'true' : 'false'}"
+                aria-label="${esc(t.description)}"
+                title="${t.fait ? 'Rouvrir la tâche' : 'Marquer comme faite'}">${marque}</button>
         <span class="entree-corps" data-tache-open="${t.id}">
           <span class="entree-texte">
             ${t.priorite === 'haute' ? '<span class="entree-signifiant">★</span>' : ''}
@@ -228,78 +294,106 @@ const Hub = {
           </span>
         </span>
         <span class="entree-outils">
-          <button class="entree-outil" data-migrer="${t.id}" title="Repousser à demain">›</button>
-          <button class="entree-outil" data-editer-tache="${t.id}" title="Modifier">✎</button>
+          <button class="entree-outil" data-migrer="${t.id}"
+                  title="Repousser à demain" aria-label="Repousser à demain">›</button>
+          <button class="entree-outil" data-editer-tache="${t.id}"
+                  title="Modifier" aria-label="Modifier la tâche">✎</button>
         </span>
       </div>`;
   },
 
-  /* ══ Raccourcis ══ */
+  /* ══════════════════════════════════════════════
+     BLOC PENSE-BÊTE
+  ══════════════════════════════════════════════ */
+  _blocNotes(r) {
+    return this._postit('notes', 'Pense-bête',
+      this._btnPlus('note', 'Nouvelle note') +
+      this._btn('data-goto="notes"', 'Tout voir', 'Voir toutes les notes'),
+      this._corpsNotes(r));
+  },
+
+  _corpsNotes(r) {
+    const notes = (r.notesEpinglees.length ? r.notesEpinglees : r.notes).slice(0, 4);
+    if (!notes.length) return `<p class="hub-vide">Aucune note pour l'instant.</p>`;
+    return `
+      <div class="notes-mini">
+        ${notes.map(n => `
+          <button class="note-mini" style="background:${esc(n.couleur)}"
+                  data-note-id="${n.id}">
+            ${n.epinglee ? '<span class="note-mini-pin">📌</span>' : ''}
+            ${n.titre ? `<span class="note-mini-titre">${esc(n.titre)}</span>` : ''}
+            <span class="note-mini-corps">${esc((n.contenu || '').slice(0, 150))}</span>
+          </button>`).join('')}
+      </div>`;
+  },
+
+  /* ══════════════════════════════════════════════
+     BLOC RACCOURCIS
+  ══════════════════════════════════════════════ */
   _blocRaccourcis() {
     const r = (page, icone, label) =>
       `<button class="hub-raccourci" data-goto="${page}">
          <span class="hub-raccourci-ic">${icone}</span>${label}</button>`;
-    return `
-      <section class="section-card">
-        <div class="section-card-body hub-raccourcis">
-          ${r('assistant', '🤖', 'Assistant')}
-          ${r('agenda',    '📅', 'Agenda')}
-          ${r('taches',    '✓',  'Tâches')}
-          ${r('notes',     '📝', 'Pense-bête')}
-          ${r('coffre',    '🗄️', 'Coffre')}
-          ${r('journee',   '🎓', 'Ma journée')}
-        </div>
-      </section>`;
+    return this._postit('raccourcis', 'Aller à', '',
+      `<div class="hub-raccourcis">
+         ${r('agenda',    '📅', 'Agenda')}
+         ${r('taches',    '✓',  'Tâches')}
+         ${r('notes',     '📝', 'Pense-bête')}
+         ${r('coffre',    '🗄️', 'Coffre')}
+         ${r('journee',   '🎓', 'Ma journée')}
+         ${r('settings',  '⚙️', 'Réglages')}
+       </div>`);
   },
 
-  /* ══ Pense-bête ══ */
-  _blocNotes(r) {
-    const notes = (r.notesEpinglees.length ? r.notesEpinglees : r.notes).slice(0, 4);
-    return `
-      <section class="section-card">
-        <header class="section-card-header">
-          <h2 class="section-card-title">Pense-bête</h2>
-          <button class="btn btn-sm btn-secondary" data-goto="notes">Tout voir</button>
-        </header>
-        <div class="section-card-body">
-          ${notes.length ? `
-            <div class="notes-mini">
-              ${notes.map(n => `
-                <button class="note-mini" style="background:${esc(n.couleur)}"
-                        data-note-id="${n.id}">
-                  ${n.epinglee ? '<span class="note-mini-pin">📌</span>' : ''}
-                  ${n.titre ? `<span class="note-mini-titre">${esc(n.titre)}</span>` : ''}
-                  <span class="note-mini-corps">${esc((n.contenu || '').slice(0, 150))}</span>
-                </button>`).join('')}
-            </div>`
-            : `<p class="hub-vide">Aucune note pour l'instant.</p>`}
-        </div>
-      </section>`;
-  },
-
-  /* ══ Documents qui expirent ══ */
+  /* ══════════════════════════════════════════════
+     BLOC « À RENOUVELER »
+  ══════════════════════════════════════════════ */
   _blocExpirations(r) {
     if (!r.expirations.length) return '';
+    return this._postit('coffre', 'À renouveler',
+      this._btn('data-goto="coffre"', 'Coffre', 'Ouvrir le coffre'),
+      this._corpsExpirations(r));
+  },
+
+  _corpsExpirations(r) {
+    if (!r.expirations.length) return `<p class="hub-vide">Rien n'expire prochainement.</p>`;
     return `
-      <section class="section-card">
-        <header class="section-card-header">
-          <h2 class="section-card-title">À renouveler</h2>
-          <button class="btn btn-sm btn-secondary" data-goto="coffre">Coffre</button>
-        </header>
-        <div class="section-card-body">
-          <div class="log">
-            ${r.expirations.slice(0, 5).map(d => `
-              <div class="entree" data-goto="coffre">
-                <span class="puce puce-note">—</span>
-                <span class="entree-heure entree-heure-alerte">${Dates.relative(d.date_expiration)}</span>
-                <span class="entree-corps">
-                  <span class="entree-texte">${esc(d.titre)}</span>
-                  <span class="entree-meta">expire le ${Dates.courte(d.date_expiration)}</span>
-                </span>
-              </div>`).join('')}
-          </div>
-        </div>
-      </section>`;
+      <div class="log">
+        ${r.expirations.slice(0, 5).map(d => `
+          <div class="entree" data-goto="coffre">
+            <span class="puce puce-note">—</span>
+            <span class="entree-heure entree-heure-alerte">${Dates.relative(d.date_expiration)}</span>
+            <span class="entree-corps">
+              <span class="entree-texte">${esc(d.titre)}</span>
+              <span class="entree-meta">expire le ${Dates.courte(d.date_expiration)}</span>
+            </span>
+          </div>`).join('')}
+      </div>`;
+  },
+
+  /* ══════════════════════════════════════════════
+     MISE À JOUR PARTIELLE
+     On ne repeint jamais la page entière depuis une action : la réponse de
+     l'assistant et le texte en cours de saisie seraient effacés. On relit le
+     résumé et on remplace le contenu des blocs concernés.
+  ══════════════════════════════════════════════ */
+  async _rafraichir() {
+    const hub = document.querySelector('.hub');
+    if (!hub) return;
+
+    try { this._resume = await DataStore.getResumeJour(); }
+    catch (err) { Toast.show('Actualisation impossible : ' + esc(err.message), 'error'); return; }
+
+    const r = this._resume;
+    const poser = (sel, html) => { const n = hub.querySelector(sel); if (n) n.innerHTML = html; };
+
+    poser('.hub-tuiles',                       this._tuilesCorps(r));
+    poser('[data-bloc="agenda"] .postit-corps', this._corpsAgenda(r));
+    poser('[data-bloc="taches"] .postit-corps', this._corpsTaches(r));
+    poser('[data-bloc="notes"]  .postit-corps', this._corpsNotes(r));
+    poser('[data-bloc="coffre"] .postit-corps', this._corpsExpirations(r));
+
+    updateJourneeBadge();
   },
 
   /* ══════════════════════════════════════════════
@@ -315,12 +409,51 @@ const Hub = {
     zone.addEventListener('click', async e => {
       const cible = sel => e.target.closest(sel);
 
-      const check = cible('.puce[data-tache-id]');
+      /* ── Couleur du bloc ── */
+      const teinte = cible('[data-teinte]');
+      if (teinte) {
+        const cle = teinte.dataset.cle, val = teinte.dataset.teinte;
+        const bloc = zone.querySelector(`[data-bloc="${cle}"]`);
+        // On repeint tout de suite, on enregistre ensuite : le choix d'une
+        // couleur doit être instantané, même sur une connexion lente.
+        bloc.style.setProperty('--pastel', `var(--pastel-${val})`);
+        bloc.querySelectorAll('.postit-teinte')
+            .forEach(b => b.classList.toggle('on', b.dataset.teinte === val));
+        this._prefs.blocs = { ...(this._prefs.blocs || {}), [cle]: val };
+        try { await DataStore.setPreference(`blocs.${cle}`, val); }
+        catch { Toast.show('Couleur non enregistrée', 'warning'); }
+        return;
+      }
+
+      const palette = cible('[data-palette]');
+      if (palette) {
+        const p = zone.querySelector(`[data-palette-pour="${palette.dataset.palette}"]`);
+        if (p) p.hidden = !p.hidden;
+        return;
+      }
+
+      /* ── Assistant ── */
+      if (cible('#iaEnvoyer'))  return this._demander();
+      if (cible('#iaMicro'))    return this._dicter();
+      const exemple = cible('.ia-exemple');
+      if (exemple) return this._demander(exemple.textContent.trim());
+
+      /* ── Cocher une tâche ── */
+      const check = cible('.case[data-tache-id]');
       if (check) {
-        const t = await DataStore.getTache(check.dataset.tacheId);
-        await DataStore.setTacheFait(t.id, !t.fait);
-        await this._rafraichir();
-        updateJourneeBadge();
+        const id = check.dataset.tacheId;
+        const coche = !check.classList.contains('cochee');
+        // Retour visuel immédiat, avant même l'aller-retour réseau
+        check.classList.toggle('cochee', coche);
+        check.setAttribute('aria-checked', coche ? 'true' : 'false');
+        check.closest('.entree')?.classList.toggle('est-fait', coche);
+        try {
+          await DataStore.setTacheFait(id, coche);
+          await this._rafraichir();
+        } catch (err) {
+          check.classList.toggle('cochee', !coche);
+          Toast.show('Erreur : ' + esc(err.message), 'error');
+        }
         return;
       }
 
@@ -331,7 +464,6 @@ const Hub = {
           await DataStore.migrerTache(migrer.dataset.migrer, Dates.iso(demain));
           Toast.show('Repoussée à demain', 'info');
           await this._rafraichir();
-          updateJourneeBadge();
         } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
         return;
       }
@@ -368,102 +500,121 @@ const Hub = {
       if (nav) return Router.navigate(nav.dataset.goto);
     });
 
-    /* ── Saisie rapide ── */
-    const input  = document.getElementById('quickInput');
-    const indice = document.getElementById('quickHint');
-
-    const apercu = () => {
-      const texte = input.value.trim();
-      if (!texte) { indice.textContent = ''; return; }
-      const p = this._lire(texte);
-      indice.textContent =
-        p.type === 'note'      ? `— note « ${p.titre} »`
-      : p.type === 'evenement' ? `○ rendez-vous « ${p.titre} » · ${Dates.longue(p.date)} à ${Dates.heure(p.date)}`
-      : `• tâche « ${p.titre} »` +
-        (p.echeance ? ` · ${Dates.relative(p.echeance)}${p.heure ? ' à ' + p.heure : ''}` : ' · sans date') +
-        (p.priorite === 'haute' ? ' · priorité' : '');
-    };
-
-    input.addEventListener('input', apercu);
-    input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') { e.preventDefault(); this._ajoutRapide(); }
+    /* ── Champ de l'assistant : hauteur souple, Entrée envoie ── */
+    const champ = document.getElementById('iaTexte');
+    champ.addEventListener('input', () => {
+      champ.style.height = 'auto';
+      champ.style.height = Math.min(champ.scrollHeight, 120) + 'px';
     });
-    document.getElementById('quickAdd').addEventListener('click', () => this._ajoutRapide());
+    champ.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this._demander(); }
+    });
 
-    if (this._reprendreFocus) { input.focus(); this._reprendreFocus = false; }
+    /* La dictée n'existe pas partout (Firefox notamment) : on n'affiche le
+       micro que si le navigateur sait vraiment écouter. */
+    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
+      document.getElementById('iaMicro').hidden = false;
+    }
   },
 
-  /* ── Lecture d'une ligne de saisie ──
-     Les symboles du carnet priment sur l'analyse automatique :
-       •  force une tâche    ○  force un rendez-vous    —  force une note
-     Un préfixe alphabétique n'est reconnu que suivi d'une espace, sinon
-     « organiser le placard » deviendrait un rendez-vous. */
-  _lire(texte) {
-    const brut  = texte.trim();
-    const isole = c => brut[0] === c && (brut.length === 1 || brut[1] === ' ');
+  /* ══ Demande à l'assistant ══ */
+  async _demander(texteDonne) {
+    if (this._iaOccupe) return;
+    const champ = document.getElementById('iaTexte');
+    const texte = String(texteDonne ?? champ.value).trim();
+    if (!texte) { champ.focus(); return; }
 
-    if (isole('—') || isole('–') || isole('-')) {
-      return { type: 'note', titre: brut.slice(1).trim() };
-    }
-    if (brut[0] === '○' || isole('o') || isole('O')) {
-      const p = QuickParse.analyser(brut.slice(1).trim());
-      const d = p.type === 'evenement'
-        ? p.date
-        : Dates.combiner(p.echeance || Dates.aujourdhui(), p.heure || '09:00');
-      return { type: 'evenement', titre: p.titre, date: d };
-    }
-    if (brut[0] === '•' || isole('*')) {
-      const p = QuickParse.analyser(brut.slice(1).trim());
-      return { type: 'tache', titre: p.titre,
-               echeance: p.echeance || (p.date ? Dates.iso(p.date) : null),
-               heure:    p.heure    || (p.date ? Dates.heure(p.date) : null),
-               priorite: p.priorite || 'normale' };
-    }
+    const zone  = document.getElementById('iaReponse');
+    const envoi = document.getElementById('iaEnvoyer');
+    this._iaOccupe = true;
+    envoi.disabled = true;
+    champ.value = '';
+    champ.style.height = 'auto';
 
-    const p = QuickParse.analyser(brut);
-    if (p.type === 'evenement') return { type: 'evenement', titre: p.titre, date: p.date };
-    return { type: 'tache', titre: p.titre, echeance: p.echeance,
-             heure: p.heure, priorite: p.priorite };
-  },
-
-  async _ajoutRapide() {
-    const input = document.getElementById('quickInput');
-    const texte = input.value.trim();
-    if (!texte) return;
-
-    const etiquetteId = document.getElementById('quickEtiq').value || null;
-    const p = this._lire(texte);
+    const entete = `<div class="ia-demande">« ${esc(texte)} »</div>`;
+    zone.hidden = false;
+    zone.innerHTML = entete + '<span class="ia-points"><i></i><i></i><i></i></span>';
 
     try {
-      if (p.type === 'note') {
-        await DataStore.addNote({ contenu: p.titre, etiquetteId, couleur: '#FCE7F1' });
-        Toast.show('Note ajoutée', 'success');
-      } else if (p.type === 'evenement') {
-        await DataStore.addEvenement({
-          titre:   p.titre,
-          debut:   p.date.toISOString(),
-          fin:     new Date(p.date.getTime() + 3600000).toISOString(),
-          etiquetteId,
-          rappels: [15]
-        });
-        Toast.show('Rendez-vous ajouté · rappel 15 min avant', 'success');
-      } else {
-        await DataStore.addTacheComplete({
-          description:   p.titre,
-          echeance:      p.echeance || null,
-          heure:         p.heure    || null,
-          rappelMinutes: p.heure ? 15 : null,
-          priorite:      p.priorite,
-          etiquetteId
-        });
-        Toast.show('Tâche ajoutée', 'success');
-      }
-      input.value = '';
-      this._reprendreFocus = true;
-      await this._rafraichir();
-      updateJourneeBadge();
+      const r = await Assistant.demander(texte, {
+        onEtape: libelle => {
+          zone.innerHTML = entete +
+            `<div class="ia-etape">${libelle}</div>` +
+            '<span class="ia-points"><i></i><i></i><i></i></span>';
+        }
+      });
+
+      zone.innerHTML = entete + Assistant._markdown(r.texte) +
+        (r.actions.length
+          ? `<div class="ia-actions">${r.actions.map(a => `<span class="ia-action">${a}</span>`).join('')}</div>`
+          : '');
+
+      // L'assistant a pu créer ou modifier quelque chose : on remet les
+      // autres blocs à jour sans effacer sa réponse.
+      if (r.actions.length) await this._rafraichir();
+
     } catch (err) {
-      Toast.show('Erreur : ' + esc(err.message), 'error');
+      zone.innerHTML = entete +
+        `<span class="ia-erreur">⚠️ ${esc(err.message)}</span>`;
+    } finally {
+      this._iaOccupe = false;
+      const b = document.getElementById('iaEnvoyer');
+      if (b) b.disabled = false;
+    }
+  },
+
+  /* ══ Dictée ══
+     Un appui lance l'écoute, un second l'arrête. Dès que le navigateur rend
+     une phrase définitive, on envoie : dicter puis devoir appuyer sur
+     « envoyer » n'aurait aucun intérêt par rapport au clavier. */
+  _dicter() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const bouton = document.getElementById('iaMicro');
+    if (!SR) { Toast.show("La dictée n'est pas disponible sur ce navigateur", 'warning'); return; }
+
+    if (this._reco) { this._reco.stop(); return; }
+
+    const champ = document.getElementById('iaTexte');
+    const reco  = this._reco = new SR();
+    reco.lang            = 'fr-FR';
+    reco.interimResults  = true;
+    reco.continuous      = false;
+    reco.maxAlternatives = 1;
+
+    const depart = champ.value.trim();
+    let definitif = false;
+
+    reco.onresult = e => {
+      let dit = '';
+      for (let i = 0; i < e.results.length; i++) {
+        dit += e.results[i][0].transcript;
+        if (e.results[i].isFinal) definitif = true;
+      }
+      champ.value = (depart ? depart + ' ' : '') + dit.trim();
+    };
+
+    reco.onerror = ev => {
+      definitif = false;
+      Toast.show(ev.error === 'not-allowed'
+        ? 'Accès au micro refusé — autorisez-le dans les réglages du navigateur'
+        : "La dictée s'est interrompue", 'warning');
+    };
+
+    reco.onend = () => {
+      this._reco = null;
+      bouton.classList.remove('ecoute');
+      bouton.setAttribute('aria-label', 'Dicter la demande');
+      if (definitif && champ.value.trim()) this._demander();
+      else champ.focus();
+    };
+
+    try {
+      reco.start();
+      bouton.classList.add('ecoute');
+      bouton.setAttribute('aria-label', "Arrêter la dictée");
+    } catch {
+      this._reco = null;
+      Toast.show("La dictée n'a pas pu démarrer", 'warning');
     }
   },
 
@@ -486,7 +637,8 @@ const Hub = {
 
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   QuickParse — comprendre « RDV dentiste vendredi 9h30 » sans appeler l'IA
+   QuickParse — comprendre « RDV dentiste vendredi 9h30 » sans appeler l'IA.
+   Utilisé par la saisie éclair de la page Tâches.
    Volontairement simple : ce qu'il ne comprend pas devient une tâche sans date,
    ce qui n'est jamais faux, juste incomplet.
 ───────────────────────────────────────────────────────────────────────────── */

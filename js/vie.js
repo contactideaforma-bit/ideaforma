@@ -705,6 +705,49 @@ Object.assign(DataStore, {
   },
 
   /* ══════════════════════════════════════════════
+     PRÉFÉRENCES D'AFFICHAGE  (profiles.preferences)
+     Couleur de chaque post-it du tableau de bord, réglages de l'assistant…
+     Portées par le compte : les mêmes réglages sur l'iPhone et l'ordinateur.
+  ══════════════════════════════════════════════ */
+
+  /* Cache mémoire : le tableau de bord lit les préférences à chaque
+     repeinture, on ne veut pas un aller-retour réseau à chaque fois. */
+  _prefs: null,
+
+  async getPreferences(forcer = false) {
+    if (this._prefs && !forcer) return this._prefs;
+    const uid = await this._uid();
+    const { data, error } = await supa
+      .from('profiles').select('preferences').eq('id', uid).maybeSingle();
+    // Colonne absente (migration v10 pas encore jouée) : on n'empêche pas
+    // l'application de fonctionner, on part sur des valeurs par défaut.
+    if (error) { this._prefs = {}; return this._prefs; }
+    this._prefs = (data && data.preferences) || {};
+    return this._prefs;
+  },
+
+  /** setPreference('blocs.taches', '#D9EEE1') — chemin en pointillé. */
+  async setPreference(chemin, valeur) {
+    const uid    = await this._uid();
+    const prefs  = JSON.parse(JSON.stringify(await this.getPreferences()));
+    const bouts  = String(chemin).split('.');
+    let noeud    = prefs;
+    for (let i = 0; i < bouts.length - 1; i++) {
+      if (typeof noeud[bouts[i]] !== 'object' || noeud[bouts[i]] === null) noeud[bouts[i]] = {};
+      noeud = noeud[bouts[i]];
+    }
+    if (valeur === null || valeur === undefined) delete noeud[bouts[bouts.length - 1]];
+    else noeud[bouts[bouts.length - 1]] = valeur;
+
+    // Optimiste : l'interface se repeint tout de suite, on écrit derrière.
+    this._prefs = prefs;
+    const { error } = await supa.from('profiles')
+      .update({ preferences: prefs }).eq('id', uid);
+    if (error) this._handleError(error, 'Enregistrement des préférences');
+    return prefs;
+  },
+
+  /* ══════════════════════════════════════════════
      RÉSUMÉ POUR LE TABLEAU DE BORD ET POUR L'IA
   ══════════════════════════════════════════════ */
   /** Tout ce qu'affiche le tableau de bord, en une seule passe.
@@ -845,7 +888,11 @@ function teinte(hex, alpha = 0.12) {
 /* Puce d'étiquette réutilisée partout */
 function pucePastille(etiquette) {
   if (!etiquette) return '';
-  return `<span class="etiq-chip" style="background:${teinte(etiquette.couleur, 0.14)};color:${etiquette.couleur};">
+  /* Le texte reste en encre du thème, jamais dans la couleur de l'étiquette :
+     une couleur choisie librement (sombre en thème sombre, claire en thème
+     clair) tombait sous 2:1 de contraste. La couleur passe dans la pastille. */
+  return `<span class="etiq-chip" style="background:${teinte(etiquette.couleur, 0.16)};">
+            <i class="etiq-point" style="background:${etiquette.couleur};"></i>
             ${etiquette.icone || ''} ${esc(etiquette.nom)}
           </span>`;
 }

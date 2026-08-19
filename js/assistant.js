@@ -16,6 +16,7 @@ const Assistant = {
   _etiquettes:    [],
   _listes:        [],
   _occupe:        false,
+  _convRapide:    null,   // conversation ouverte depuis le bloc du tableau de bord
 
   /* ══════════════════════════════════════════════
      OUTILS EXPOSÉS AU MODÈLE
@@ -611,30 +612,116 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     }
   },
 
+  /* ══════════════════════════════════════════════
+     ENTRÉE SANS INTERFACE — utilisée par le bloc du tableau de bord
+
+     Même moteur que envoyer(), mais rien n'est peint ici : la fonction rend
+     { texte, actions } et l'appelant affiche ce qu'il veut. Elle travaille
+     sur sa propre liste de messages pour ne pas parasiter la discussion
+     ouverte sur la page Assistant, tout en enregistrant l'échange dans une
+     conversation « Depuis le tableau de bord » qu'on retrouve dans
+     l'historique.
+  ══════════════════════════════════════════════ */
+  async demander(texte, options = {}) {
+    const dire = typeof options.onEtape === 'function' ? options.onEtape : () => {};
+    const propre = String(texte || '').trim();
+    if (!propre) return { texte: '', actions: [] };
+
+    const messages = [{ role: 'user', content: [{ type: 'text', text: propre }] }];
+    const actions  = [];
+    let   convId   = this._convRapide;
+
+    /* La conversation n'est qu'un journal : si son enregistrement échoue,
+       la demande doit quand même aboutir. */
+    const tracer = async (role, contenu) => {
+      if (!convId) return;
+      try { await DataStore.addMessage(convId, role, contenu); } catch { /* journal seulement */ }
+    };
+
+    try {
+      const c = await DataStore.addConversation(propre.slice(0, 60));
+      convId = this._convRapide = c.id;
+    } catch { /* on continue sans historique */ }
+
+    await tracer('user', messages[0].content);
+
+    const systeme = await this.systeme();
+    const outils  = this.outils();
+    let   final   = '';
+
+    for (let tour = 0; tour < 6; tour++) {
+      const reponse = await this._appeler(systeme, outils, null, messages);
+      messages.push({ role: 'assistant', content: reponse.content });
+      await tracer('assistant', reponse.content);
+
+      final = reponse.content.filter(b => b.type === 'text')
+                             .map(b => b.text).join('\n').trim() || final;
+
+      if (reponse.stop_reason !== 'tool_use') break;
+
+      dire(reponse.content.filter(b => b.type === 'tool_use')
+            .map(b => this._libelleOutil(b.name, b.input || {}))[0] || 'Un instant…');
+
+      const resultats = [];
+      for (const bloc of reponse.content.filter(b => b.type === 'tool_use')) {
+        let r;
+        try { r = await this.executer(bloc.name, bloc.input || {}); }
+        catch (err) { r = { ok: false, erreur: err.message }; }
+        if (r?.ok !== false) actions.push(this._libelleOutil(bloc.name, bloc.input || {}));
+        resultats.push({
+          type: 'tool_result',
+          tool_use_id: bloc.id,
+          content: JSON.stringify(r).slice(0, 12000),
+          is_error: r?.ok === false
+        });
+      }
+
+      messages.push({ role: 'user', content: resultats });
+      await tracer('user', resultats);
+
+      // Dernier tour : on force une conclusion en phrase, sinon l'échange
+      // se terminerait sur un résultat technique et le bloc resterait muet.
+      if (tour === 5) {
+        const fin = await this._appeler(systeme, outils, { type: 'none' }, messages);
+        messages.push({ role: 'assistant', content: fin.content });
+        await tracer('assistant', fin.content);
+        final = fin.content.filter(b => b.type === 'text')
+                           .map(b => b.text).join('\n').trim() || final;
+      }
+    }
+
+    updateJourneeBadge();
+
+    // Le modèle peut n'avoir rien dit alors qu'il a agi : on ne laisse pas vide.
+    if (!final) final = actions.length ? actions.join('\n') : "C'est noté.";
+    return { texte: final, actions };
+  },
+
   /** Les N derniers messages, en veillant à ne pas commencer par un
       tool_result orphelin : l'API refuse un résultat d'outil dont l'appel
       correspondant a été coupé. */
-  _fenetre(n) {
-    let debut = Math.max(0, this._messages.length - n);
-    while (debut < this._messages.length) {
-      const m = this._messages[debut];
+  _fenetre(n, source = null) {
+    const liste = source || this._messages;
+    let debut = Math.max(0, liste.length - n);
+    while (debut < liste.length) {
+      const m = liste[debut];
       const contientResultat = Array.isArray(m.content)
         && m.content.some(b => b.type === 'tool_result');
       if (m.role === 'user' && !contientResultat) break;
       debut++;
     }
     // Si tout a été écarté, on repart du dernier message utilisateur
-    if (debut >= this._messages.length) {
-      for (let i = this._messages.length - 1; i >= 0; i--) {
-        const m = this._messages[i];
+    if (debut >= liste.length) {
+      for (let i = liste.length - 1; i >= 0; i--) {
+        const m = liste[i];
         if (m.role === 'user' && Array.isArray(m.content)
             && !m.content.some(b => b.type === 'tool_result')) { debut = i; break; }
       }
     }
-    return this._messages.slice(debut);
+    return liste.slice(debut);
   },
 
-  async _appeler(systeme, outils, toolChoice = null) {
+  async _appeler(systeme, outils, toolChoice = null, source = null) {
     const { data: { session } } = await supa.auth.getSession();
     if (!session?.access_token) throw new Error('Session expirée — reconnectez-vous');
 
@@ -650,7 +737,7 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
         tools:      outils,
         ...(toolChoice ? { tool_choice: toolChoice } : {}),
         max_tokens: 2500,
-        messages:   this._fenetre(40)
+        messages:   this._fenetre(40, source)
       })
     });
 

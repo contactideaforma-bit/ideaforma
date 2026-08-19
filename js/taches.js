@@ -5,6 +5,10 @@
    second système.
 ───────────────────────────────────────────────────────────────────────────── */
 
+/* Icônes proposées pour une étiquette, ici comme dans les Paramètres. */
+const ICONES_ETIQUETTE = ['🏷️', '🎓', '💼', '🏡', '👨‍👩‍👧', '💰', '🩺', '🚗', '✈️', '📞',
+                          '🛒', '🎯', '📚', '🔧', '🎨', '🌱', '⚖️', '🐾'];
+
 const Taches = {
 
   _listes:     [],
@@ -15,17 +19,20 @@ const Taches = {
   voirFaites:  false,
   recherche:   '',
 
-  /* ── Ligne de carnet, même grammaire que le tableau de bord ──
-       •  à faire   ✕  faite   ~  abandonnée   ›  repoussée   ★  priorité   */
+  /* ── Une ligne de tâche : case à cocher, texte, repères, outils.
+       La case est le même composant que sur le tableau de bord : cocher se
+       fait d'un seul geste, au même endroit, partout dans l'application. */
   ligne(t) {
-    const retard  = t.echeance && !t.fait && t.echeance < Dates.aujourdhui();
-    const symbole = t.fait ? '✕' : t.abandonnee ? '~' : '•';
-    const classe  = t.fait ? 'puce-fait' : t.abandonnee ? 'puce-abandonnee' : 'puce-tache';
+    const retard = t.echeance && !t.fait && t.echeance < Dates.aujourdhui();
+    const classeCase = t.abandonnee ? 'case case-abandon' : (t.fait ? 'case cochee' : 'case');
+    const marque     = t.abandonnee ? '~' : '✓';
 
     return `
       <div class="entree ${t.fait ? 'est-fait' : ''} ${t.abandonnee ? 'est-abandonne' : ''}">
-        <button class="puce ${classe}" data-tache-id="${t.id}"
-                aria-label="${t.fait ? 'Rouvrir' : 'Marquer comme fait'}">${symbole}</button>
+        <button class="${classeCase}" data-tache-id="${t.id}" role="checkbox"
+                aria-checked="${t.fait ? 'true' : 'false'}"
+                aria-label="${esc(t.description)}"
+                title="${t.fait ? 'Rouvrir la tâche' : 'Marquer comme faite'}">${marque}</button>
         <span class="entree-corps" data-tache-open="${t.id}">
           <span class="entree-texte">
             ${t.priorite === 'haute' ? '<span class="entree-signifiant">★</span>' : ''}
@@ -112,34 +119,40 @@ const Taches = {
             </button>`).join('')}
           <button class="liste-chip liste-chip-plus" id="btnNouvelleListe">＋ Liste</button>
         </div>
-        <div style="font-size:11.5px;color:var(--text-muted);margin:-6px 0 2px;">
-          Astuce : recliquez sur la liste sélectionnée pour la renommer ou la supprimer.
+
+        <!-- ── Ajout en une ligne ──
+             Placé haut : sur téléphone, écrire une tâche est le geste le plus
+             fréquent, il ne doit pas demander de faire défiler la page. -->
+        <div class="tache-ajout">
+          <input id="tacheFlash" autocomplete="off" enterkeyhint="done"
+                 placeholder="Nouvelle tâche…  « relancer AKTO demain 10h »" />
         </div>
 
         <!-- ── Filtres ── -->
         <div class="taches-filtres">
-          <div class="search-input-wrap" style="flex:1;min-width:180px;">
+          <div class="search-input-wrap taches-filtre-recherche">
             <input class="search-input" id="tacheSearch" placeholder="Rechercher…"
                    value="${esc(this.recherche)}" />
           </div>
-          <select class="filter-select" id="tacheEtiq">
+          <select class="filter-select taches-filtre-etiq" id="tacheEtiq">
             <option value="">Toutes les étiquettes</option>
             ${this._etiquettes.map(e => `
               <option value="${e.id}" ${this.etiqActive === e.id ? 'selected' : ''}>
                 ${e.icone} ${esc(e.nom)}</option>`).join('')}
           </select>
-          <button class="liste-chip liste-chip-plus" id="btnGererEtiquettes"
-                  title="Créer une étiquette">＋ Étiquette</button>
-          <label class="taches-switch">
-            <input type="checkbox" id="tacheVoirFaites" ${this.voirFaites ? 'checked' : ''} />
-            Voir les tâches terminées et abandonnées
-          </label>
+          <div class="taches-filtres-bas">
+            <button class="liste-chip liste-chip-plus" id="btnGererEtiquettes"
+                    title="Créer une étiquette">＋ Étiquette</button>
+            <button class="liste-chip ${this.voirFaites ? 'active' : ''}" id="tacheVoirFaites"
+                    aria-pressed="${this.voirFaites ? 'true' : 'false'}"
+                    title="Afficher aussi les tâches terminées et abandonnées">
+              ✓ Terminées
+            </button>
+          </div>
         </div>
-
-        <!-- ── Ajout en une ligne ── -->
-        <div class="tache-ajout">
-          <input id="tacheFlash" placeholder="Nouvelle tâche… (Entrée pour valider)" autocomplete="off" />
-        </div>
+        <p class="taches-astuce">
+          Touchez une seconde fois la liste active pour la renommer ou la supprimer.
+        </p>
 
         <!-- ── Groupes ── -->
         ${groupes.length ? groupes.map(g => `
@@ -180,6 +193,12 @@ const Taches = {
     const page = document.querySelector('.taches-page');
 
     page.addEventListener('click', async e => {
+      if (e.target.closest('#tacheVoirFaites')) {
+        this.voirFaites = !this.voirFaites;
+        await this._charger();
+        return;
+      }
+
       const chip = e.target.closest('[data-liste]');
       if (chip) {
         // Second clic sur la liste déjà active : on ouvre ses réglages.
@@ -203,13 +222,24 @@ const Taches = {
 
       if (e.target.closest('#btnNouvelleListe')) { this._formListe(); return; }
 
-      const check = e.target.closest('[data-tache-id]');
+      const check = e.target.closest('.case[data-tache-id]');
       if (check) {
         const id = check.dataset.tacheId;
         const t  = this._taches.find(x => x.id === id);
-        await DataStore.setTacheFait(id, !t.fait);
-        await this._charger();
-        updateJourneeBadge();
+        const coche = !t?.fait;
+        // Retour visuel avant l'aller-retour réseau : cocher doit être
+        // instantané, c'est le geste le plus fréquent de la page.
+        check.classList.toggle('cochee', coche);
+        check.setAttribute('aria-checked', coche ? 'true' : 'false');
+        check.closest('.entree')?.classList.toggle('est-fait', coche);
+        try {
+          await DataStore.setTacheFait(id, coche);
+          await this._charger();
+          updateJourneeBadge();
+        } catch (err) {
+          check.classList.toggle('cochee', !coche);
+          Toast.show('Erreur : ' + esc(err.message), 'error');
+        }
         return;
       }
 
@@ -275,11 +305,6 @@ const Taches = {
       await this._charger();
     });
 
-    document.getElementById('tacheVoirFaites').addEventListener('change', async e => {
-      this.voirFaites = e.target.checked;
-      await this._charger();
-    });
-
     let minuteur;
     document.getElementById('tacheSearch').addEventListener('input', e => {
       clearTimeout(minuteur);
@@ -331,11 +356,25 @@ const Taches = {
         </div>
         <div class="field">
           <label>Étiquette</label>
-          <select id="fEtiq">
-            <option value="">Aucune</option>
-            ${this._etiquettes.map(x => `<option value="${x.id}" ${t?.etiquette_id === x.id ? 'selected' : ''}>
-              ${x.icone} ${esc(x.nom)}</option>`).join('')}
-          </select>
+          <div class="champ-plus">
+            <select id="fEtiq">
+              <option value="">Aucune</option>
+              ${this._etiquettes.map(x => `<option value="${x.id}" ${t?.etiquette_id === x.id ? 'selected' : ''}>
+                ${x.icone} ${esc(x.nom)}</option>`).join('')}
+            </select>
+            <button type="button" class="champ-plus-btn" id="fEtiqPlus"
+                    title="Créer une étiquette" aria-label="Créer une étiquette">＋</button>
+          </div>
+          <!-- Création sur place : ouvrir une seconde modale par-dessus
+               celle-ci perdrait tout ce qui vient d'être saisi. -->
+          <div class="etiq-express" id="fEtiqNouvelle" hidden>
+            <input id="fEtiqNom" placeholder="Nom de l'étiquette" maxlength="40" />
+            <select id="fEtiqIcone" aria-label="Icône">
+              ${ICONES_ETIQUETTE.map(i => `<option>${i}</option>`).join('')}
+            </select>
+            <input type="color" id="fEtiqCouleur" value="#B03A63" aria-label="Couleur" />
+            <button type="button" class="btn btn-sm btn-primary" id="fEtiqCreer">Créer</button>
+          </div>
         </div>
         <div class="field">
           <label>Échéance</label>
@@ -394,6 +433,42 @@ const Taches = {
           } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
         } }
     ]);
+
+    /* ── Création d'une étiquette sans quitter le formulaire ── */
+    const zone = document.getElementById('fEtiqNouvelle');
+    const sel  = document.getElementById('fEtiq');
+
+    document.getElementById('fEtiqPlus').addEventListener('click', () => {
+      zone.hidden = !zone.hidden;
+      if (!zone.hidden) document.getElementById('fEtiqNom').focus();
+    });
+
+    document.getElementById('fEtiqCreer').addEventListener('click', async () => {
+      const nom = document.getElementById('fEtiqNom').value.trim();
+      if (!nom) { Toast.show('Donnez un nom à l\'étiquette', 'error'); return; }
+      try {
+        const nouvelle = await DataStore.addEtiquette({
+          nom,
+          icone:   document.getElementById('fEtiqIcone').value,
+          couleur: document.getElementById('fEtiqCouleur').value
+        });
+        this._etiquettes = await DataStore.getEtiquettes(true);
+
+        const opt = document.createElement('option');
+        opt.value = nouvelle.id;
+        opt.textContent = `${nouvelle.icone} ${nouvelle.nom}`;
+        sel.appendChild(opt);
+        sel.value = nouvelle.id;          // on la choisit : c'est pour ça qu'on l'a créée
+
+        document.getElementById('fEtiqNom').value = '';
+        zone.hidden = true;
+        Toast.show('Étiquette créée', 'success');
+      } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
+    });
+
+    document.getElementById('fEtiqNom').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('fEtiqCreer').click(); }
+    });
   },
 
   /* ══ Création d'une liste ══ */
