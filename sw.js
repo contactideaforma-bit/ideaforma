@@ -10,7 +10,7 @@
      restent servis depuis le cache.
 ───────────────────────────────────────────────────────────────────────────── */
 
-const CACHE_VERSION = 'ideaforma-v15';
+const CACHE_VERSION = 'ideaforma-v16';
 const COQUILLE = [
   '/app.html',
   '/index.html',
@@ -64,32 +64,26 @@ self.addEventListener('activate', event => {
 });
 
 /* ── Requêtes ──
-   Réseau d'abord pour tout ce qui est dynamique (Supabase, /api),
-   cache d'abord pour les fichiers statiques de l'application. */
+   Réseau d'abord pour TOUT ce qui vient de notre domaine : on ne veut jamais
+   servir une vieille version de l'application. Le cache ne sert qu'en cas de
+   panne réseau (hors connexion). Supabase et /api ne passent jamais par ici. */
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
-
-  // Jamais de cache pour les données : ni Supabase, ni les fonctions serverless
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   event.respondWith(
-    caches.match(req).then(hit => {
-      const reseau = fetch(req)
-        .then(res => {
-          if (res && res.status === 200 && res.type === 'basic') {
-            const copie = res.clone();
-            caches.open(CACHE_VERSION).then(c => c.put(req, copie));
-          }
-          return res;
-        })
-        .catch(() => hit || caches.match('/app.html'));
-
-      // On sert le cache tout de suite et on rafraîchit en arrière-plan
-      return hit || reseau;
-    })
+    fetch(req, { cache: 'no-cache' })
+      .then(res => {
+        if (res && res.status === 200 && res.type === 'basic') {
+          const copie = res.clone();
+          caches.open(CACHE_VERSION).then(c => c.put(req, copie));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req).then(hit => hit || caches.match('/app.html')))
   );
 });
 
