@@ -769,16 +769,25 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
 
     } catch (err) {
       this._parle = false;
+      // On repeint d'abord, PUIS on ajoute l'erreur : l'ancien code faisait
+      // l'inverse dans « finally », ce qui effaçait le message d'erreur et
+      // laissait l'utilisateur sans aucune réponse.
       this._peindre();
-      document.getElementById('chatFil').insertAdjacentHTML('beforeend',
+      const fil = document.getElementById('chatFil');
+      fil.insertAdjacentHTML('beforeend',
         `<div class="chat-bulle chat-erreur">${Icone('alerte', { taille: 16 })} ${esc(err.message)}</div>`);
-    } finally {
+      fil.scrollTop = fil.scrollHeight;
+      console.error('[Assistant]', err);
       this._occupe = false;
       const b = document.getElementById('chatEnvoyer');
       if (b) b.disabled = false;
-      this._peindre();
-      document.getElementById('chatInput')?.focus();
+      return;
     }
+    this._occupe = false;
+    const b = document.getElementById('chatEnvoyer');
+    if (b) b.disabled = false;
+    this._peindre();
+    document.getElementById('chatInput')?.focus();
   },
 
   /* ══════════════════════════════════════════════
@@ -911,7 +920,7 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     });
 
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    if (!res.ok) throw new Error(data.error || `Le serveur a répondu ${res.status}`);
     if (!Array.isArray(data.content) || !data.content.length) {
       throw new Error('Réponse vide du modèle');
     }
