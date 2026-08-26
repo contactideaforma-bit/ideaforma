@@ -1054,12 +1054,12 @@ html, body { overflow-x: hidden; }
   --bleu-vif:        #1D4ED8;
   --bleu-texte:      #FFFFFF;
   --bleu-pale:       rgba(37, 99, 235, 0.10);
-  --lateral-bg:      #2E1F27;
-  --lateral-texte:   #F3E8EC;
-  --lateral-douce:   #CDB7C0;
-  --lateral-pale:    #A38C96;
-  --lateral-filet:   rgba(255, 255, 255, 0.12);
-  --lateral-actif:   rgba(255, 255, 255, 0.13);
+  --lateral-bg:      #F3E3E9;                 /* rose pâle, plus soutenu que l'en-tête */
+  --lateral-texte:   #3A2830;
+  --lateral-douce:   #5C4550;
+  --lateral-pale:    #8A6E79;
+  --lateral-filet:   rgba(158, 48, 87, 0.18);
+  --lateral-actif:   #FFFFFF;
   --entete-bg:       #FBEEF2;
   --entete-filet:    rgba(158, 48, 87, 0.20);
 }
@@ -1071,7 +1071,7 @@ html, body { overflow-x: hidden; }
   --bleu-vif:        #A3C0FF;
   --bleu-texte:      #10172A;
   --bleu-pale:       rgba(127, 167, 255, 0.16);
-  --lateral-bg:      #100C0E;
+  --lateral-bg:      #201519;
   --lateral-texte:   #F2F2F2;
   --lateral-douce:   #BDB0B5;
   --lateral-pale:    #8E8288;
@@ -1091,31 +1091,34 @@ html, body { overflow-x: hidden; }
   border-bottom: 1px solid var(--lateral-filet);
   padding: 16px 16px 14px;
 }
-/* Le logo est un PNG sur fond blanc : on le pose sur une carte blanche,
-   sinon un rectangle blanc apparaîtrait sur le prune. */
+/* Le logo Mymy est un PNG sur fond blanc : on le pose sur une carte blanche
+   pour que le rectangle blanc devienne un choix, pas un accident. */
 .sidebar-logo img {
-  background: #fff; padding: 7px 12px; border-radius: 10px;
-  max-height: 48px; width: 100%; max-width: 100%; object-fit: contain;
-  box-shadow: 0 1px 2px rgba(0,0,0,.25);
+  background: #fff; padding: 2px 10px; border-radius: 12px;
+  max-height: 90px; width: 100%; max-width: 100%; object-fit: contain;
+  box-shadow: var(--ombre-feuille); border: 1px solid var(--lateral-filet);
 }
 .logo-name { color: var(--lateral-texte); }
 .logo-tagline { color: var(--lateral-douce); }
 .nav-section { color: var(--lateral-pale); }
 .nav-item { color: var(--lateral-douce); border-radius: 9px; }
 .nav-item svg { opacity: .9; }
-.nav-item:hover { background: rgba(255,255,255,0.07); color: var(--lateral-texte); }
+.nav-item:hover { background: rgba(255,255,255,0.55); color: var(--lateral-texte); }
+[data-theme="dark"] .nav-item:hover { background: rgba(255,255,255,0.07); }
 .nav-item.active {
-  background: var(--lateral-actif); color: #fff;
-  border-left-color: var(--encre-rose);
+  background: var(--lateral-actif); color: var(--encre-rose);
+  border-left-color: var(--encre-rose); box-shadow: var(--shadow-sm);
 }
-[data-theme="dark"] .nav-item.active { color: #fff; border-left-color: #F09BB6; }
+[data-theme="dark"] .nav-item.active { color: #fff; border-left-color: #F09BB6; box-shadow: none; }
 .nav-badge { background: var(--encre-rose); color: #fff; }
 .sidebar-footer { border-top: 1px solid var(--lateral-filet); }
 .user-name { color: var(--lateral-texte); }
 .user-role { color: var(--lateral-douce); }
 .user-avatar { background: var(--encre-rose); }
 .btn-logout { color: var(--lateral-douce); border-color: var(--lateral-filet); }
-.btn-logout:hover { background: rgba(240,145,156,.16); color: #FFC5CC; border-color: rgba(240,145,156,.4); }
+.btn-logout { background: rgba(255,255,255,.5); }
+[data-theme="dark"] .btn-logout { background: transparent; }
+.btn-logout:hover { background: var(--danger-bg); color: var(--encre-rouge); border-color: rgba(163,35,48,.35); }
 .sidebar .install-btn, .sidebar .install-badge { color: var(--lateral-texte); }
 
 /* ── En-tête ── */
