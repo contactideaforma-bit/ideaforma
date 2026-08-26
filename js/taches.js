@@ -106,11 +106,11 @@ const Taches = {
     const faites  = this._taches.filter(t => t.fait || t.abandonnee);
 
     const groupes = [
-      { titre: 'En retard',     couleur: 'var(--encre-rouge)',  items: enCours.filter(t => t.echeance && t.echeance < hui) },
-      { titre: "Aujourd'hui",   couleur: 'var(--encre-or)',     items: enCours.filter(t => t.echeance === hui) },
-      { titre: 'Cette semaine', couleur: 'var(--encre-rose)',   items: enCours.filter(t => t.echeance > hui && t.echeance <= dans7) },
-      { titre: 'Plus tard',     couleur: 'var(--encre-prune)',  items: enCours.filter(t => t.echeance > dans7) },
-      { titre: 'Sans date',     couleur: 'var(--encre-pale)',   items: enCours.filter(t => !t.echeance) }
+      { cle: 'retard',   titre: 'En retard',     cls: 'rouge', icone: 'alerte',  items: enCours.filter(t => t.echeance && t.echeance < hui) },
+      { cle: 'jour',     titre: "Aujourd'hui",   cls: 'or',    icone: 'horloge', items: enCours.filter(t => t.echeance === hui) },
+      { cle: 'semaine',  titre: 'Cette semaine', cls: 'rose',  icone: 'agenda',  items: enCours.filter(t => t.echeance > hui && t.echeance <= dans7) },
+      { cle: 'tard',     titre: 'Plus tard',     cls: 'prune', icone: 'sablier', items: enCours.filter(t => t.echeance > dans7) },
+      { cle: 'sansdate', titre: 'Sans date',     cls: 'pale',  icone: 'liste',   items: enCours.filter(t => !t.echeance) }
     ].filter(g => g.items.length);
 
     document.getElementById('pageContent').innerHTML = `
@@ -160,12 +160,7 @@ const Taches = {
              ne voyait plus la liste, seulement des bordures. -->
         ${groupes.length ? `
           <div class="feuille taches-feuille">
-            ${groupes.map(g => `
-              <h2 class="hub-sous-titre" style="color:${g.couleur}">
-                ${g.titre}<span class="hub-compteur">${g.items.length}</span>
-              </h2>
-              <div class="log">${g.items.map(t => this.ligne(t)).join('')}</div>
-            `).join('')}
+            ${groupes.map(g => Hub.groupe(g, `<div class="log">${g.items.map(t => this.ligne(t)).join('')}</div>`)).join('')}
           </div>`
           : `<div class="feuille taches-feuille">
                <div class="empty-state"><div class="empty-icon">${Icone('check', { taille: 34 })}</div>
@@ -173,11 +168,9 @@ const Taches = {
 
         ${this.voirFaites && faites.length ? `
           <div class="feuille taches-feuille">
-            <h2 class="hub-sous-titre hub-sous-titre-pale">
-              Terminées et abandonnées<span class="hub-compteur">${faites.length}</span>
-              <button class="btn btn-sm btn-secondary" id="btnPurger">Nettoyer</button>
-            </h2>
-            <div class="log">${faites.slice(0, 100).map(t => this.ligne(t)).join('')}</div>
+            ${Hub.groupe({ cle: 'faites', titre: 'Terminées et abandonnées', cls: 'pale', icone: 'check', items: faites },
+              `<div class="log">${faites.slice(0, 100).map(t => this.ligne(t)).join('')}</div>
+               <button class="btn btn-sm btn-secondary" id="btnPurger" style="margin:8px 0 6px;">Nettoyer les terminées</button>`, true)}
           </div>` : ''}
       </div>`;
 
@@ -190,6 +183,9 @@ const Taches = {
     const page = document.querySelector('.taches-page');
 
     page.addEventListener('click', async e => {
+      const bande = e.target.closest('[data-groupe]');
+      if (bande) { Hub.basculerGroupe(bande); return; }
+
       if (e.target.closest('#tacheVoirFaites')) {
         this.voirFaites = !this.voirFaites;
         await this._charger();

@@ -147,12 +147,39 @@ const Hub = {
   },
 
   /* ══════════════════════════════════════════════
+     LE GROUPE À BANDEAU — partagé avec la page Tâches
+     Un bandeau coloré (pictogramme, titre, nombre, chevron) au-dessus d'une
+     liste de lignes. Même dessin partout, pour qu'on s'y retrouve.
+     g : { cle, titre, cls (rouge|or|rose|prune|bleu|pale), icone, items }
+  ══════════════════════════════════════════════ */
+  groupe(g, corps, replie = false) {
+    return `
+      <section class="hub-groupe hub-groupe-${g.cls}" ${replie ? 'data-replie="1"' : ''}>
+        <button class="hub-groupe-bande" data-groupe="${g.cle}" aria-expanded="${replie ? 'false' : 'true'}">
+          <span class="hub-groupe-ic">${Icone(g.icone, { taille: 15 })}</span>
+          <span class="hub-groupe-titre">${g.titre}</span>
+          ${g.items ? `<span class="hub-groupe-nb">${g.items.length}</span>` : ''}
+          <span class="hub-groupe-chevron">${Icone('chevron', { taille: 15 })}</span>
+        </button>
+        <div class="hub-groupe-log">${corps}</div>
+      </section>`;
+  },
+
+  /* Repli / dépli d'un bandeau — appelé par les écouteurs des deux pages */
+  basculerGroupe(bande) {
+    const sec = bande.closest('.hub-groupe');
+    const replie = sec.hasAttribute('data-replie');
+    if (replie) sec.removeAttribute('data-replie'); else sec.setAttribute('data-replie', '1');
+    bande.setAttribute('aria-expanded', replie ? 'true' : 'false');
+  },
+
+  /* ══════════════════════════════════════════════
      BLOC AGENDA
   ══════════════════════════════════════════════ */
   _blocAgenda(r) {
-    return this._postit('agenda', "Aujourd'hui",
+    return this._postit('agenda', 'Agenda',
       this._btnPlus('evenement', 'Nouveau rendez-vous') +
-      this._btn('data-goto="agenda"', 'Agenda', "Ouvrir l'agenda"),
+      this._btn('data-goto="agenda"', 'Tout voir', "Ouvrir l'agenda"),
       this._corpsAgenda(r));
   },
 
@@ -186,13 +213,14 @@ const Hub = {
         </div>`;
     };
 
+    const auj = r.agendaAujourdhui;
     return `
-      ${r.agendaAujourdhui.length
-        ? `<div class="log">${r.agendaAujourdhui.map(a => ligne(a)).join('')}</div>`
-        : `<p class="hub-vide">Rien de programmé aujourd'hui.</p>`}
-      ${suite.length ? `
-        <h3 class="hub-sous-titre">Cette semaine</h3>
-        <div class="log">${suite.map(a => ligne(a, true)).join('')}</div>` : ''}`;
+      ${this.groupe({ cle: 'auj', titre: "Aujourd'hui", cls: 'bleu', icone: 'horloge', items: auj },
+        auj.length ? `<div class="log">${auj.map(a => ligne(a)).join('')}</div>`
+                   : `<p class="hub-vide">Rien de programmé aujourd'hui.</p>`)}
+      ${this.groupe({ cle: 'sem', titre: 'Cette semaine', cls: 'prune', icone: 'agenda', items: suite },
+        suite.length ? `<div class="log">${suite.map(a => ligne(a, true)).join('')}</div>`
+                     : `<p class="hub-vide">Rien d'autre cette semaine.</p>`)}`;
   },
 
   /* ══════════════════════════════════════════════
@@ -231,22 +259,13 @@ const Hub = {
             <b>${g.items.length}</b> ${g.titre.toLowerCase()}
           </span>`).join('')}
       </div>
-      ${pleins.map(g => `
-        <section class="hub-groupe hub-groupe-${g.cls}" ${g.cle === 'sansdate' && pleins.length > 1 ? 'data-replie="1"' : ''}>
-          <button class="hub-groupe-bande" data-groupe="${g.cle}" aria-expanded="${g.cle === 'sansdate' && pleins.length > 1 ? 'false' : 'true'}">
-            <span class="hub-groupe-ic">${Icone(g.icone, { taille: 15 })}</span>
-            <span class="hub-groupe-titre">${g.titre}</span>
-            <span class="hub-groupe-nb">${g.items.length}</span>
-            <span class="hub-groupe-chevron">${Icone('chevron', { taille: 15 })}</span>
-          </button>
-          <div class="log hub-groupe-log">
+      ${pleins.map(g => this.groupe(g, `
             ${g.items.slice(0, MAX).map(t => this.ligneTache(t)).join('')}
             ${g.items.length > MAX ? `
               <button class="hub-groupe-plus" data-goto="taches">
                 Voir les ${g.items.length - MAX} autres ${Icone('chevron', { taille: 13 })}
-              </button>` : ''}
-          </div>
-        </section>`).join('')}`;
+              </button>` : ''}`,
+          g.cle === 'sansdate' && pleins.length > 1)).join('')}`;
   },
 
   /** Une tâche : case à cocher, texte, repères. Réutilisée par la page Tâches. */
@@ -428,13 +447,7 @@ const Hub = {
 
       /* ── Replier / déplier un groupe de tâches ── */
       const bande = cible('[data-groupe]');
-      if (bande) {
-        const sec = bande.closest('.hub-groupe');
-        const replie = sec.hasAttribute('data-replie');
-        if (replie) sec.removeAttribute('data-replie'); else sec.setAttribute('data-replie', '1');
-        bande.setAttribute('aria-expanded', replie ? 'true' : 'false');
-        return;
-      }
+      if (bande) { this.basculerGroupe(bande); return; }
 
       /* ── Cocher une tâche ── */
       const check = cible('.case[data-tache-id]');

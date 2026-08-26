@@ -1047,21 +1047,21 @@ html, body { overflow-x: hidden; }
    pour que chaque zone se distingue du fond d'un seul coup d'œil.
 ═══════════════════════════════════════════════════════════════════════════ */
 :root {
-  --jaune-pale:      #FFF8D6;
-  --jaune-pale-2:    #FBEFB8;                 /* cases hors mois, en-têtes */
-  --jaune-regle:     rgba(120, 90, 10, 0.16);
+  --jaune-pale:      #FFFDF0;                 /* jaune très pâle, à peine teinté */
+  --jaune-pale-2:    #FBF6DC;                 /* cases hors mois, en-têtes */
+  --jaune-regle:     rgba(120, 90, 10, 0.18);
   --bleu:            #2563EB;
   --bleu-vif:        #1D4ED8;
   --bleu-texte:      #FFFFFF;
   --bleu-pale:       rgba(37, 99, 235, 0.10);
-  --lateral-bg:      #F3E3E9;                 /* rose pâle, plus soutenu que l'en-tête */
-  --lateral-texte:   #3A2830;
-  --lateral-douce:   #5C4550;
-  --lateral-pale:    #8A6E79;
-  --lateral-filet:   rgba(158, 48, 87, 0.18);
+  --lateral-bg:      #FCF6F8;                 /* rose à peine teinté, plus clair que l'en-tête */
+  --lateral-texte:   #111111;
+  --lateral-douce:   #111111;
+  --lateral-pale:    #6E5A63;
+  --lateral-filet:   rgba(158, 48, 87, 0.16);
   --lateral-actif:   #FFFFFF;
-  --entete-bg:       #FBEEF2;
-  --entete-filet:    rgba(158, 48, 87, 0.20);
+  --entete-bg:       #F6E3EA;
+  --entete-filet:    rgba(158, 48, 87, 0.22);
 }
 [data-theme="dark"] {
   --jaune-pale:      #2C2818;
@@ -1089,24 +1089,25 @@ html, body { overflow-x: hidden; }
 }
 .sidebar-logo {
   border-bottom: 1px solid var(--lateral-filet);
-  padding: 16px 16px 14px;
+  padding: 14px 16px 12px; height: auto; min-height: 0;
+  display: flex; align-items: center; justify-content: center; overflow: visible;
 }
 /* Le logo Mymy est un PNG sur fond blanc : on le pose sur une carte blanche
    pour que le rectangle blanc devienne un choix, pas un accident. */
 .sidebar-logo img {
-  background: #fff; padding: 2px 10px; border-radius: 12px;
-  max-height: 90px; width: 100%; max-width: 100%; object-fit: contain;
+  display: block; background: #fff; padding: 4px 10px; border-radius: 12px;
+  height: 84px; max-height: 84px; width: auto; max-width: 100%; object-fit: contain;
   box-shadow: var(--ombre-feuille); border: 1px solid var(--lateral-filet);
 }
 .logo-name { color: var(--lateral-texte); }
 .logo-tagline { color: var(--lateral-douce); }
 .nav-section { color: var(--lateral-pale); }
-.nav-item { color: var(--lateral-douce); border-radius: 9px; }
+.nav-item { color: var(--lateral-texte); border-radius: 9px; font-weight: 600; }
 .nav-item svg { opacity: .9; }
-.nav-item:hover { background: rgba(255,255,255,0.55); color: var(--lateral-texte); }
+.nav-item:hover { background: rgba(255,255,255,0.9); color: var(--lateral-texte); }
 [data-theme="dark"] .nav-item:hover { background: rgba(255,255,255,0.07); }
 .nav-item.active {
-  background: var(--lateral-actif); color: var(--encre-rose);
+  background: var(--lateral-actif); color: var(--encre-rose); font-weight: 700;
   border-left-color: var(--encre-rose); box-shadow: var(--shadow-sm);
 }
 [data-theme="dark"] .nav-item.active { color: #fff; border-left-color: #F09BB6; box-shadow: none; }
@@ -1272,3 +1273,40 @@ html, body { overflow-x: hidden; }
   color: var(--g); background: transparent;
 }
 .hub-groupe-plus:hover { background: rgba(0,0,0,.05); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   15. Reprises du 26/08 (après-midi)
+═══════════════════════════════════════════════════════════════════════════ */
+/* Titres des blocs : Helvetica, capitales, gras */
+:root { --titre: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+.postit-titre, .section-card-title, .hub-sous-titre, .notes-section-titre,
+.hub-groupe-titre, .chatbot-titre, .taches-feuille .hub-sous-titre, .agenda-suite .hub-sous-titre {
+  font-family: var(--titre); text-transform: uppercase; font-weight: 700;
+  letter-spacing: .05em;
+}
+.postit-titre { font-size: 14px; }
+.section-card-title { font-size: 13.5px; }
+.hub-sous-titre { font-size: 12.5px; }
+.hub-groupe-titre { font-size: 12.5px; }
+.chatbot-titre { font-size: 14px; }
+
+/* Bandeaux : deux teintes de plus (agenda du tableau de bord) */
+.hub-groupe-bleu  { --g: var(--bleu); }
+.hub-groupe-prune { --g: var(--encre-prune); }
+.hub-groupe .hub-vide { padding: 8px 0; }
+[data-theme="dark"] .hub-groupe-bleu .hub-groupe-bande { color: var(--bleu-texte); }
+/* Sur la feuille jaune de la page Tâches, les groupes sont blancs */
+.taches-feuille .hub-groupe { background: #fff; border-color: rgba(0,0,0,.08); }
+[data-theme="dark"] .taches-feuille .hub-groupe { background: rgba(255,255,255,.05); }
+.taches-feuille { padding: 12px; }
+.taches-feuille .hub-groupe { margin-bottom: 10px; }
+.taches-feuille .hub-groupe:last-child { margin-bottom: 0; }
+
+/* Agenda, vue mois : sept colonnes STRICTEMENT égales. Avec « 1fr » tout
+   court, une colonne s'élargit à la mesure de son contenu le plus long. */
+.mois-entetes, .mois-grille { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.mois-case, .mois-entetes div { min-width: 0; overflow: hidden; }
+.mois-item { max-width: 100%; }
+.sem-grille { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.sem-col { min-width: 0; }
+.mois-entetes div { background: var(--jaune-pale-2); }
