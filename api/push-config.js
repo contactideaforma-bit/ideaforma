@@ -14,6 +14,13 @@ function resolveOrigin(req) {
      app installée sur iPhone…). La refuser rendait la clé VAPID inaccessible :
      « Configuration des notifications indisponible », et aucun abonnement. */
   if (!origin) return '*';
+  /* L'appli qui appelle sa propre API (même hôte) est toujours autorisée,
+     quelle que soit la liste : sinon un ALLOWED_ORIGINS qui traîne avec un
+     ancien domaine (ideaforma.vercel.app) bloque tout — « Origine non
+     autorisée » dans le chatbot. La liste ne sert qu'aux domaines tiers. */
+  try {
+    if (new URL(origin).host === req.headers.host) return origin;
+  } catch { /* origine illisible : on retombe sur la liste */ }
   return allowed.includes(origin) ? origin : null;
 }
 
