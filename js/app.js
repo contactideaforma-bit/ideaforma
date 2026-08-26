@@ -167,6 +167,18 @@ const SettingsPage = {
     const etat      = Notifs.etat();
     const appareils = await DataStore.getPushSubscriptions().catch(() => []);
     const aVenir    = await DataStore.getRappelsAVenir(5).catch(() => []);
+    const recents   = await DataStore.getRappelsRecents(6).catch(() => []);
+
+    /* La clé publique VAPID est servie par /api/push-config : si elle ne
+       répond pas, aucun appareil ne peut s'abonner, quoi qu'on fasse ici. */
+    let serveur = { ok: false, detail: '' };
+    try {
+      const res = await fetch('/api/push-config', { cache: 'no-store' });
+      const d   = await res.json().catch(() => ({}));
+      serveur = res.ok && d.publicKey
+        ? { ok: true,  detail: 'Le serveur de notifications répond.' }
+        : { ok: false, detail: d.error || `Le serveur répond ${res.status}.` };
+    } catch (err) { serveur = { ok: false, detail: 'Le serveur de notifications ne répond pas : ' + err.message }; }
 
     const bandeau = {
       accorde:      ['ok',      Icone('cloche', { taille: 17 }), 'Les notifications sont autorisées sur cet appareil.'],
@@ -194,6 +206,10 @@ const SettingsPage = {
           <div class="notif-etat ${bandeau[0]}">
             <span class="notif-etat-ic">${bandeau[1]}</span>
             <span>${bandeau[2]}</span>
+          </div>
+          <div class="notif-etat ${serveur.ok ? 'ok' : 'ko'}" style="margin-top:8px;">
+            <span class="notif-etat-ic">${Icone(serveur.ok ? 'check' : 'alerte', { taille: 17 })}</span>
+            <span>${esc(serveur.detail)}${serveur.ok ? '' : ' — vérifiez les variables VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, SUPABASE_SERVICE_ROLE_KEY et RAPPELS_SECRET dans Vercel.'}</span>
           </div>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -239,6 +255,26 @@ const SettingsPage = {
                   <div class="appareil-nom">${esc(r.titre)}</div>
                   <div class="appareil-date">
                     ${Dates.relative(r.envoyer_a)} à ${Dates.heure(r.envoyer_a)}
+                  </div>
+                </div>`).join('')}
+            </div>` : ''}
+
+          ${recents.length ? `
+            <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:12px;">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;
+                          letter-spacing:.5px;color:var(--text-muted);margin-bottom:6px;">
+                Derniers rappels traités par le serveur
+              </div>
+              ${recents.map(r => `
+                <div class="appareil-ligne">
+                  <div>
+                    <div class="appareil-nom">${esc(r.titre)}</div>
+                    <div class="appareil-date">
+                      ${Dates.relative(r.envoyer_a)} à ${Dates.heure(r.envoyer_a)}
+                      · <strong style="color:${r.statut === 'envoye' ? 'var(--success)' : 'var(--danger)'}">
+                        ${r.statut === 'envoye' ? 'envoyé' : r.statut === 'erreur' ? 'échec' : r.statut}</strong>
+                      ${r.erreur ? ` — ${esc(String(r.erreur).slice(0, 160))}` : ''}
+                    </div>
                   </div>
                 </div>`).join('')}
             </div>` : ''}
@@ -668,6 +704,8 @@ const Router = {
   },
 
   navigate(page, sansHistorique = false) {
+    // L'assistant n'est plus une page : c'est le panneau flottant
+    if (page === 'assistant') { Assistant.ouvrir(); return; }
     this.currentPage = page;
     document.querySelectorAll('.nav-item').forEach(el =>
       el.classList.toggle('active', el.dataset.page === page)
@@ -803,6 +841,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Surveillance des rendez-vous imminents tant que l'onglet est ouvert
   Notifs.demarrerVeille();
+
+  // Le bouton d'assistant, en bas à droite de toutes les pages
+  Assistant.monter();
 
   // Rafraîchissement des pastilles toutes les 5 minutes
   setInterval(updateJourneeBadge, 300000);

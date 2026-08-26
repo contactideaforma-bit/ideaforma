@@ -329,8 +329,11 @@ const Assistant = {
     this._etiquettes = etiquettes;
     this._listes     = listes;
 
-    return `Tu es l'assistant personnel intégré à IDEAFORMA, l'application de gestion de son utilisateur unique.
+    return `Tu es l'assistant personnel intégré à IDEAFORMA, l'application de gestion de son utilisateur unique (la seule personne qui te parle).
 Cette application sert à deux choses : suivre les dossiers de formation professionnelle déposés auprès des OPCO (organisme de formation certifié Qualiopi), et organiser le quotidien — tâches, rendez-vous, notes, documents.
+
+TU N'ES PAS LIMITÉ À L'APPLICATION
+Réponds à toute question, quel que soit le sujet : culture générale, droit de la formation, rédaction d'un mail ou d'un courrier, calculs, traduction, conseils, idées, explications, vie personnelle. Réponds-y directement, complètement et sans détour, comme un assistant polyvalent de confiance. N'appelle les outils que lorsque la demande concerne les données de l'application.
 
 CONTEXTE TEMPOREL
 Nous sommes le ${Dates.longue(maintenant)} ${maintenant.getFullYear()}, il est ${Dates.heure(maintenant)} (heure de Paris).
@@ -355,6 +358,7 @@ COMMENT TRAVAILLER
 - Programme un rappel par défaut (15 min avant) sauf indication contraire ; pour une échéance importante, propose aussi la veille.
 - Devine l'étiquette d'après le sujet : ce qui touche aux dossiers OPCO, aux clients ou aux formations va sous « IDEAFORMA », le reste sous « Pro » ou « Perso ».
 - Avant de créer quelque chose d'ambigu, pose UNE question courte. Sinon agis, puis dis en une phrase ce que tu as fait.
+- La question peut avoir été dictée à la voix : tolère les fautes de reconnaissance et devine le sens. Ta réponse peut être lue à voix haute : évite les tableaux et le formatage lourd quand ce n'est pas utile.
 - Pour les questions sur l'activité (chiffre d'affaires, dossiers en retard), appelle resume_activite ou chercher_dossiers plutôt que de deviner.
 
 TON
@@ -362,73 +366,223 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
   },
 
   /* ══════════════════════════════════════════════
-     PAGE
+     LE CHATBOT FLOTTANT
+     Un bouton en bas à droite, présent sur toutes les pages. Il ouvre un
+     panneau de discussion : on écrit ou on parle, la réponse s'affiche et,
+     si on a parlé, elle est lue à voix haute.
   ══════════════════════════════════════════════ */
-  async render() {
-    document.getElementById('pageTitle').textContent    = 'Assistant';
-    document.getElementById('pageSubtitle').textContent = 'Il voit vos données et peut agir';
-    document.getElementById('pageHeaderRight').innerHTML = `
-      <button class="btn btn-sm btn-secondary" id="btnHistorique">Discussions</button>
-      <button class="btn btn-sm btn-primary" id="btnNouvelleConv">${Icone('plus', { taille: 16 })} Nouvelle</button>`;
+  _ouvert:   false,
+  _monte:    false,
+  _reco:     null,     // reconnaissance vocale en cours
+  _voix:     false,    // lecture à voix haute des réponses
+  _parle:    false,    // la dernière question a été dictée
 
-    document.getElementById('pageContent').innerHTML = `
-      <div class="chat-page">
-        <div class="chat-fil" id="chatFil"></div>
-        <div class="chat-saisie">
-          <textarea id="chatInput" rows="1"
-                    placeholder="Demandez n'importe quoi : « qu'est-ce que j'ai demain ? », « rappelle-moi d'appeler AKTO jeudi 10h », « combien de dossiers en attente ? »"></textarea>
-          <button class="btn btn-primary" id="chatEnvoyer"
-                  title="Envoyer" aria-label="Envoyer">${Icone('envoyer')}</button>
+  monter() {
+    if (this._monte) return;
+    this._monte = true;
+
+    const peutDicter = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    const peutLire   = 'speechSynthesis' in window;
+    try { this._voix = localStorage.getItem('chatbot_voix') === '1'; } catch { /* rien */ }
+
+    document.body.insertAdjacentHTML('beforeend', `
+      <button class="chatbot-bouton" id="chatbotBouton"
+              title="Assistant" aria-label="Ouvrir l'assistant" aria-expanded="false">
+        ${Icone('assistant', { taille: 26 })}
+      </button>
+      <div class="chatbot-voile" id="chatbotVoile" hidden></div>
+      <section class="chatbot" id="chatbot" hidden aria-label="Assistant">
+        <header class="chatbot-tete">
+          <span class="chatbot-tete-ic">${Icone('assistant', { taille: 20 })}</span>
+          <div class="chatbot-tete-txt">
+            <div class="chatbot-titre">Assistant</div>
+            <div class="chatbot-sous">Écrivez ou parlez — sans limite</div>
+          </div>
+          ${peutLire ? `
+            <button class="chatbot-outil ${this._voix ? 'on' : ''}" id="chatbotVoix"
+                    title="Lire les réponses à voix haute" aria-pressed="${this._voix}"
+                    aria-label="Lire les réponses à voix haute">${Icone('musique', { taille: 17 })}</button>` : ''}
+          <button class="chatbot-outil" id="btnHistorique" title="Discussions précédentes"
+                  aria-label="Discussions précédentes">${Icone('horloge', { taille: 17 })}</button>
+          <button class="chatbot-outil" id="btnNouvelleConv" title="Nouvelle discussion"
+                  aria-label="Nouvelle discussion">${Icone('plus', { taille: 18 })}</button>
+          <button class="chatbot-outil" id="chatbotFermer" title="Fermer"
+                  aria-label="Fermer l'assistant">${Icone('fermer', { taille: 18 })}</button>
+        </header>
+        <div class="chat-fil chatbot-fil" id="chatFil"></div>
+        <div class="chatbot-saisie">
+          <textarea id="chatInput" rows="1" enterkeyhint="send"
+                    placeholder="Posez votre question…"></textarea>
+          ${peutDicter ? `
+            <button class="chatbot-micro" id="chatMicro" title="Parler"
+                    aria-label="Dicter la question">${Icone('micro', { taille: 20 })}</button>` : ''}
+          <button class="chatbot-envoi" id="chatEnvoyer" title="Envoyer"
+                  aria-label="Envoyer">${Icone('envoyer', { taille: 19 })}</button>
         </div>
-      </div>`;
+      </section>`);
 
+    document.getElementById('chatbotBouton').addEventListener('click', () => this.basculer());
+    document.getElementById('chatbotFermer').addEventListener('click', () => this.fermer());
+    document.getElementById('chatbotVoile').addEventListener('click', () => this.fermer());
     document.getElementById('btnNouvelleConv').addEventListener('click', () => this.nouvelle());
     document.getElementById('btnHistorique').addEventListener('click', () => this._historique());
+    document.getElementById('chatMicro')?.addEventListener('click', () => this._dicter());
+    document.getElementById('chatbotVoix')?.addEventListener('click', () => {
+      this._voix = !this._voix;
+      const b = document.getElementById('chatbotVoix');
+      b.classList.toggle('on', this._voix);
+      b.setAttribute('aria-pressed', String(this._voix));
+      try { localStorage.setItem('chatbot_voix', this._voix ? '1' : '0'); } catch { /* rien */ }
+      if (!this._voix) window.speechSynthesis?.cancel();
+      Toast.show(this._voix ? 'Les réponses seront lues à voix haute' : 'Lecture à voix haute coupée', 'info');
+    });
 
     const input = document.getElementById('chatInput');
     input.addEventListener('input', () => {
       input.style.height = 'auto';
-      input.style.height = Math.min(input.scrollHeight, 180) + 'px';
+      input.style.height = Math.min(input.scrollHeight, 140) + 'px';
     });
     input.addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.envoyer(); }
     });
     document.getElementById('chatEnvoyer').addEventListener('click', () => this.envoyer());
-
-    // Reprise de la dernière discussion, ou accueil
-    const convs = await DataStore.getConversations(1).catch(() => []);
-    if (convs.length) await this.charger(convs[0].id);
-    else this._accueil();
-
-    input.focus();
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && this._ouvert) this.fermer();
+    });
   },
+
+  async ouvrir() {
+    this.monter();
+    if (this._ouvert) return;
+    this._ouvert = true;
+    const p = document.getElementById('chatbot');
+    p.hidden = false;
+    document.getElementById('chatbotVoile').hidden = false;
+    document.getElementById('chatbotBouton').setAttribute('aria-expanded', 'true');
+    document.getElementById('chatbotBouton').classList.add('ouvert');
+    requestAnimationFrame(() => p.classList.add('visible'));
+
+    if (!this._charge) {
+      this._charge = true;
+      const convs = await DataStore.getConversations(1).catch(() => []);
+      if (convs.length) await this.charger(convs[0].id);
+      else this._accueil();
+    }
+    if (window.matchMedia('(min-width: 761px)').matches) {
+      document.getElementById('chatInput')?.focus();
+    }
+  },
+
+  fermer() {
+    if (!this._ouvert) return;
+    this._ouvert = false;
+    const p = document.getElementById('chatbot');
+    p.classList.remove('visible');
+    document.getElementById('chatbotBouton').setAttribute('aria-expanded', 'false');
+    document.getElementById('chatbotBouton').classList.remove('ouvert');
+    document.getElementById('chatbotVoile').hidden = true;
+    setTimeout(() => { if (!this._ouvert) p.hidden = true; }, 220);
+    if (this._reco) this._reco.stop();
+  },
+
+  basculer() { this._ouvert ? this.fermer() : this.ouvrir(); },
+
+  /* Compatibilité : l'ancienne route « assistant » ouvre le panneau */
+  render() { this.ouvrir(); },
 
   _accueil() {
     const suggestions = [
       "Qu'est-ce que j'ai de prévu cette semaine ?",
       "Rappelle-moi d'appeler le comptable jeudi à 10h",
       'Quels dossiers OPCO sont en retard ?',
-      'Fais-moi la liste de mes tâches en retard',
-      'Note que le code du portail AKTO a changé'
+      'Rédige-moi un mail de relance poli',
+      'Explique-moi le fonctionnement du BPF'
     ];
-    document.getElementById('chatFil').innerHTML = `
+    const fil = document.getElementById('chatFil');
+    if (!fil) return;
+    fil.innerHTML = `
       <div class="chat-accueil">
         <div class="chat-accueil-ic">${Icone('assistant', { taille: 38 })}</div>
         <div class="chat-accueil-titre">Que puis-je faire pour vous ?</div>
         <div class="chat-accueil-sous">
-          Je vois vos dossiers, votre agenda, vos tâches et vos notes.
-          Je peux aussi créer des rendez-vous et programmer leurs rappels.
+          Je vois vos dossiers, votre agenda, vos tâches et vos notes, et je
+          réponds aussi à n'importe quelle autre question.
         </div>
         <div class="chat-suggestions">
           ${suggestions.map(s => `<button class="chat-suggestion">${esc(s)}</button>`).join('')}
         </div>
       </div>`;
-    document.querySelectorAll('.chat-suggestion').forEach(b =>
+    fil.querySelectorAll('.chat-suggestion').forEach(b =>
       b.addEventListener('click', () => {
         document.getElementById('chatInput').value = b.textContent.trim();
         this.envoyer();
       })
     );
+  },
+
+  /* ══ Dictée ══
+     Un appui lance l'écoute, un second l'arrête. Dès que le navigateur rend
+     une phrase définitive, on envoie, et la réponse sera lue à voix haute. */
+  _dicter() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const bouton = document.getElementById('chatMicro');
+    if (!SR) { Toast.show("La dictée n'est pas disponible sur ce navigateur", 'warning'); return; }
+    if (this._reco) { this._reco.stop(); return; }
+
+    window.speechSynthesis?.cancel();
+    const champ = document.getElementById('chatInput');
+    const reco  = this._reco = new SR();
+    reco.lang = 'fr-FR'; reco.interimResults = true;
+    reco.continuous = false; reco.maxAlternatives = 1;
+
+    const depart = champ.value.trim();
+    let definitif = false;
+
+    reco.onresult = e => {
+      let dit = '';
+      for (let i = 0; i < e.results.length; i++) {
+        dit += e.results[i][0].transcript;
+        if (e.results[i].isFinal) definitif = true;
+      }
+      champ.value = (depart ? depart + ' ' : '') + dit.trim();
+    };
+    reco.onerror = ev => {
+      definitif = false;
+      Toast.show(ev.error === 'not-allowed'
+        ? 'Accès au micro refusé — autorisez-le dans les réglages du navigateur'
+        : "La dictée s'est interrompue", 'warning');
+    };
+    reco.onend = () => {
+      this._reco = null;
+      bouton.classList.remove('ecoute');
+      bouton.setAttribute('aria-label', 'Dicter la question');
+      if (definitif && champ.value.trim()) { this._parle = true; this.envoyer(); }
+      else champ.focus();
+    };
+    try {
+      reco.start();
+      bouton.classList.add('ecoute');
+      bouton.setAttribute('aria-label', 'Arrêter la dictée');
+    } catch {
+      this._reco = null;
+      Toast.show("La dictée n'a pas pu démarrer", 'warning');
+    }
+  },
+
+  /* ══ Lecture à voix haute ══ */
+  _lire(texte) {
+    if (!('speechSynthesis' in window) || !texte) return;
+    const propre = texte
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/[*_`#>]/g, '')
+      .replace(/\s+/g, ' ').trim();
+    if (!propre) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(propre);
+    u.lang = 'fr-FR'; u.rate = 1.02;
+    const voix = window.speechSynthesis.getVoices().find(v => /^fr/i.test(v.lang));
+    if (voix) u.voice = voix;
+    window.speechSynthesis.speak(u);
   },
 
   async nouvelle() {
@@ -605,7 +759,16 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
 
       updateJourneeBadge();
 
+      // Lecture à voix haute : si la question a été dictée, ou si on l'a demandé
+      if (this._voix || this._parle) {
+        const dernier = [...this._messages].reverse().find(m => m.role === 'assistant');
+        const txt = (dernier?.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ');
+        this._lire(txt);
+      }
+      this._parle = false;
+
     } catch (err) {
+      this._parle = false;
       this._peindre();
       document.getElementById('chatFil').insertAdjacentHTML('beforeend',
         `<div class="chat-bulle chat-erreur">${Icone('alerte', { taille: 16 })} ${esc(err.message)}</div>`);
@@ -742,7 +905,7 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
         system:     systeme,
         tools:      outils,
         ...(toolChoice ? { tool_choice: toolChoice } : {}),
-        max_tokens: 2500,
+        max_tokens: 4000,
         messages:   this._fenetre(40, source)
       })
     });

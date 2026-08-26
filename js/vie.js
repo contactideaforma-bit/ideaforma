@@ -602,6 +602,18 @@ Object.assign(DataStore, {
     return data || [];
   },
 
+  /** Les derniers rappels, tous statuts confondus : c'est là qu'on voit si le
+      serveur les a envoyés, ou pourquoi il n'a pas pu. */
+  async getRappelsRecents(limite = 8) {
+    const uid = await this._uid();
+    const { data, error } = await supa.from('rappels')
+      .select('id,titre,envoyer_a,statut,envoye_le,erreur,tentatives')
+      .eq('user_id', uid).neq('statut', 'en_attente')
+      .order('envoyer_a', { ascending: false }).limit(limite);
+    if (error) this._handleError(error, 'getRappelsRecents');
+    return data || [];
+  },
+
   async addRappelManuel(titre, corps, quandISO) {
     const uid = await this._uid();
     const { data, error } = await supa.from('rappels').insert({

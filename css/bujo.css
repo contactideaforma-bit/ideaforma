@@ -366,116 +366,126 @@ html, body { overflow-x: hidden; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   7. Bloc assistant
+   7. Le chatbot flottant
+   Un bouton rond en bas à droite, présent partout ; il ouvre un panneau posé
+   au-dessus de la page (feuille remontant du bas sur téléphone).
 ═══════════════════════════════════════════════════════════════════════════ */
-.ia-saisie {
-  display: flex; align-items: flex-end; gap: 8px; min-width: 0;
-  background: rgba(255,255,255,0.78); border: 1px solid rgba(0,0,0,0.15);
-  border-radius: 12px; padding: 5px 5px 5px 12px;
-}
-[data-theme="dark"] .ia-saisie {
-  background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.18);
-}
-.ia-saisie textarea {
-  flex: 1 1 auto; min-width: 0; width: 100%;
-  border: none; background: transparent; outline: none; resize: none;
-  font-family: var(--sans); font-size: 15px; line-height: 1.4;
-  color: var(--encre); padding: 11px 0; max-height: 120px;
-}
-.ia-saisie textarea::placeholder { color: var(--encre-douce); }
-
-.ia-bouton {
-  flex-shrink: 0; width: 42px; height: 42px; border-radius: 11px;
+.chatbot-bouton {
+  position: fixed; right: 22px; bottom: calc(22px + env(safe-area-inset-bottom));
+  z-index: 130;
+  width: 60px; height: 60px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  transition: var(--transition);
-  border: 1px solid rgba(0,0,0,0.16); background: rgba(255,255,255,0.7);
-  color: var(--encre);
+  background: var(--encre-rose); color: #fff; border: none;
+  box-shadow: 0 6px 18px rgba(158, 48, 87, .40), 0 2px 4px rgba(0,0,0,.15);
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+  cursor: pointer;
 }
-[data-theme="dark"] .ia-bouton {
-  background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.18);
-}
-.ia-bouton:hover { background: #fff; }
-[data-theme="dark"] .ia-bouton:hover { background: rgba(255,255,255,0.16); }
-/* Le fond doit être redéclaré pour le thème sombre : « [data-theme] .ia-bouton »
-   est plus spécifique que « .ia-bouton-envoi » et effacerait la couleur. */
-.ia-bouton-envoi { background: var(--encre-rose); border-color: var(--encre-rose); color: #fff; }
-.ia-bouton-envoi:hover { background: var(--encre-rose-vif); }
-[data-theme="dark"] .ia-bouton-envoi {
-  background: var(--encre-rose); border-color: var(--encre-rose); color: #17161A;
-}
-[data-theme="dark"] .ia-bouton-envoi:hover { background: var(--encre-rose-vif); }
-.ia-bouton:disabled { opacity: .45; }
-/* display:flex l'emporterait sur l'attribut hidden */
-.ia-bouton[hidden] { display: none; }
+.chatbot-bouton .ic { vertical-align: 0; }
+.chatbot-bouton:hover { transform: translateY(-2px) scale(1.04); background: var(--encre-rose-vif); }
+.chatbot-bouton.ouvert { transform: scale(.92); opacity: .85; }
+[data-theme="dark"] .chatbot-bouton { color: #17161A; box-shadow: 0 6px 18px rgba(0,0,0,.6); }
 
-/* Micro en écoute : un halo qui bat */
-.ia-bouton-micro.ecoute {
+.chatbot-voile { position: fixed; inset: 0; z-index: 128; background: rgba(0,0,0,.18); }
+.chatbot-voile[hidden] { display: none; }
+
+.chatbot {
+  position: fixed; right: 22px; bottom: calc(94px + env(safe-area-inset-bottom));
+  z-index: 129;
+  width: min(440px, calc(100vw - 44px));
+  height: min(640px, calc(100vh - 130px));
+  display: flex; flex-direction: column;
+  background: var(--white); border: 1px solid var(--regle);
+  border-radius: 18px; box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  opacity: 0; transform: translateY(14px) scale(.98);
+  transition: opacity .2s ease, transform .2s ease;
+}
+.chatbot.visible { opacity: 1; transform: none; }
+.chatbot[hidden] { display: none; }
+
+.chatbot-tete {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 12px 12px 16px;
+  background: var(--encre-rose); color: #fff;
+}
+[data-theme="dark"] .chatbot-tete { color: #17161A; }
+.chatbot-tete-ic { display: flex; }
+.chatbot-tete-ic .ic { vertical-align: 0; }
+.chatbot-tete-txt { flex: 1 1 auto; min-width: 0; }
+.chatbot-titre { font-family: var(--serif); font-weight: 700; font-size: 16px; line-height: 1.15; }
+.chatbot-sous  { font-size: 11.5px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chatbot-outil {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.16); color: inherit; border: none;
+  transition: var(--transition);
+}
+.chatbot-outil:hover { background: rgba(255,255,255,.30); }
+.chatbot-outil.on { background: #fff; color: var(--encre-rose); }
+[data-theme="dark"] .chatbot-outil { background: rgba(0,0,0,.12); }
+[data-theme="dark"] .chatbot-outil.on { background: #17161A; color: var(--encre-rose); }
+.chatbot-outil .ic { vertical-align: 0; }
+
+.chatbot-fil {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: 14px 14px 10px; gap: 10px;
+  background: var(--papier);
+  background-image: radial-gradient(circle, var(--pois) 1px, transparent 1.1px);
+  background-size: 22px 22px;
+}
+.chatbot .chat-bulle { max-width: 88%; font-size: 14.5px; }
+.chatbot .chat-accueil { padding: 18px 6px; }
+.chatbot .chat-accueil-sous { font-size: 13px; margin-bottom: 14px; }
+.chatbot .chat-suggestions { gap: 6px; }
+.chatbot .chat-suggestion { font-size: 12.5px; padding: 7px 12px; text-align: left; }
+
+.chatbot-saisie {
+  display: flex; align-items: flex-end; gap: 6px;
+  padding: 10px; border-top: 1px solid var(--regle); background: var(--white);
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+.chatbot-saisie textarea {
+  flex: 1 1 auto; min-width: 0; resize: none; outline: none;
+  border: 1px solid var(--regle); border-radius: 12px;
+  padding: 11px 13px; max-height: 140px;
+  font-family: var(--sans); font-size: 15px; line-height: 1.4;
+  color: var(--encre); background: var(--papier);
+}
+.chatbot-saisie textarea:focus { border-color: var(--encre-rose); }
+.chatbot-saisie textarea::placeholder { color: var(--encre-pale); }
+.chatbot-micro, .chatbot-envoi {
+  flex-shrink: 0; width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--regle); background: var(--papier); color: var(--encre);
+  transition: var(--transition);
+}
+.chatbot-micro .ic, .chatbot-envoi .ic { vertical-align: 0; }
+.chatbot-micro:hover { border-color: var(--encre-rose); color: var(--encre-rose); }
+.chatbot-envoi { background: var(--encre-rose); border-color: var(--encre-rose); color: #fff; }
+.chatbot-envoi:hover { background: var(--encre-rose-vif); }
+.chatbot-envoi:disabled { opacity: .45; }
+[data-theme="dark"] .chatbot-envoi { color: #17161A; }
+.chatbot-micro.ecoute {
   background: var(--encre-rouge); border-color: var(--encre-rouge); color: #fff;
   animation: ecoute 1.4s ease-in-out infinite;
 }
-[data-theme="dark"] .ia-bouton-micro.ecoute {
-  background: var(--encre-rouge); border-color: var(--encre-rouge); color: #17161A;
-}
+[data-theme="dark"] .chatbot-micro.ecoute { color: #17161A; }
 @keyframes ecoute {
   0%, 100% { box-shadow: 0 0 0 0 rgba(163, 35, 48, .45); }
   50%      { box-shadow: 0 0 0 9px rgba(163, 35, 48, 0); }
 }
 
-.ia-exemples { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 9px; }
-.ia-exemple {
-  max-width: 100%; padding: 7px 12px; border-radius: 20px;
-  border: 1px solid rgba(0,0,0,0.15); background: rgba(255,255,255,0.6);
-  font-family: var(--sans); font-size: 12.5px; font-weight: 500;
-  color: var(--encre-douce); transition: var(--transition);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-[data-theme="dark"] .ia-exemple {
-  background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.16);
-}
-.ia-exemple:hover { color: var(--encre); background: #fff; }
-[data-theme="dark"] .ia-exemple:hover { background: rgba(255,255,255,0.14); }
-
-.ia-reponse {
-  margin-top: 11px; padding: 12px 14px; border-radius: 11px;
-  background: rgba(255,255,255,0.82);
-  font-family: var(--sans); font-size: 14.5px; line-height: 1.55;
-  color: var(--encre); overflow-wrap: anywhere;
-}
-[data-theme="dark"] .ia-reponse { background: rgba(255,255,255,0.08); }
-.ia-reponse[hidden] { display: none; }
-.ia-reponse strong { font-weight: 700; }
-.ia-reponse ul { margin: 6px 0 0; padding-left: 18px; }
-.ia-reponse li { margin-bottom: 3px; }
-
-/* La demande est rappelée au-dessus de la réponse : il faut pouvoir relire
-   ce qu'on a dicté, la reconnaissance vocale se trompant parfois de mot. */
-.ia-demande {
-  font-family: var(--serif); font-style: italic; font-size: 13.5px;
-  color: var(--encre-douce); margin-bottom: 8px;
-  padding-bottom: 8px; border-bottom: 1px solid rgba(0,0,0,0.10);
-}
-[data-theme="dark"] .ia-demande { border-bottom-color: rgba(255,255,255,0.12); }
-.ia-etape {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12.5px; color: var(--encre-douce); margin-bottom: 6px;
-}
-.ia-actions { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
-.ia-action {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12.5px; color: var(--encre-verte); font-weight: 600;
-}
-.ia-erreur { display: flex; align-items: center; gap: 6px; color: var(--encre-rouge); font-weight: 600; }
-
-.ia-points { display: inline-flex; gap: 4px; align-items: center; height: 14px; }
-.ia-points i {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--encre-douce);
-  animation: iaPoint 1.2s infinite ease-in-out;
-}
-.ia-points i:nth-child(2) { animation-delay: .15s; }
-.ia-points i:nth-child(3) { animation-delay: .3s; }
-@keyframes iaPoint {
-  0%, 60%, 100% { opacity: .25; transform: translateY(0); }
-  30%           { opacity: 1;   transform: translateY(-3px); }
+@media (max-width: 760px) {
+  .chatbot-bouton { right: 16px; bottom: calc(18px + env(safe-area-inset-bottom)); width: 56px; height: 56px; }
+  .chatbot {
+    right: 0; left: 0; bottom: 0; width: 100%;
+    height: min(86vh, 100vh - 40px);
+    border-radius: 18px 18px 0 0; border-left: none; border-right: none;
+    transform: translateY(24px);
+  }
+  .chatbot.visible { transform: none; }
+  .chatbot-bouton.ouvert { display: none; }
+  .chatbot-saisie textarea { font-size: 16px !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -760,8 +770,7 @@ html, body { overflow-x: hidden; }
      l'utilisateur doit repincer pour revenir. */
   input, select, textarea,
   .field input, .field select, .field textarea,
-  .search-input, .filter-select, .ia-saisie textarea,
-  .tache-ajout input { font-size: 16px !important; }
+  .search-input, .filter-select { font-size: 16px !important; }
 
   .page-header {
     position: sticky; top: 0; z-index: 40;
@@ -806,8 +815,6 @@ html, body { overflow-x: hidden; }
   .hub-raccourci { min-height: 68px; font-size: 11px; }
   .notes-mini { grid-template-columns: 1fr; }
 
-  .ia-bouton { width: 46px; height: 46px; }
-  .ia-saisie { padding: 5px 5px 5px 11px; }
 
   /* Fenêtres modales : feuille remontant du bas, actions au pouce */
   .modal {
@@ -862,7 +869,7 @@ html, body { overflow-x: hidden; }
 }
 
 @media print {
-  .sidebar, .page-header, .ia-saisie, .ia-exemples,
+  .sidebar, .page-header, .chatbot, .chatbot-bouton,
   .entree-outils, .hub-raccourcis, .postit-palette { display: none !important; }
   body, .app-layout { background: #fff; }
   .postit, .section-card { box-shadow: none; border: 1px solid #ddd; }
@@ -951,7 +958,6 @@ html, body { overflow-x: hidden; }
 /* ── Cibles de touche : rien sous 28 px de haut ── */
 .btn-icon { min-width: 34px; min-height: 34px; }
 .case { width: 28px; height: 28px; }
-.ia-exemple { min-height: 34px; display: inline-flex; align-items: center; }
 .liste-chip, .agenda-filtre, .chat-suggestion { min-height: 34px; }
 
 @media (max-width: 760px) {
@@ -1033,3 +1039,233 @@ html, body { overflow-x: hidden; }
 [data-theme="dark"] .note-carte .note-corps { color: #2E2E2E; }
 [data-theme="dark"] .note-carte .note-pin,
 [data-theme="dark"] .note-mini-pin { color: #171717; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   14. Contraste — barre latérale, en-tête, agenda, tâches (26/08/2026)
+   La page est blanche : la barre latérale passe en encre prune, l'en-tête en
+   rose très pâle, et les feuilles de l'agenda et des tâches en jaune pâle,
+   pour que chaque zone se distingue du fond d'un seul coup d'œil.
+═══════════════════════════════════════════════════════════════════════════ */
+:root {
+  --jaune-pale:      #FFF8D6;
+  --jaune-pale-2:    #FBEFB8;                 /* cases hors mois, en-têtes */
+  --jaune-regle:     rgba(120, 90, 10, 0.16);
+  --bleu:            #2563EB;
+  --bleu-vif:        #1D4ED8;
+  --bleu-texte:      #FFFFFF;
+  --bleu-pale:       rgba(37, 99, 235, 0.10);
+  --lateral-bg:      #2E1F27;
+  --lateral-texte:   #F3E8EC;
+  --lateral-douce:   #CDB7C0;
+  --lateral-pale:    #A38C96;
+  --lateral-filet:   rgba(255, 255, 255, 0.12);
+  --lateral-actif:   rgba(255, 255, 255, 0.13);
+  --entete-bg:       #FBEEF2;
+  --entete-filet:    rgba(158, 48, 87, 0.20);
+}
+[data-theme="dark"] {
+  --jaune-pale:      #2C2818;
+  --jaune-pale-2:    #37311C;
+  --jaune-regle:     rgba(255, 230, 150, 0.16);
+  --bleu:            #7FA7FF;
+  --bleu-vif:        #A3C0FF;
+  --bleu-texte:      #10172A;
+  --bleu-pale:       rgba(127, 167, 255, 0.16);
+  --lateral-bg:      #100C0E;
+  --lateral-texte:   #F2F2F2;
+  --lateral-douce:   #BDB0B5;
+  --lateral-pale:    #8E8288;
+  --lateral-filet:   rgba(255, 255, 255, 0.10);
+  --lateral-actif:   rgba(255, 255, 255, 0.11);
+  --entete-bg:       #241B20;
+  --entete-filet:    rgba(240, 155, 182, 0.22);
+}
+
+/* ── Barre latérale ── */
+.sidebar {
+  background: var(--lateral-bg);
+  border-right: 1px solid var(--lateral-filet);
+  color: var(--lateral-texte);
+}
+.sidebar-logo {
+  border-bottom: 1px solid var(--lateral-filet);
+  padding: 16px 16px 14px;
+}
+/* Le logo est un PNG sur fond blanc : on le pose sur une carte blanche,
+   sinon un rectangle blanc apparaîtrait sur le prune. */
+.sidebar-logo img {
+  background: #fff; padding: 7px 12px; border-radius: 10px;
+  max-height: 48px; width: 100%; max-width: 100%; object-fit: contain;
+  box-shadow: 0 1px 2px rgba(0,0,0,.25);
+}
+.logo-name { color: var(--lateral-texte); }
+.logo-tagline { color: var(--lateral-douce); }
+.nav-section { color: var(--lateral-pale); }
+.nav-item { color: var(--lateral-douce); border-radius: 9px; }
+.nav-item svg { opacity: .9; }
+.nav-item:hover { background: rgba(255,255,255,0.07); color: var(--lateral-texte); }
+.nav-item.active {
+  background: var(--lateral-actif); color: #fff;
+  border-left-color: var(--encre-rose);
+}
+[data-theme="dark"] .nav-item.active { color: #fff; border-left-color: #F09BB6; }
+.nav-badge { background: var(--encre-rose); color: #fff; }
+.sidebar-footer { border-top: 1px solid var(--lateral-filet); }
+.user-name { color: var(--lateral-texte); }
+.user-role { color: var(--lateral-douce); }
+.user-avatar { background: var(--encre-rose); }
+.btn-logout { color: var(--lateral-douce); border-color: var(--lateral-filet); }
+.btn-logout:hover { background: rgba(240,145,156,.16); color: #FFC5CC; border-color: rgba(240,145,156,.4); }
+.sidebar .install-btn, .sidebar .install-badge { color: var(--lateral-texte); }
+
+/* ── En-tête ── */
+.page-header {
+  background: var(--entete-bg);
+  border-bottom: 1px solid var(--entete-filet);
+  box-shadow: 0 1px 0 rgba(255,255,255,.6) inset, var(--shadow-sm);
+}
+.hamburger, .dark-toggle { color: var(--encre); }
+
+/* ── Agenda : feuilles jaune pâle, boutons de vue en bleu ── */
+.agenda-page .section-card,
+.agenda-page .feuille {
+  background: var(--jaune-pale);
+  border-color: var(--jaune-regle);
+}
+.agenda-page .section-card-header, .mois-entetes, .sem-entete { border-bottom-color: var(--jaune-regle); }
+.mois-entetes div { color: var(--encre-douce); }
+.mois-case { border-color: var(--jaune-regle); }
+.mois-case.hors { background: var(--jaune-pale-2); opacity: 1; }
+.mois-case.hors .mois-num { color: var(--encre-pale); }
+.mois-case:hover { background: var(--bleu-pale); }
+.mois-case.aujourdhui { background: var(--bleu-pale); box-shadow: inset 0 0 0 2px var(--bleu); }
+.mois-case.aujourdhui .mois-num { background: var(--bleu); color: var(--bleu-texte); }
+.sem-col { border-right-color: var(--jaune-regle); }
+.sem-col.aujourdhui { background: var(--bleu-pale); }
+.sem-col.aujourdhui .sem-num { color: var(--bleu); }
+.jour-item:hover { background: var(--bleu-pale); }
+.agenda-page .entree { border-bottom-color: var(--jaune-regle); }
+.agenda-page .hub-sous-titre::after { background: var(--jaune-regle); }
+
+.agenda-vues { background: var(--white); border-color: var(--regle); }
+.agenda-vues .sub-nav-item { color: var(--encre-douce); border-radius: 8px; }
+.agenda-vues .sub-nav-item:hover:not(.active) { background: var(--bleu-pale); color: var(--bleu); }
+.agenda-vues .sub-nav-item.active { background: var(--bleu); color: var(--bleu-texte); }
+.agenda-vues .sub-nav-item.active:hover { background: var(--bleu-vif); }
+.agenda-nav .btn-secondary:hover { border-color: var(--bleu); color: var(--bleu); }
+
+/* ── Tâches : la feuille en jaune pâle ── */
+.taches-feuille {
+  background: var(--jaune-pale);
+  border-color: var(--jaune-regle);
+}
+.taches-feuille .entree { border-bottom-color: var(--jaune-regle); }
+.taches-feuille .hub-sous-titre::after { background: var(--jaune-regle); }
+.taches-feuille .case { background: #fff; }
+[data-theme="dark"] .taches-feuille .case { background: var(--papier); }
+.taches-feuille .case.cochee { background: var(--encre-verte); }
+
+/* Barre des listes et des étiquettes : puces blanches sur fond blanc,
+   on leur donne un liseré plus franc et une ombre légère. */
+.liste-chip { box-shadow: var(--shadow-sm); border-color: rgba(17,17,17,.18); }
+[data-theme="dark"] .liste-chip { border-color: rgba(255,255,255,.18); }
+.liste-chip.active { background: var(--bleu); border-color: var(--bleu); color: var(--bleu-texte); }
+.liste-chip.active .ic { color: var(--bleu-texte); }
+.liste-chip.active .hub-compteur { background: rgba(255,255,255,.25); color: var(--bleu-texte); }
+[data-theme="dark"] .liste-chip.active .hub-compteur { background: rgba(0,0,0,.18); }
+
+/* ── Gestion des étiquettes (page Tâches) ── */
+.etiq-gestion { display: flex; flex-direction: column; gap: 4px; }
+.etiq-ligne {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 4px 4px 6px; border-radius: 10px; min-height: 44px;
+  border: 1px solid var(--regle); background: var(--papier);
+}
+.etiq-ligne-corps {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px;
+  text-align: left; padding: 6px; border-radius: 8px; background: transparent;
+}
+.etiq-ligne-corps:hover { background: var(--papier-creux); }
+.etiq-ligne-corps .etiq-chip { font-size: 13px; padding: 4px 10px; }
+.etiq-ligne-sys { font-size: 11px; color: var(--encre-pale); }
+
+/* ── Éditeur de note : la barre d'outils ──
+   Le sélecteur d'étiquette chevauchait les pastilles de couleur : chaque
+   élément a maintenant sa place et passe à la ligne quand il manque de
+   largeur. */
+.note-outils {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--regle);
+}
+.note-couleurs { display: flex; flex-wrap: wrap; gap: 8px; flex: 0 0 auto; }
+.note-couleur { width: 28px; height: 28px; flex-shrink: 0; border: 2px solid rgba(0,0,0,.12); }
+.note-couleur.on { border-color: var(--encre); border-width: 3px; }
+.note-couleur-libre { position: relative; overflow: hidden; cursor: pointer; }
+.note-couleur-libre input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+.note-outils .filter-select {
+  flex: 1 1 170px; min-width: 0; max-width: 100%; width: auto;
+  min-height: 40px; font-size: 14px;
+}
+.note-outils .taches-switch { flex: 0 0 auto; min-height: 40px; display: inline-flex; align-items: center; gap: 7px; }
+@media (max-width: 560px) {
+  .note-outils .filter-select { flex: 1 1 100%; }
+}
+
+/* ── Tableau de bord : le bloc « Mes tâches » ──
+   Un résumé chiffré en tête, puis un bandeau coloré par groupe : on voit
+   d'un coup d'œil ce qui presse, sans lire toutes les lignes. */
+.hub-taches-resume { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; }
+.hub-taches-pilule {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px;
+  font-family: var(--sans); font-size: 12px; font-weight: 600;
+  color: var(--encre); background: rgba(255,255,255,.7);
+  border: 1px solid rgba(0,0,0,.10);
+}
+[data-theme="dark"] .hub-taches-pilule { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); }
+.hub-taches-pilule b { font-size: 15px; font-weight: 800; color: var(--g); }
+.hub-taches-pilule.vide { opacity: .55; }
+.hub-taches-pilule-rouge { --g: var(--encre-rouge); }
+.hub-taches-pilule-or    { --g: var(--encre-or); }
+.hub-taches-pilule-rose  { --g: var(--encre-rose); }
+
+.hub-groupe {
+  --g: var(--encre-douce);
+  margin-bottom: 10px; border-radius: 12px; overflow: hidden;
+  background: rgba(255,255,255,.62); border: 1px solid rgba(0,0,0,.08);
+}
+[data-theme="dark"] .hub-groupe { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.10); }
+.hub-groupe:last-child { margin-bottom: 0; }
+.hub-groupe-rouge { --g: var(--encre-rouge); }
+.hub-groupe-or    { --g: var(--encre-or); }
+.hub-groupe-rose  { --g: var(--encre-rose); }
+.hub-groupe-pale  { --g: var(--encre-douce); }
+
+.hub-groupe-bande {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; text-align: left;
+  background: var(--g); color: #fff; border: none; cursor: pointer;
+}
+[data-theme="dark"] .hub-groupe-bande { color: #17161A; }
+.hub-groupe-ic { display: flex; }
+.hub-groupe-ic .ic, .hub-groupe-chevron .ic { vertical-align: 0; }
+.hub-groupe-titre { flex: 1 1 auto; font-family: var(--sans); font-weight: 700; font-size: 13.5px; }
+.hub-groupe-nb {
+  min-width: 24px; height: 22px; padding: 0 7px; border-radius: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.28); font-size: 12.5px; font-weight: 800;
+}
+[data-theme="dark"] .hub-groupe-nb { background: rgba(0,0,0,.16); }
+.hub-groupe-chevron { display: flex; transition: transform .18s ease; transform: rotate(90deg); }
+.hub-groupe[data-replie] .hub-groupe-chevron { transform: rotate(0deg); }
+.hub-groupe[data-replie] .hub-groupe-log { display: none; }
+.hub-groupe-log { padding: 2px 12px 4px; }
+.hub-groupe .entree { border-bottom-color: rgba(0,0,0,.07); }
+.hub-groupe .entree:last-of-type { border-bottom: none; }
+.hub-groupe-plus {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 8px; margin: 2px 0 4px; border-radius: 8px;
+  font-family: var(--sans); font-size: 12.5px; font-weight: 600;
+  color: var(--g); background: transparent;
+}
+.hub-groupe-plus:hover { background: rgba(0,0,0,.05); }

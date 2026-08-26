@@ -131,14 +131,6 @@ const Taches = {
                   >${Icone('plus', { taille: 16 })} Liste</button>
         </div>
 
-        <!-- ── Ajout en une ligne ──
-             Placé haut : sur téléphone, écrire une tâche est le geste le plus
-             fréquent, il ne doit pas demander de faire défiler la page. -->
-        <div class="tache-ajout">
-          <input id="tacheFlash" autocomplete="off" enterkeyhint="done"
-                 placeholder="Nouvelle tâche…" />
-        </div>
-
         <!-- ── Filtres ── -->
         <div class="taches-filtres">
           <div class="search-input-wrap taches-filtre-recherche">
@@ -153,8 +145,8 @@ const Taches = {
           </select>
           <div class="taches-filtres-bas">
             <button class="liste-chip liste-chip-plus" id="btnGererEtiquettes"
-                    title="Créer une étiquette"
-                    >${Icone('plus', { taille: 16 })} Étiquette</button>
+                    title="Créer, modifier ou supprimer des étiquettes"
+                    >${Icone('etiquette', { taille: 16 })} Étiquettes</button>
             <button class="liste-chip ${this.voirFaites ? 'active' : ''}" id="tacheVoirFaites"
                     aria-pressed="${this.voirFaites ? 'true' : 'false'}"
                     title="Afficher aussi les tâches terminées et abandonnées"
@@ -217,13 +209,7 @@ const Taches = {
         return;
       }
 
-      if (e.target.closest('#btnGererEtiquettes')) {
-        SettingsPage._formEtiquette(null, async () => {
-          this._etiquettes = await DataStore.getEtiquettes(true);
-          await this._charger();
-        });
-        return;
-      }
+      if (e.target.closest('#btnGererEtiquettes')) { this._gererEtiquettes(); return; }
 
       if (e.target.closest('#btnNouvelleListe')) { this._formListe(); return; }
 
@@ -316,24 +302,6 @@ const Taches = {
       this.recherche = e.target.value;
       minuteur = setTimeout(async () => { await this._charger(); rendreFocus('tacheSearch'); }, 320);
     });
-
-    const flash = document.getElementById('tacheFlash');
-    flash.addEventListener('keydown', async e => {
-      if (e.key !== 'Enter' || !flash.value.trim()) return;
-      const p = QuickParse.analyser(flash.value);
-      await DataStore.addTacheComplete({
-        description:   p.type === 'evenement' ? p.titre : p.titre,
-        echeance:      p.type === 'evenement' ? Dates.iso(p.date) : p.echeance,
-        heure:         p.type === 'evenement' ? Dates.heure(p.date) : p.heure,
-        rappelMinutes: (p.type === 'evenement' || p.heure) ? 15 : null,
-        priorite:      p.priorite || 'normale',
-        listeId:       this.listeActive,
-        etiquetteId:   this.etiqActive
-      });
-      flash.value = '';
-      await this._charger();
-      updateJourneeBadge();
-    });
   },
 
   /* ══ Formulaire complet ══ */
@@ -353,11 +321,24 @@ const Taches = {
         </div>
         <div class="field">
           <label>Liste</label>
-          <select id="fListe">
-            <option value="">Sans liste</option>
-            ${this._listes.map(l => `<option value="${l.id}" ${t?.liste_id === l.id ? 'selected' : ''}>
-              ${esc(l.nom)}</option>`).join('')}
-          </select>
+          <div class="champ-plus">
+            <select id="fListe">
+              <option value="">Sans liste</option>
+              ${this._listes.map(l => `<option value="${l.id}" ${t?.liste_id === l.id ? 'selected' : ''}>
+                ${esc(l.nom)}</option>`).join('')}
+            </select>
+            <button type="button" class="champ-plus-btn" id="fListePlus"
+                    title="Créer une liste" aria-label="Créer une liste"
+                    >${Icone('plus', { taille: 18 })}</button>
+          </div>
+          <div class="etiq-express" id="fListeNouvelle" hidden>
+            <input id="fListeNom" placeholder="Nom de la nouvelle liste" maxlength="40" />
+            ${grilleIcones('fListeIcone', CHOIX_LISTE, 'liste')}
+            <div class="etiq-express-ligne">
+              <input type="color" id="fListeCouleur" value="#2563EB" aria-label="Couleur de la liste" />
+              <button type="button" class="btn btn-sm btn-primary" id="fListeCreer">Créer la liste</button>
+            </div>
+          </div>
         </div>
         <div class="field">
           <label>Étiquette</label>
@@ -475,6 +456,92 @@ const Taches = {
 
     document.getElementById('fEtiqNom').addEventListener('keydown', e => {
       if (e.key === 'Enter') { e.preventDefault(); document.getElementById('fEtiqCreer').click(); }
+    });
+
+    /* ── Création d'une liste sans quitter le formulaire ── */
+    const zoneL = document.getElementById('fListeNouvelle');
+    const selL  = document.getElementById('fListe');
+    document.getElementById('fListePlus').addEventListener('click', () => {
+      zoneL.hidden = !zoneL.hidden;
+      if (!zoneL.hidden) document.getElementById('fListeNom').focus();
+    });
+    document.getElementById('fListeCreer').addEventListener('click', async () => {
+      const nom = document.getElementById('fListeNom').value.trim();
+      if (!nom) { Toast.show('Donnez un nom à la liste', 'error'); return; }
+      try {
+        const nouvelle = await DataStore.addListe({
+          nom,
+          icone:   document.getElementById('fListeIcone').value,
+          couleur: document.getElementById('fListeCouleur').value
+        });
+        this._listes = await DataStore.getListes();
+        const opt = document.createElement('option');
+        opt.value = nouvelle.id; opt.textContent = nouvelle.nom;
+        selL.appendChild(opt);
+        selL.value = nouvelle.id;
+        document.getElementById('fListeNom').value = '';
+        zoneL.hidden = true;
+        Toast.show('Liste créée', 'success');
+      } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
+    });
+    document.getElementById('fListeNom').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('fListeCreer').click(); }
+    });
+  },
+
+  /* ══ Gestion des étiquettes, depuis la page Tâches ══
+     Créer, renommer, recolorer, supprimer : le même formulaire que dans les
+     Paramètres, sans avoir à y aller. */
+  async _gererEtiquettes() {
+    this._etiquettes = await DataStore.getEtiquettes(true);
+    const rafraichir = async () => {
+      this._etiquettes = await DataStore.getEtiquettes(true);
+      if (this.etiqActive && !this._etiquettes.some(e => e.id === this.etiqActive)) this.etiqActive = null;
+      await this._charger();
+      this._gererEtiquettes();
+    };
+
+    Modal.open('Étiquettes', `
+      <div class="etiq-gestion">
+        ${this._etiquettes.length ? this._etiquettes.map(e => `
+          <div class="etiq-ligne">
+            <button class="etiq-ligne-corps" data-etiq-edit="${e.id}" title="Modifier">
+              ${pucePastille(e)}
+              ${e.systeme ? '<span class="etiq-ligne-sys">système</span>' : ''}
+            </button>
+            ${e.systeme ? '' : `
+              <button class="btn-icon danger" data-etiq-del="${e.id}"
+                      title="Supprimer" aria-label="Supprimer l'étiquette ${esc(e.nom)}"
+                      >${Icone('poubelle', { taille: 16 })}</button>`}
+          </div>`).join('')
+          : '<div class="empty-state">Aucune étiquette pour l\'instant.</div>'}
+      </div>`, [
+      { label: 'Fermer', cls: 'btn btn-secondary', action: () => Modal.close() },
+      { label: `${Icone('plus', { taille: 16 })} Nouvelle étiquette`, cls: 'btn btn-primary',
+        action: () => SettingsPage._formEtiquette(null, rafraichir) }
+    ], 'modal-sm');
+
+    document.querySelector('.etiq-gestion').addEventListener('click', e => {
+      const del = e.target.closest('[data-etiq-del]');
+      if (del) {
+        const et = this._etiquettes.find(x => x.id === del.dataset.etiqDel);
+        Modal.open(`Supprimer « ${et?.nom || ''} » ?`,
+          '<p style="font-size:14px;color:var(--text-muted);">Les tâches, notes et rendez-vous qui la portent sont conservés, simplement sans étiquette.</p>',
+          [
+            { label: 'Annuler',   cls: 'btn btn-secondary', action: () => this._gererEtiquettes() },
+            { label: 'Supprimer', cls: 'btn btn-danger', action: async () => {
+                try { await DataStore.deleteEtiquette(et.id); Toast.show('Étiquette supprimée', 'info'); }
+                catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
+                await rafraichir();
+              } }
+          ], 'modal-sm');
+        return;
+      }
+      const ed = e.target.closest('[data-etiq-edit]');
+      if (ed) {
+        const et = this._etiquettes.find(x => x.id === ed.dataset.etiqEdit);
+        if (et) SettingsPage._formEtiquette(et, rafraichir);
+      }
     });
   },
 

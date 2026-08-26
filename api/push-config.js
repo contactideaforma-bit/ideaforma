@@ -10,6 +10,10 @@ function resolveOrigin(req) {
     .split(',').map(s => s.trim()).filter(Boolean);
   const origin = req.headers.origin;
   if (!allowed.length) return origin || '*';
+  /* Sans en-tête Origin, la requête est same-origin (fetch GET depuis la page,
+     app installée sur iPhone…). La refuser rendait la clé VAPID inaccessible :
+     « Configuration des notifications indisponible », et aucun abonnement. */
+  if (!origin) return '*';
   return allowed.includes(origin) ? origin : null;
 }
 

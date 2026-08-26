@@ -5,10 +5,10 @@
    choisit la couleur (rangée dans profiles.preferences, donc identique sur le
    téléphone et sur l'ordinateur).
 
-   Trois choses se font ici sans changer de page :
-     – parler à l'assistant, au clavier ou à la voix ;
+   Deux choses se font ici sans changer de page :
      – cocher une tâche ;
      – créer une tâche, un rendez-vous ou une note (bouton + de chaque bloc).
+   L'assistant, lui, vit dans le bouton flottant en bas à droite (assistant.js).
 
    Le tableau de bord est PERSONNEL : rien qui touche aux dossiers OPCO n'y
    figure. Les échéances de formation vivent sur « Ma journée ».
@@ -20,8 +20,6 @@ const Hub = {
   _etiquettes: [],
   _listes:     [],
   _prefs:      {},
-  _iaOccupe:   false,
-  _reco:       null,     // reconnaissance vocale en cours
 
   /* Les huit pastels, dans l'ordre où ils sont proposés. On enregistre la
      CLÉ et non la couleur : le thème sombre remplace la valeur derrière. */
@@ -66,8 +64,6 @@ const Hub = {
     document.getElementById('pageContent').innerHTML = `
       <div class="hub">
         <div class="hub-tuiles">${this._tuilesCorps(r)}</div>
-
-        ${this._blocAssistant()}
 
         <div class="hub-grid">
           <div class="hub-col">
@@ -151,38 +147,6 @@ const Hub = {
   },
 
   /* ══════════════════════════════════════════════
-     BLOC ASSISTANT
-     Écrit ou dicté. La réponse s'affiche sur place ; si l'assistant a créé
-     quelque chose, les autres blocs se remettent à jour sans effacer la
-     conversation en cours.
-  ══════════════════════════════════════════════ */
-  _blocAssistant() {
-    const exemples = [
-      "Qu'est-ce que j'ai demain ?",
-      'Rappelle-moi d’appeler le comptable jeudi 10h',
-      'Mes tâches en retard'
-    ];
-
-    const corps = `
-      <div class="ia-saisie">
-        <textarea id="iaTexte" rows="1" enterkeyhint="send"
-                  placeholder="Écrivez ou dictez…"></textarea>
-        <button class="ia-bouton ia-bouton-micro" id="iaMicro" hidden
-                title="Dicter" aria-label="Dicter la demande">${Icone('micro')}</button>
-        <button class="ia-bouton ia-bouton-envoi" id="iaEnvoyer"
-                title="Envoyer" aria-label="Envoyer la demande">${Icone('envoyer')}</button>
-      </div>
-      <div class="ia-exemples">
-        ${exemples.map(e => `<button class="ia-exemple">${esc(e)}</button>`).join('')}
-      </div>
-      <div class="ia-reponse" id="iaReponse" hidden></div>`;
-
-    return this._postit('assistant', 'Assistant',
-      this._btn('data-goto="assistant"', 'Discussion', 'Ouvrir la discussion complète'),
-      corps);
-  },
-
-  /* ══════════════════════════════════════════════
      BLOC AGENDA
   ══════════════════════════════════════════════ */
   _blocAgenda(r) {
@@ -245,22 +209,44 @@ const Hub = {
     const hui   = Dates.aujourdhui();
     const dans7 = Dates.iso(new Date(Date.now() + 7 * 86400000));
 
+    /* Quatre groupes, chacun avec sa couleur : on lit d'abord le bandeau
+       (titre + nombre), puis seulement les lignes. */
     const groupes = [
-      { titre: 'En retard',     cls: 'rouge', items: r.taches.filter(t => t.echeance && t.echeance < hui) },
-      { titre: "Aujourd'hui",   cls: 'or',    items: r.taches.filter(t => t.echeance === hui) },
-      { titre: 'Cette semaine', cls: 'rose',  items: r.taches.filter(t => t.echeance > hui && t.echeance <= dans7) },
-      { titre: 'Sans date',     cls: 'pale',  items: r.taches.filter(t => !t.echeance).slice(0, 6) }
-    ].filter(g => g.items.length);
+      { cle: 'retard',  titre: 'En retard',     cls: 'rouge', icone: 'alerte',  items: r.taches.filter(t => t.echeance && t.echeance < hui) },
+      { cle: 'jour',    titre: "Aujourd'hui",   cls: 'or',    icone: 'horloge', items: r.taches.filter(t => t.echeance === hui) },
+      { cle: 'semaine', titre: 'Cette semaine', cls: 'rose',  icone: 'agenda',  items: r.taches.filter(t => t.echeance > hui && t.echeance <= dans7) },
+      { cle: 'sansdate',titre: 'Sans date',     cls: 'pale',  icone: 'liste',   items: r.taches.filter(t => !t.echeance) }
+    ];
+    const pleins = groupes.filter(g => g.items.length);
 
-    if (!groupes.length) {
+    if (!pleins.length) {
       return `<p class="hub-vide">Aucune tâche en attente. Profitez-en.</p>`;
     }
-    return groupes.map(g => `
-      <h3 class="hub-sous-titre hub-sous-titre-${g.cls}">
-        ${g.titre}<span class="hub-compteur">${g.items.length}</span>
-      </h3>
-      <div class="log">${g.items.slice(0, 8).map(t => this.ligneTache(t)).join('')}</div>
-    `).join('');
+
+    const MAX = 5;
+    return `
+      <div class="hub-taches-resume">
+        ${groupes.filter(g => g.cle !== 'sansdate').map(g => `
+          <span class="hub-taches-pilule hub-taches-pilule-${g.cls} ${g.items.length ? '' : 'vide'}">
+            <b>${g.items.length}</b> ${g.titre.toLowerCase()}
+          </span>`).join('')}
+      </div>
+      ${pleins.map(g => `
+        <section class="hub-groupe hub-groupe-${g.cls}" ${g.cle === 'sansdate' && pleins.length > 1 ? 'data-replie="1"' : ''}>
+          <button class="hub-groupe-bande" data-groupe="${g.cle}" aria-expanded="${g.cle === 'sansdate' && pleins.length > 1 ? 'false' : 'true'}">
+            <span class="hub-groupe-ic">${Icone(g.icone, { taille: 15 })}</span>
+            <span class="hub-groupe-titre">${g.titre}</span>
+            <span class="hub-groupe-nb">${g.items.length}</span>
+            <span class="hub-groupe-chevron">${Icone('chevron', { taille: 15 })}</span>
+          </button>
+          <div class="log hub-groupe-log">
+            ${g.items.slice(0, MAX).map(t => this.ligneTache(t)).join('')}
+            ${g.items.length > MAX ? `
+              <button class="hub-groupe-plus" data-goto="taches">
+                Voir les ${g.items.length - MAX} autres ${Icone('chevron', { taille: 13 })}
+              </button>` : ''}
+          </div>
+        </section>`).join('')}`;
   },
 
   /** Une tâche : case à cocher, texte, repères. Réutilisée par la page Tâches. */
@@ -440,11 +426,15 @@ const Hub = {
         return;
       }
 
-      /* ── Assistant ── */
-      if (cible('#iaEnvoyer'))  return this._demander();
-      if (cible('#iaMicro'))    return this._dicter();
-      const exemple = cible('.ia-exemple');
-      if (exemple) return this._demander(exemple.textContent.trim());
+      /* ── Replier / déplier un groupe de tâches ── */
+      const bande = cible('[data-groupe]');
+      if (bande) {
+        const sec = bande.closest('.hub-groupe');
+        const replie = sec.hasAttribute('data-replie');
+        if (replie) sec.removeAttribute('data-replie'); else sec.setAttribute('data-replie', '1');
+        bande.setAttribute('aria-expanded', replie ? 'true' : 'false');
+        return;
+      }
 
       /* ── Cocher une tâche ── */
       const check = cible('.case[data-tache-id]');
@@ -508,122 +498,6 @@ const Hub = {
       if (nav) return Router.navigate(nav.dataset.goto);
     });
 
-    /* ── Champ de l'assistant : hauteur souple, Entrée envoie ── */
-    const champ = document.getElementById('iaTexte');
-    champ.addEventListener('input', () => {
-      champ.style.height = 'auto';
-      champ.style.height = Math.min(champ.scrollHeight, 120) + 'px';
-    });
-    champ.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this._demander(); }
-    });
-
-    /* La dictée n'existe pas partout (Firefox notamment) : on n'affiche le
-       micro que si le navigateur sait vraiment écouter. */
-    if (window.SpeechRecognition || window.webkitSpeechRecognition) {
-      document.getElementById('iaMicro').hidden = false;
-    }
-  },
-
-  /* ══ Demande à l'assistant ══ */
-  async _demander(texteDonne) {
-    if (this._iaOccupe) return;
-    const champ = document.getElementById('iaTexte');
-    const texte = String(texteDonne ?? champ.value).trim();
-    if (!texte) { champ.focus(); return; }
-
-    const zone  = document.getElementById('iaReponse');
-    const envoi = document.getElementById('iaEnvoyer');
-    this._iaOccupe = true;
-    envoi.disabled = true;
-    champ.value = '';
-    champ.style.height = 'auto';
-
-    const entete = `<div class="ia-demande">« ${esc(texte)} »</div>`;
-    zone.hidden = false;
-    zone.innerHTML = entete + '<span class="ia-points"><i></i><i></i><i></i></span>';
-
-    try {
-      const r = await Assistant.demander(texte, {
-        onEtape: libelle => {
-          zone.innerHTML = entete +
-            `<div class="ia-etape">${libelle}</div>` +
-            '<span class="ia-points"><i></i><i></i><i></i></span>';
-        }
-      });
-
-      zone.innerHTML = entete + Assistant._markdown(r.texte) +
-        (r.actions.length
-          ? `<div class="ia-actions">${r.actions.map(a => `<span class="ia-action">${a}</span>`).join('')}</div>`
-          : '');
-
-      // L'assistant a pu créer ou modifier quelque chose : on remet les
-      // autres blocs à jour sans effacer sa réponse.
-      if (r.actions.length) await this._rafraichir();
-
-    } catch (err) {
-      zone.innerHTML = entete +
-        `<span class="ia-erreur">${Icone('alerte', { taille: 16 })} ${esc(err.message)}</span>`;
-    } finally {
-      this._iaOccupe = false;
-      const b = document.getElementById('iaEnvoyer');
-      if (b) b.disabled = false;
-    }
-  },
-
-  /* ══ Dictée ══
-     Un appui lance l'écoute, un second l'arrête. Dès que le navigateur rend
-     une phrase définitive, on envoie : dicter puis devoir appuyer sur
-     « envoyer » n'aurait aucun intérêt par rapport au clavier. */
-  _dicter() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const bouton = document.getElementById('iaMicro');
-    if (!SR) { Toast.show("La dictée n'est pas disponible sur ce navigateur", 'warning'); return; }
-
-    if (this._reco) { this._reco.stop(); return; }
-
-    const champ = document.getElementById('iaTexte');
-    const reco  = this._reco = new SR();
-    reco.lang            = 'fr-FR';
-    reco.interimResults  = true;
-    reco.continuous      = false;
-    reco.maxAlternatives = 1;
-
-    const depart = champ.value.trim();
-    let definitif = false;
-
-    reco.onresult = e => {
-      let dit = '';
-      for (let i = 0; i < e.results.length; i++) {
-        dit += e.results[i][0].transcript;
-        if (e.results[i].isFinal) definitif = true;
-      }
-      champ.value = (depart ? depart + ' ' : '') + dit.trim();
-    };
-
-    reco.onerror = ev => {
-      definitif = false;
-      Toast.show(ev.error === 'not-allowed'
-        ? 'Accès au micro refusé — autorisez-le dans les réglages du navigateur'
-        : "La dictée s'est interrompue", 'warning');
-    };
-
-    reco.onend = () => {
-      this._reco = null;
-      bouton.classList.remove('ecoute');
-      bouton.setAttribute('aria-label', 'Dicter la demande');
-      if (definitif && champ.value.trim()) this._demander();
-      else champ.focus();
-    };
-
-    try {
-      reco.start();
-      bouton.classList.add('ecoute');
-      bouton.setAttribute('aria-label', "Arrêter la dictée");
-    } catch {
-      this._reco = null;
-      Toast.show("La dictée n'a pas pu démarrer", 'warning');
-    }
   },
 
   /* ── Ouverture des formulaires sans quitter le tableau de bord ── */

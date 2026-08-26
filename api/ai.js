@@ -4,7 +4,7 @@
      ANTHROPIC_API_KEY   sk-ant-...                          (secret)
      SUPABASE_URL        https://xxxx.supabase.co
      SUPABASE_ANON_KEY   eyJhbGciOi...                       (clé publique anon)
-     ALLOWED_ORIGINS     https://ideaforma.vercel.app,http://localhost:3000
+     ALLOWED_ORIGINS     https://ideaforma-opco.vercel.app,http://localhost:3000
 
    Sans jeton Supabase valide, l'endpoint répond 401 : la clé Anthropic n'est
    plus consommable par un tiers qui connaîtrait l'URL.
@@ -14,9 +14,9 @@
    faite par le navigateur avec la session de l'utilisateur, donc sous RLS.
 ─────────────────────────────────────────────────────────────────────────────── */
 
-const MAX_BODY_CHARS   = 120000;  // l'historique + les résultats d'outils tiennent large
-const MAX_TOKENS_LIMIT = 4096;
-const RATE_LIMIT       = 60;      // requêtes par utilisateur…
+const MAX_BODY_CHARS   = 600000;  // un seul utilisateur : on laisse de la marge
+const MAX_TOKENS_LIMIT = 8192;
+const RATE_LIMIT       = 600;     // requêtes par utilisateur… (garde-fou anti-boucle seulement)
 const RATE_WINDOW_MS   = 60000;   // …par minute
 
 /* Modèles autorisés : on ne laisse pas le client choisir n'importe quoi */
@@ -51,6 +51,10 @@ function resolveOrigin(req) {
   // Aucune liste configurée : on autorise l'origine de la requête (mode dégradé,
   // la protection réelle reste la vérification du jeton ci-dessous).
   if (!allowed.length) return origin || '*';
+  // Pas d'en-tête Origin : c'est un appel same-origin (les navigateurs ne
+  // l'envoient pas toujours, l'app installée sur iPhone en particulier).
+  // Refuser ici bloquait les notifications ; le jeton reste le vrai verrou.
+  if (!origin) return '*';
   return allowed.includes(origin) ? origin : null;
 }
 
