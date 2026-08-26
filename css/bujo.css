@@ -1310,3 +1310,16 @@ html, body { overflow-x: hidden; }
 .sem-grille { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .sem-col { min-width: 0; }
 .mois-entetes div { background: var(--jaune-pale-2); }
+
+/* ── Barre latérale : le logo et le pied ne bougent pas, seul le menu défile.
+   Avant, toute la barre défilait ; sur un écran peu haut le logo partait
+   au-dessus du bord et semblait « mal cadré ». ── */
+.sidebar { overflow: hidden; display: flex; flex-direction: column; }
+.sidebar-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.sidebar-logo { flex: 0 0 auto; padding: 12px 16px 10px; }
+.sidebar-logo img { height: 68px; max-height: 68px; padding: 3px 12px; }
+.sidebar-footer { flex: 0 0 auto; }
+@media (max-height: 760px) {
+  .sidebar-logo img { height: 54px; max-height: 54px; }
+  .nav-item { padding-top: 7px; padding-bottom: 7px; }
+}
