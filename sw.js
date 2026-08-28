@@ -10,7 +10,7 @@
      restent servis depuis le cache.
 ───────────────────────────────────────────────────────────────────────────── */
 
-const CACHE_VERSION = 'ideaforma-v18';
+const CACHE_VERSION = 'ideaforma-v19';
 const COQUILLE = [
   '/app.html',
   '/index.html',
@@ -29,6 +29,7 @@ const COQUILLE = [
   '/js/ai.js',
   '/js/notifications.js',
   '/js/hub.js',
+  '/js/parcours.js',
   '/js/taches.js',
   '/js/agenda.js',
   '/js/notes.js',

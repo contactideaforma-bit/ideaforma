@@ -699,6 +699,7 @@ const Router = {
     notes:     () => Notes.render(),
     coffre:    () => Coffre.render(),
     journee:   () => JourneePage.render(),
+    parcours:  () => ParcoursPage.render(),
     activite:  () => Dashboard.render(),
     settings:  () => SettingsPage.render()
   },
