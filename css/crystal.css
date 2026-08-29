@@ -333,3 +333,92 @@ input:focus, select:focus, textarea:focus, .search-input:focus {
   border-radius: 24px;
   box-shadow: var(--ombre-verre), var(--reflet);
 }
+
+/* ═══ 9. Page Tâches v13 — toutes les listes (bureau), mosaïque (téléphone) ═══ */
+.taches-board {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+  gap: 14px; align-items: start;
+}
+.taches-liste-carte {
+  background-color: var(--verre);
+  -webkit-backdrop-filter: var(--flou); backdrop-filter: var(--flou);
+  border: 1px solid var(--verre-bord);
+  border-top: 4px solid var(--lc, #9E3057);
+  border-radius: 18px;
+  box-shadow: var(--ombre-verre), var(--reflet);
+  background-image: linear-gradient(180deg,
+      color-mix(in srgb, var(--lc, #9E3057) 10%, transparent),
+      transparent 60px);
+  min-width: 0;
+}
+.tlc-tete {
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 12px 6px;
+}
+.tlc-titre {
+  display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+  font-weight: 800; font-size: 15px; color: var(--encre);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tlc-titre[data-regler-liste] { cursor: pointer; }
+.tlc-titre[data-regler-liste]:hover { color: var(--encre-rose); }
+.tlc-titre .ic { color: var(--lc, var(--encre-rose)); flex: 0 0 auto; }
+.tlc-plus { margin-left: auto; }
+.tlc-corps { padding: 0 12px 10px; }
+.tlc-faites { border-top: 1px dashed var(--regle); margin-top: 6px; padding-top: 4px; opacity: 0.65; }
+
+.taches-mosaique {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+.taches-mosaique .liste-carte { flex-basis: auto; width: 100%; }
+
+/* ═══ 10. Formulaire de tâche simplifié (v13) ═══ */
+.tform { display: flex; flex-direction: column; gap: 10px; }
+.tform-titre {
+  font-size: 17px !important; font-weight: 600; padding: 12px 14px !important;
+  width: 100%;
+}
+.tform-notes { width: 100%; resize: vertical; }
+.tform-select, .tform-select-alerte { width: 100%; }
+.tform-liste-fixe {
+  display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
+  padding: 6px 13px; border-radius: 999px;
+  background: color-mix(in srgb, var(--lc, #9E3057) 14%, #FFFFFF);
+  border: 1px solid color-mix(in srgb, var(--lc, #9E3057) 30%, #FFFFFF);
+  color: color-mix(in srgb, var(--lc, #9E3057) 72%, #141418);
+  font-size: 13px; font-weight: 700;
+}
+.tform-boutons { display: flex; gap: 8px; flex-wrap: wrap; }
+.tform-outil {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  font-size: 13.5px; font-weight: 700; color: var(--encre);
+  background: var(--verre-dense);
+  border: 1px solid var(--verre-filet);
+  box-shadow: 0 3px 10px -4px rgba(158, 48, 87, 0.18),
+              inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  transition: var(--transition);
+  min-height: 40px;
+}
+.tform-outil[aria-pressed="true"] {
+  background: linear-gradient(135deg, var(--rose-vif), var(--rose-profond));
+  border-color: rgba(255, 255, 255, 0.55); color: #fff;
+}
+.tform-outil[aria-pressed="true"] .ic { color: #fff; }
+.tform-outil-urgent[aria-pressed="true"] {
+  background: linear-gradient(135deg, #E0517C, #B22946);
+}
+.tform-zone {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  padding: 10px; border-radius: 14px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid var(--verre-bord);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+.tform-zone input[type="date"], .tform-zone input[type="time"] { flex: 1 1 130px; min-width: 0; }
+.tform-zone-alertes .tform-select-alerte { flex: 1 1 140px; width: auto; }
+.tform-aide { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--encre-pale); }
+
+@media (max-width: 760px) {
+  .taches-board { grid-template-columns: 1fr; }
+}

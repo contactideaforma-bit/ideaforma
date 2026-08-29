@@ -36,7 +36,8 @@ const Assistant = {
             priorite:    { type: 'string', enum: ['basse', 'normale', 'haute'] },
             etiquette:   { type: 'string', description: 'Nom exact d\'une étiquette existante' },
             liste:       { type: 'string', description: 'Nom exact d\'une liste existante' },
-            rappel_minutes: { type: 'integer', description: 'Minutes avant l\'échéance pour la notification (0 = à l\'heure dite)' }
+            rappel_minutes: { type: 'integer', description: 'Minutes avant l\'échéance pour la notification (0 = à l\'heure dite)' },
+            rappel_minutes_2: { type: 'integer', description: 'Seconde alerte optionnelle, en minutes avant l\'échéance (ex. 1440 = la veille)' }
           },
           required: ['description']
         }
@@ -176,7 +177,8 @@ const Assistant = {
           priorite:      args.priorite || 'normale',
           etiquetteId:   idEtiquette(args.etiquette),
           listeId:       idListe(args.liste),
-          rappelMinutes: args.rappel_minutes ?? (args.heure ? 15 : null)
+          rappelMinutes:  args.rappel_minutes ?? (args.heure ? 0 : null),
+          rappelMinutes2: args.rappel_minutes_2 ?? null
         });
         return {
           ok: true, id: t.id,
@@ -349,6 +351,15 @@ ${listes.map(l => `- ${l.nom}`).join('\n') || '- aucune'}
 COMMENT TRAVAILLER
 - Tu as des outils pour lire ET écrire. Utilise-les plutôt que de demander à l'utilisateur de le faire lui-même.
 - Un horaire précis ⇒ creer_evenement. Une chose à faire sans horaire ⇒ creer_tache.
+- EXCEPTION IMPORTANTE : « rappelle-moi de… », « pense à me rappeler… », « n'oublie pas… »
+  ⇒ TOUJOURS creer_tache (jamais un rendez-vous), avec echeance + heure si données,
+  et rappel_minutes: 0 pour que la notification parte à l'heure dite.
+  Ex. « rappelle-moi d'envoyer le mail à l'école demain à 9h » ⇒ creer_tache
+  { description: "Envoyer le mail à l'école", echeance: demain, heure: "09:00", rappel_minutes: 0 }.
+- Si l'utilisateur nomme une liste (« dans la liste Courses », « liste école »),
+  remplis le champ liste avec son nom exact pris dans LISTES DE TÂCHES DISPONIBLES.
+- Une seconde alerte (rappel_minutes_2, ex. 1440 pour la veille) seulement si demandée
+  ou si l'échéance est visiblement importante.
 - Vocabulaire de l'interface : une tâche se COCHE quand elle est faite, se
   REPOUSSE à une autre date, ou s'ABANDONNE quand elle n'a plus lieu d'être.
   Un rendez-vous se pose dans l'agenda, une note dans le pense-bête.

@@ -162,6 +162,7 @@ Object.assign(DataStore, {
       echeance:       d.echeance     || null,
       heure:          d.heure        || null,
       rappel_minutes: d.rappelMinutes ?? null,
+      rappel_minutes_2: d.rappelMinutes2 ?? null,
       ordre:          d.ordre        ?? 0,
       fait:           false
     }).select().single();
@@ -176,7 +177,8 @@ Object.assign(DataStore, {
       description: 'description', notes: 'notes', priorite: 'priorite',
       echeance: 'echeance', heure: 'heure', ordre: 'ordre', fait: 'fait',
       listeId: 'liste_id', etiquetteId: 'etiquette_id',
-      dossierId: 'dossier_id', rappelMinutes: 'rappel_minutes'
+      dossierId: 'dossier_id', rappelMinutes: 'rappel_minutes',
+      rappelMinutes2: 'rappel_minutes_2'
     };
     Object.entries(champs).forEach(([js, col]) => {
       if (d[js] !== undefined) patch[col] = d[js] === '' ? null : d[js];
