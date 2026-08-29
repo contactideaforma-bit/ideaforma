@@ -19,14 +19,15 @@
 
 :root {
   /* ── La matière ── */
-  --verre:        rgba(255, 255, 255, 0.62);
-  --verre-dense:  rgba(255, 255, 255, 0.78);
+  --verre:        rgba(255, 255, 255, 0.44);
+  --verre-dense:  rgba(255, 255, 255, 0.62);
   --verre-bord:   rgba(255, 255, 255, 0.85);
   --verre-filet:  rgba(158, 48, 87, 0.14);
   --reflet:       inset 0 1px 0 rgba(255, 255, 255, 0.95),
                   inset 0 -1px 0 rgba(255, 255, 255, 0.35);
-  --ombre-verre:  0 10px 34px -14px rgba(158, 48, 87, 0.28),
-                  0 2px 8px rgba(120, 80, 120, 0.08);
+  --ombre-verre:  0 12px 36px -14px rgba(120, 60, 100, 0.30),
+                  0 2px 8px rgba(60, 50, 80, 0.10),
+                  0 0 0 1px rgba(120, 60, 90, 0.06);
   --flou:         blur(22px) saturate(1.5);
 
   /* ── Les roses ── */
@@ -36,27 +37,27 @@
   --encre-rose-vif:#8C1F4B;
 
   /* ── Remplacement du papier ── */
-  --papier:       #FBF6F9;
+  --papier:       #FDFBFD;
   --papier-creux: rgba(255, 255, 255, 0.45);
   --pois:         transparent;                /* plus de points de carnet */
   --regle:        var(--verre-filet);
   --white:        #FFFFFF;
 
   /* Les pastels des post-it deviennent des voiles de verre teinté */
-  --pastel-rose:   rgba(246, 173, 205, 0.34);
-  --pastel-peche:  rgba(250, 196, 158, 0.30);
-  --pastel-jaune:  rgba(247, 226, 140, 0.30);
-  --pastel-vert:   rgba(168, 224, 188, 0.32);
-  --pastel-menthe: rgba(153, 222, 214, 0.32);
-  --pastel-ciel:   rgba(166, 200, 247, 0.32);
-  --pastel-lilas:  rgba(203, 181, 244, 0.32);
-  --pastel-gris:   rgba(224, 224, 230, 0.38);
+  --pastel-rose:   rgba(246, 173, 205, 0.24);
+  --pastel-peche:  rgba(250, 196, 158, 0.22);
+  --pastel-jaune:  rgba(247, 226, 140, 0.22);
+  --pastel-vert:   rgba(168, 224, 188, 0.22);
+  --pastel-menthe: rgba(153, 222, 214, 0.22);
+  --pastel-ciel:   rgba(166, 200, 247, 0.22);
+  --pastel-lilas:  rgba(203, 181, 244, 0.22);
+  --pastel-gris:   rgba(224, 224, 230, 0.28);
 
   /* Barre latérale et en-tête : verre blanc / verre rosé */
-  --lateral-bg:    rgba(255, 255, 255, 0.55);
+  --lateral-bg:    rgba(255, 255, 255, 0.48);
   --lateral-filet: rgba(158, 48, 87, 0.12);
   --lateral-actif: rgba(255, 255, 255, 0.92);
-  --entete-bg:     rgba(249, 214, 229, 0.55);
+  --entete-bg:     rgba(253, 236, 244, 0.50);
   --entete-filet:  rgba(158, 48, 87, 0.16);
   --jaune-pale:    rgba(255, 255, 255, 0.50); /* les feuilles jaunes deviennent du verre */
   --jaune-pale-2:  rgba(255, 244, 250, 0.65);
@@ -76,11 +77,11 @@
 body, .app-layout {
   background-color: var(--papier);
   background-image:
-    radial-gradient(1100px 700px at 12% -8%,  rgba(246, 167, 202, 0.42), transparent 60%),
-    radial-gradient(900px 640px  at 88% 4%,   rgba(196, 181, 245, 0.34), transparent 62%),
-    radial-gradient(1000px 720px at 78% 96%,  rgba(160, 216, 235, 0.32), transparent 60%),
-    radial-gradient(760px 560px  at 6% 88%,   rgba(250, 205, 164, 0.22), transparent 62%),
-    linear-gradient(165deg, #FDF7FB 0%, #F6F3FC 48%, #F1F7FB 100%);
+    radial-gradient(1100px 700px at 12% -8%,  rgba(246, 167, 202, 0.20), transparent 60%),
+    radial-gradient(900px 640px  at 88% 4%,   rgba(196, 181, 245, 0.15), transparent 62%),
+    radial-gradient(1000px 720px at 78% 96%,  rgba(160, 216, 235, 0.15), transparent 60%),
+    radial-gradient(760px 560px  at 6% 88%,   rgba(250, 205, 164, 0.10), transparent 62%),
+    linear-gradient(165deg, #FEFCFE 0%, #FBFAFE 48%, #F8FBFD 100%);
   background-attachment: fixed;
   background-size: auto, auto, auto, auto, auto;
 }
@@ -185,7 +186,9 @@ body::before {
 /* Titres : modernes, gras, resserrés — plus de manuscrit */
 .page-title {
   font-family: var(--sans); font-weight: 800; letter-spacing: -0.02em;
+  color: #0F0F12;
 }
+.postit-titre, .section-card-title, .hub-sous-titre { color: #131316; }
 .postit-titre, .section-card-title, .hub-sous-titre {
   font-family: var(--sans); letter-spacing: 0.05em;
 }
@@ -269,7 +272,7 @@ input:focus, select:focus, textarea:focus, .search-input:focus {
 .liste-vue-feuille { border-top: 4px solid var(--lc, var(--rose-vif)); }
 
 /* ═══ 6. Modales, panneau de l'assistant, toasts ═══ */
-.modal { background: rgba(255, 255, 255, 0.82); }
+.modal { background: rgba(255, 255, 255, 0.72); }
 .modal-overlay, #modalOverlay { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .chatbot, .toast {
   background: rgba(255, 255, 255, 0.80);
@@ -287,13 +290,29 @@ input:focus, select:focus, textarea:focus, .search-input:focus {
 .dark-toggle, #darkToggle { display: none !important; }
 
 /* ═══ 8. Finitions ═══ */
-/* Les bandeaux colorés gardent leur couleur franche mais prennent un éclat
-   de verre : un voile de lumière en haut, comme le reste. */
+/* Les bandeaux de groupe (Aujourd'hui, Cette semaine, En retard…) :
+   fini les aplats saturés hors thème — un verre teinté de leur couleur,
+   le texte dans la version profonde de la même teinte, et un filet
+   coloré à gauche pour garder le repère. Contraste ≥ 4,5:1. */
 .hub-groupe-bande {
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.24),
-                    rgba(255, 255, 255, 0) 60%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 70%),
+              color-mix(in srgb, var(--g, #A82D5F) 14%, rgba(255, 255, 255, 0.45));
+  color: color-mix(in srgb, var(--g, #A82D5F) 72%, #141418);
+  box-shadow: inset 3px 0 0 var(--g, #A82D5F),
+              inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  font-weight: 800;
 }
+.hub-groupe-nb {
+  background: color-mix(in srgb, var(--g, #A82D5F) 16%, #FFFFFF);
+  color: color-mix(in srgb, var(--g, #A82D5F) 75%, #141418);
+}
+/* Les teintes elles-mêmes, accordées au crystal */
+.hub-groupe-bleu  { --g: #4A66C9; }
+.hub-groupe-prune { --g: #7A55A6; }
+.hub-groupe-rouge { --g: #C23A55; }
+.hub-groupe-or    { --g: #B07E22; }
+.hub-groupe-rose  { --g: #C94B84; }
+.hub-groupe-pale  { --g: #8A8A92; }
 
 /* Le bouton dangereux (Supprimer, Créer l'urgence) : verre rouge franc */
 .btn-danger {
