@@ -87,11 +87,11 @@ const Hub = {
   },
 
   _salutation() {
+    // Demandé le 29/08/2026 : « La King » la journée, Vincent le soir.
     const h = new Date().getHours();
-    if (h < 6)  return 'Bonne nuit';
-    if (h < 12) return 'Bonjour';
-    if (h < 18) return 'Bon après-midi';
-    return 'Bonsoir';
+    if (h < 6)  return 'Bonne nuit Vincent';
+    if (h < 18) return 'Bonjour La King';
+    return 'Bonsoir Vincent';
   },
 
   /* ══════════════════════════════════════════════
