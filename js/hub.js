@@ -32,7 +32,7 @@ const Hub = {
   },
   TEINTE_DEFAUT: {
     assistant: 'lilas', agenda: 'ciel', taches: 'vert',
-    notes: 'jaune', raccourcis: 'gris', coffre: 'peche'
+    notes: 'jaune', raccourcis: 'gris', coffre: 'peche', urgent: 'rose'
   },
 
   /* Utilisé aussi par js/agenda.js pour nommer un type d'entrée. */
@@ -72,6 +72,7 @@ const Hub = {
 
         <div class="hub-grid">
           <div class="hub-col">
+            ${this._blocUrgent(r)}
             ${this._blocAgenda(r)}
             ${this._blocTaches(r)}
           </div>
@@ -184,6 +185,34 @@ const Hub = {
   },
 
   /* ══════════════════════════════════════════════
+     BLOC URGENT — tout ce qui est en priorité haute et pas fait.
+     Invisible quand il n'y a rien d'urgent : pas d'alarme pour rien.
+  ══════════════════════════════════════════════ */
+  _tachesUrgentes(r) {
+    return r.taches
+      .filter(t => t.priorite === 'haute' && !t.fait && !t.abandonnee)
+      .sort((a, b) => String(a.echeance || '9999').localeCompare(String(b.echeance || '9999')));
+  },
+
+  _blocUrgent(r) {
+    if (!this._tachesUrgentes(r).length) return '';
+    return this._postit('urgent', 'Urgent',
+      this._btn('data-nouvelle-urgence', `${Icone('plus', { taille: 15 })} Urgence`, 'Créer une tâche urgente'),
+      this._corpsUrgent(r));
+  },
+
+  _corpsUrgent(r) {
+    const urgentes = this._tachesUrgentes(r);
+    if (!urgentes.length) {
+      return `<p class="hub-vide">Plus rien d'urgent. Respirez.</p>`;
+    }
+    return `
+      <div class="log">${urgentes.slice(0, 8).map(t => this.ligneTache(t)).join('')}</div>
+      <p class="hub-urgent-note">Une tâche de la liste « Urgent » non cochée
+      est relancée chaque jour à 10 h et 15 h.</p>`;
+  },
+
+  /* ══════════════════════════════════════════════
      BLOC AGENDA
   ══════════════════════════════════════════════ */
   _blocAgenda(r) {
@@ -255,10 +284,12 @@ const Hub = {
         <b>${n}</b> ${titre}
       </span>`;
 
-    /* La plus récemment ouverte d'abord ; à date égale, l'ordre manuel. */
+    /* La liste « Urgent » d'abord, puis la plus récemment ouverte. */
+    const urg = l => (l.nom || '').toLowerCase() === 'urgent' ? 0 : 1;
     const listes = [...this._listes].sort((a, b) =>
-      String(b.utilisee_le || b.cree_le || '').localeCompare(
-      String(a.utilisee_le || a.cree_le || ''))
+      urg(a) - urg(b)
+      || String(b.utilisee_le || b.cree_le || '').localeCompare(
+         String(a.utilisee_le || a.cree_le || ''))
       || (a.ordre ?? 0) - (b.ordre ?? 0));
 
     const carte = (l, id, cls = '') => {
@@ -474,14 +505,17 @@ const Hub = {
           const titre = document.getElementById('uTitre').value.trim();
           if (!titre) { Toast.show('Dites au moins de quoi il s\'agit', 'error'); return; }
           try {
+            const lu = await DataStore.getListeUrgente(true);
             await DataStore.addTacheComplete({
-              description: titre, priorite: 'haute', echeance: Dates.aujourdhui()
+              description: titre, priorite: 'haute',
+              echeance: Dates.aujourdhui(), listeId: lu?.id || null
             });
             Modal.close();
-            Toast.show('Tâche urgente créée', 'success');
+            Toast.show('Tâche urgente créée — relances à 10 h et 15 h tant qu\'elle n\'est pas cochée', 'success', 5000);
             updateJourneeBadge();
+            this._listes = await DataStore.getListes();
             if (this.listeOuverte) await this._peindreListe();
-            else                   await this._rafraichir();
+            else                   await this.render();
           } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
         } }
     ], 'modal-sm');
@@ -630,6 +664,7 @@ const Hub = {
     const poser = (sel, html) => { const n = hub.querySelector(sel); if (n) n.innerHTML = html; };
 
     poser('.hub-tuiles',                       this._tuilesCorps(r));
+    poser('[data-bloc="urgent"] .postit-corps', this._corpsUrgent(r));
     poser('[data-bloc="agenda"] .postit-corps', this._corpsAgenda(r));
     poser('[data-bloc="taches"] .postit-corps', this._corpsTaches(r));
     poser('[data-bloc="notes"]  .postit-corps', this._corpsNotes(r));
@@ -733,7 +768,7 @@ const Hub = {
         return;
       }
 
-      if (cible('#hubUrgence')) return this._urgence();
+      if (cible('#hubUrgence') || cible('[data-nouvelle-urgence]')) return this._urgence();
 
       /* ── Une carte du carrousel : la liste s'ouvre en pleine largeur ── */
       const carteListe = cible('[data-ouvrir-liste]');

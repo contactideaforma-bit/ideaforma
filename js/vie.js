@@ -103,6 +103,15 @@ Object.assign(DataStore, {
     if (error) this._handleError(error, 'deleteListe');
   },
 
+  /** La liste « Urgent » — reconnue par son NOM, créée au premier besoin.
+      Rouge, pictogramme alerte, ordre -1 : elle passe devant tout. */
+  async getListeUrgente(creer = false) {
+    const listes = await this.getListes();
+    const l = listes.find(x => (x.nom || '').toLowerCase() === 'urgent');
+    if (l || !creer) return l || null;
+    return this.addListe({ nom: 'Urgent', couleur: '#C2233A', icone: 'alerte', ordre: -1 });
+  },
+
   /** Enregistre l'ordre manuel des listes (glisser-déposer de la mosaïque).
       ids : tableau d'identifiants dans le nouvel ordre. */
   async reordonnerListes(ids) {

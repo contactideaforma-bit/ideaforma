@@ -74,8 +74,10 @@ const Taches = {
      mosaïque) ; à égalité (jamais réordonnées), la plus récente d'abord.
      Le carrousel de l'accueil, lui, garde le tri par dernière utilisation. */
   _listesTriees() {
+    const urg = l => (l.nom || '').toLowerCase() === 'urgent' ? 0 : 1;
     return [...this._listes].sort((a, b) =>
-      (a.ordre ?? 50) - (b.ordre ?? 50)
+      urg(a) - urg(b)
+      || (a.ordre ?? 50) - (b.ordre ?? 50)
       || String(b.utilisee_le || b.cree_le || '').localeCompare(
          String(a.utilisee_le || a.cree_le || '')));
   },
@@ -242,9 +244,15 @@ const Taches = {
     zone.addEventListener('touchmove', e => { if (envol) e.preventDefault(); },
                           { passive: false });
 
+    const estFixe = c => {
+      if (c.dataset.focusListe === 'sans') return true;
+      const l = this._listes.find(x => x.id === c.dataset.focusListe);
+      return (l?.nom || '').toLowerCase() === 'urgent';
+    };
+
     zone.addEventListener('pointerdown', e => {
       const c = e.target.closest('[data-focus-liste]');
-      if (!c || c.dataset.focusListe === 'sans') return;
+      if (!c || estFixe(c)) return;
       carte = c; sx = e.clientX; sy = e.clientY; envol = false;
       minuteur = setTimeout(() => {
         envol = true;
@@ -264,7 +272,7 @@ const Taches = {
       }
       const sous = document.elementFromPoint(e.clientX, e.clientY)
                      ?.closest('[data-focus-liste]');
-      if (sous && sous !== carte && sous.dataset.focusListe !== 'sans') {
+      if (sous && sous !== carte && !estFixe(sous)) {
         const r = sous.getBoundingClientRect();
         const avant = e.clientY < r.top + r.height / 2
                    || (e.clientY < r.bottom && e.clientX < r.left + r.width / 2);
@@ -281,7 +289,7 @@ const Taches = {
         setTimeout(() => { this._dragVientDeFinir = false; }, 400);
 
         const ids = [...zone.querySelectorAll('[data-focus-liste]')]
-          .map(x => x.dataset.focusListe).filter(id => id !== 'sans');
+          .filter(x => !estFixe(x)).map(x => x.dataset.focusListe);
         ids.forEach((id, i) => {
           const l = this._listes.find(x => x.id === id);
           if (l) l.ordre = i;
