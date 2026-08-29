@@ -304,7 +304,9 @@ const Taches = {
   /** `apres` permet d'ouvrir ce formulaire depuis une autre page (le carnet)
       sans qu'il repeigne la page Tâches par-dessus. */
   ouvrirForm(t = null, apres = null) {
-    const edition = !!t;
+    // Un objet SANS id (ex. { liste_id }) préremplit le formulaire tout en
+    // restant une création : c'est ce qu'envoie la liste ouverte du carnet.
+    const edition = !!(t && t.id);
     const corps = `
       <div class="form-grid">
         <div class="field form-col-full">

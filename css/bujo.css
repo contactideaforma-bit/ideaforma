@@ -1323,3 +1323,117 @@ html, body { overflow-x: hidden; }
   .sidebar-logo img { height: 54px; max-height: 54px; }
   .nav-item { padding-top: 7px; padding-bottom: 7px; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   16. v12 — accueil : carrousel de listes, liste pleine largeur, urgence
+   (29/08/2026)  Le bloc « Mes tâches » devient « Mes listes » : une carte par
+   liste, à SA couleur (var(--lc), choisie dans la fiche de la liste), la plus
+   récemment ouverte d'abord. Une carte choisie ouvre la liste en pleine
+   largeur, avec bouton retour. La 4e tuile est le bouton d'urgence.
+═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Bouton d'urgence, dans la rangée des tuiles ── */
+.hub-tuiles { grid-template-columns: repeat(3, 1fr) minmax(104px, auto); }
+.hub-urgence {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; min-width: 0; padding: 10px 16px;
+  background: #A32330; color: #FFFFFF;
+  border: 1px solid #7E1520; border-radius: 12px;
+  box-shadow: var(--ombre-feuille); cursor: pointer;
+  transition: var(--transition);
+}
+.hub-urgence:hover  { background: #8A1B27; }
+.hub-urgence:active { transform: scale(0.97); }
+.hub-urgence .ic    { color: #FFFFFF; }
+.hub-urgence-lbl {
+  font-family: var(--sans); font-size: 12px; font-weight: 800;
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+[data-theme="dark"] .hub-urgence {
+  /* Fond d'accent clair → texte sombre, jamais blanc (règle du thème sombre) */
+  background: #F0919C; color: #241B20; border-color: #F7B3BB;
+}
+[data-theme="dark"] .hub-urgence .ic { color: #241B20; }
+[data-theme="dark"] .hub-urgence:hover { background: #F7B3BB; }
+
+/* ── Le carrousel des listes ── */
+.hub-carrousel {
+  display: flex; gap: 10px; padding: 4px 2px 10px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity; scrollbar-width: thin;
+}
+.liste-carte {
+  flex: 0 0 168px; min-height: 118px; min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 10px 12px 11px; text-align: left;
+  scroll-snap-align: start; cursor: pointer;
+  background: var(--white);
+  background: color-mix(in srgb, var(--lc, #9E3057) 13%, var(--white));
+  border: 1px solid var(--regle);
+  border-top: 4px solid var(--lc, #9E3057);
+  border-radius: 12px; box-shadow: var(--ombre-feuille);
+  color: var(--encre); transition: var(--transition);
+}
+.liste-carte:hover { border-color: var(--lc, #9E3057); box-shadow: var(--ombre-postit); }
+.liste-carte:active { transform: scale(0.98); }
+.liste-carte-tete {
+  display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%;
+}
+.liste-carte-nom {
+  font-family: var(--serif); font-size: 15px; font-weight: 700;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.liste-carte-nb { font-size: 12px; font-weight: 600; color: var(--encre-douce); }
+.liste-carte-retard {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11.5px; font-weight: 700; color: var(--encre-rouge);
+}
+.liste-carte-apercu {
+  display: flex; flex-direction: column; gap: 1px; min-width: 0; max-width: 100%;
+  margin-top: auto; font-size: 11.5px; color: var(--encre-pale);
+}
+.liste-carte-apercu span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.liste-carte-plus {
+  align-items: center; justify-content: center; gap: 6px;
+  border: 1.5px dashed var(--regle); border-top-width: 1.5px;
+  background: transparent; box-shadow: none;
+  color: var(--encre-douce); font-size: 12.5px; font-weight: 600;
+}
+.liste-carte-plus:hover { border-color: var(--encre-rose); color: var(--encre-rose); }
+[data-theme="dark"] .liste-carte { border-color: rgba(255,255,255,.14); }
+[data-theme="dark"] .liste-carte-plus { border-color: rgba(255,255,255,.22); }
+
+/* ── La liste ouverte, en pleine largeur ── */
+.liste-vue { max-width: 860px; }
+.liste-vue-tete {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.liste-vue-retour { display: inline-flex; align-items: center; gap: 5px; }
+.liste-vue-retour .ic { transform: rotate(180deg); }  /* le chevron (→) regarde à gauche */
+.liste-vue-titre {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  font-family: var(--serif); font-size: 19px; font-weight: 700; color: var(--encre);
+}
+.liste-vue-titre .ic { color: var(--lc, var(--encre-rose)); }
+.liste-vue-outils {
+  display: inline-flex; align-items: center; gap: 8px; margin-left: auto; flex-wrap: wrap;
+}
+.liste-vue-feuille { padding: 12px 14px; border-top: 5px solid var(--lc, var(--encre-rose)); }
+.liste-vue-faites { margin-top: 14px; border-top: 1px dashed var(--regle); padding-top: 10px; }
+.liste-vue-faites-titre {
+  font-family: var(--sans); font-size: 12px; font-weight: 800;
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--encre-douce);
+  margin-bottom: 4px;
+}
+
+/* ── Téléphone ── */
+@media (max-width: 760px) {
+  /* La rangée des tuiles passe en 2×2, l'urgence occupe la 4e case */
+  .hub-tuiles { grid-template-columns: 1fr 1fr; }
+  .liste-carte { flex-basis: 152px; }
+  .liste-vue-tete { gap: 8px; }
+  .liste-vue-outils { margin-left: 0; width: 100%; }
+  .liste-vue-outils .btn { flex: 1 1 0; justify-content: center; min-height: 40px; }
+}

@@ -103,6 +103,17 @@ Object.assign(DataStore, {
     if (error) this._handleError(error, 'deleteListe');
   },
 
+  /** Horodate l'ouverture d'une liste : c'est ce qui ordonne le carrousel du
+      tableau de bord. Silencieux si la migration v12 n'est pas encore jouée. */
+  async toucherListe(id) {
+    try {
+      const uid = await this._uid();
+      await supa.from('listes')
+        .update({ utilisee_le: new Date().toISOString() })
+        .eq('id', id).eq('user_id', uid);
+    } catch { /* sans gravité : le tri retombe sur l'ordre manuel */ }
+  },
+
   /* ══════════════════════════════════════════════
      TÂCHES (table « taches » étendue par la migration v8)
   ══════════════════════════════════════════════ */
@@ -115,6 +126,7 @@ Object.assign(DataStore, {
       .eq('user_id', uid);
 
     if (f.listeId)     q = q.eq('liste_id', f.listeId);
+    if (f.sansListe)   q = q.is('liste_id', null);
     if (f.etiquetteId) q = q.eq('etiquette_id', f.etiquetteId);
     if (f.dossierId)   q = q.eq('dossier_id', f.dossierId);
     if (f.fait !== undefined && f.fait !== null) q = q.eq('fait', f.fait);

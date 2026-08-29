@@ -20,6 +20,8 @@ const Hub = {
   _etiquettes: [],
   _listes:     [],
   _prefs:      {},
+  listeOuverte:     null,    // id de liste, 'sans', ou null = carrousel
+  _voirFaitesListe: false,
 
   /* Les huit pastels, dans l'ordre où ils sont proposés. On enregistre la
      CLÉ et non la couleur : le thème sombre remplace la valeur derrière. */
@@ -60,6 +62,9 @@ const Hub = {
       ]);
       this._resume = r;
     } catch (err) { peindreErreur(err); return; }
+
+    // Une liste était ouverte en pleine largeur : on y retourne telle quelle.
+    if (this.listeOuverte) return this._peindreListe();
 
     document.getElementById('pageContent').innerHTML = `
       <div class="hub">
@@ -143,7 +148,12 @@ const Hub = {
     return `
       ${t(r.agendaAujourdhui.filter(a => !a.termine).length, "aujourd'hui", 'rose',  'agenda')}
       ${t(r.tachesEnRetard.length,                            'en retard',   'rouge', 'taches')}
-      ${t(r.tachesDuJour.length,                              'à faire',     'or',    'taches')}`;
+      ${t(r.tachesDuJour.length,                              'à faire',     'or',    'taches')}
+      <button class="hub-urgence" id="hubUrgence"
+              title="Créer une tâche urgente : priorité haute, échéance aujourd'hui">
+        ${Icone('alerte', { taille: 22 })}
+        <span class="hub-urgence-lbl">Urgence</span>
+      </button>`;
   },
 
   /* ══════════════════════════════════════════════
@@ -224,10 +234,12 @@ const Hub = {
   },
 
   /* ══════════════════════════════════════════════
-     BLOC TÂCHES
+     BLOC LISTES — le carrousel (v12)
+     Chaque liste est une carte à sa couleur, la plus récemment ouverte en
+     tête. Choisir une carte ouvre la liste en pleine largeur (_peindreListe).
   ══════════════════════════════════════════════ */
   _blocTaches(r) {
-    return this._postit('taches', 'Mes tâches',
+    return this._postit('taches', 'Mes listes',
       this._btnPlus('tache', 'Nouvelle tâche') +
       this._btn('data-goto="taches"', 'Toutes', 'Voir toutes les tâches'),
       this._corpsTaches(r));
@@ -236,36 +248,252 @@ const Hub = {
   _corpsTaches(r) {
     const hui   = Dates.aujourdhui();
     const dans7 = Dates.iso(new Date(Date.now() + 7 * 86400000));
+    const t     = r.taches;                       // les tâches non faites
 
-    /* Quatre groupes, chacun avec sa couleur : on lit d'abord le bandeau
-       (titre + nombre), puis seulement les lignes. */
-    const groupes = [
-      { cle: 'retard',  titre: 'En retard',     cls: 'rouge', icone: 'alerte',  items: r.taches.filter(t => t.echeance && t.echeance < hui) },
-      { cle: 'jour',    titre: "Aujourd'hui",   cls: 'or',    icone: 'horloge', items: r.taches.filter(t => t.echeance === hui) },
-      { cle: 'semaine', titre: 'Cette semaine', cls: 'rose',  icone: 'agenda',  items: r.taches.filter(t => t.echeance > hui && t.echeance <= dans7) },
-      { cle: 'sansdate',titre: 'Sans date',     cls: 'pale',  icone: 'liste',   items: r.taches.filter(t => !t.echeance) }
-    ];
-    const pleins = groupes.filter(g => g.items.length);
+    const pilule = (n, titre, cls) => `
+      <span class="hub-taches-pilule hub-taches-pilule-${cls} ${n ? '' : 'vide'}">
+        <b>${n}</b> ${titre}
+      </span>`;
 
-    if (!pleins.length) {
-      return `<p class="hub-vide">Aucune tâche en attente. Profitez-en.</p>`;
-    }
+    /* La plus récemment ouverte d'abord ; à date égale, l'ordre manuel. */
+    const listes = [...this._listes].sort((a, b) =>
+      String(b.utilisee_le || b.cree_le || '').localeCompare(
+      String(a.utilisee_le || a.cree_le || ''))
+      || (a.ordre ?? 0) - (b.ordre ?? 0));
 
-    const MAX = 5;
+    const carte = (l, id, cls = '') => {
+      const propres = t.filter(x => (x.liste_id || 'sans') === id);
+      const retard  = propres.filter(x => x.echeance && x.echeance < hui).length;
+      return `
+        <button class="liste-carte ${cls}" data-ouvrir-liste="${id}"
+                style="--lc:${esc(l.couleur || '#9E3057')}"
+                aria-label="Ouvrir la liste ${esc(l.nom)}">
+          <span class="liste-carte-tete">
+            <span class="liste-carte-ic">${Icone(l.icone, { taille: 20, defaut: 'liste' })}</span>
+            <span class="liste-carte-nom">${esc(l.nom)}</span>
+          </span>
+          <span class="liste-carte-nb">${propres.length ? `${propres.length} à faire` : 'rien à faire'}</span>
+          ${retard ? `<span class="liste-carte-retard">${Icone('alerte', { taille: 12 })} ${retard} en retard</span>` : ''}
+          <span class="liste-carte-apercu">
+            ${propres.slice(0, 2).map(x => `<span>• ${esc(x.description)}</span>`).join('')}
+          </span>
+        </button>`;
+    };
+
+    const sans = t.filter(x => !x.liste_id).length;
+
     return `
       <div class="hub-taches-resume">
-        ${groupes.filter(g => g.cle !== 'sansdate').map(g => `
-          <span class="hub-taches-pilule hub-taches-pilule-${g.cls} ${g.items.length ? '' : 'vide'}">
-            <b>${g.items.length}</b> ${g.titre.toLowerCase()}
-          </span>`).join('')}
+        ${pilule(t.filter(x => x.echeance && x.echeance < hui).length, 'en retard', 'rouge')}
+        ${pilule(t.filter(x => x.echeance === hui).length, "aujourd'hui", 'or')}
+        ${pilule(t.filter(x => x.echeance > hui && x.echeance <= dans7).length, 'cette semaine', 'rose')}
       </div>
-      ${pleins.map(g => this.groupe(g, `
-            ${g.items.slice(0, MAX).map(t => this.ligneTache(t)).join('')}
-            ${g.items.length > MAX ? `
-              <button class="hub-groupe-plus" data-goto="taches">
-                Voir les ${g.items.length - MAX} autres ${Icone('chevron', { taille: 13 })}
-              </button>` : ''}`,
-          g.cle === 'sansdate' && pleins.length > 1)).join('')}`;
+      <div class="hub-carrousel">
+        ${listes.map(l => carte(l, l.id)).join('')}
+        ${sans ? carte({ nom: 'Sans liste', couleur: '#8A8A86', icone: 'liste' }, 'sans', 'liste-carte-sans') : ''}
+        <button class="liste-carte liste-carte-plus" data-nouvelle-liste
+                aria-label="Créer une nouvelle liste">
+          ${Icone('plus', { taille: 24 })}
+          <span>Nouvelle liste</span>
+        </button>
+      </div>`;
+  },
+
+  /* ══════════════════════════════════════════════
+     LA LISTE OUVERTE — pleine largeur, bouton retour
+  ══════════════════════════════════════════════ */
+  async ouvrirListe(id) {
+    this.listeOuverte     = id;
+    this._voirFaitesListe = false;
+    if (id !== 'sans') DataStore.toucherListe(id);   // ordonne le carrousel
+    await this._peindreListe();
+  },
+
+  async _peindreListe() {
+    const id   = this.listeOuverte;
+    const sans = id === 'sans';
+    const l    = sans ? { nom: 'Sans liste', couleur: '#8A8A86', icone: 'liste' }
+                      : this._listes.find(x => x.id === id);
+    if (!l) { this.listeOuverte = null; return this.render(); }
+
+    document.getElementById('pageTitle').textContent    = l.nom;
+    document.getElementById('pageSubtitle').textContent = 'Liste de tâches';
+    document.getElementById('pageHeaderRight').innerHTML = '';
+
+    let taches;
+    try {
+      if (!this._etiquettes.length) this._etiquettes = await DataStore.getEtiquettes();
+      taches = await DataStore.getTachesFiltrees({
+        listeId:            sans ? undefined : id,
+        sansListe:          sans,
+        fait:               this._voirFaitesListe ? undefined : false,
+        inclureAbandonnees: this._voirFaitesListe
+      });
+    } catch (err) { peindreErreur(err); return; }
+
+    const enCours = taches.filter(t => !t.fait && !t.abandonnee);
+    const faites  = taches.filter(t => t.fait || t.abandonnee);
+
+    document.getElementById('pageContent').innerHTML = `
+      <div class="hub liste-vue" style="--lc:${esc(l.couleur || '#9E3057')}">
+        <div class="liste-vue-tete">
+          <button class="btn btn-secondary liste-vue-retour" data-retour-carrousel
+                  aria-label="Revenir au tableau de bord">
+            ${Icone('chevron', { taille: 15 })} Retour
+          </button>
+          <span class="liste-vue-titre">
+            ${Icone(l.icone, { taille: 20, defaut: 'liste' })}
+            ${esc(l.nom)}
+            <span class="hub-compteur">${enCours.length}</span>
+          </span>
+          <span class="liste-vue-outils">
+            ${sans ? '' : `
+              <button class="btn btn-sm btn-secondary" data-regler-liste
+                      title="Nom, couleur et pictogramme de la liste"
+                      >${Icone('crayon', { taille: 15 })} Régler</button>`}
+            <button class="btn btn-sm ${this._voirFaitesListe ? 'btn-primary' : 'btn-secondary'}"
+                    data-voir-faites aria-pressed="${this._voirFaitesListe ? 'true' : 'false'}"
+                    title="Afficher aussi les tâches terminées et abandonnées"
+                    >${Icone('check', { taille: 15 })} Terminées</button>
+            <button class="btn btn-sm btn-primary" data-ajouter-tache
+                    >${Icone('plus', { taille: 15 })} Tâche</button>
+          </span>
+        </div>
+
+        <div class="feuille liste-vue-feuille">
+          ${enCours.length
+            ? `<div class="log">${enCours.map(t => this.ligneTache(t)).join('')}</div>`
+            : `<div class="empty-state">
+                 <div class="empty-icon">${Icone('check', { taille: 34 })}</div>
+                 Rien à faire dans cette liste. Profitez-en.
+               </div>`}
+          ${this._voirFaitesListe && faites.length ? `
+            <div class="liste-vue-faites">
+              <div class="liste-vue-faites-titre">Terminées et abandonnées</div>
+              <div class="log">${faites.slice(0, 100).map(t => this.ligneTache(t)).join('')}</div>
+            </div>` : ''}
+        </div>
+      </div>`;
+
+    this._bindListe(l);
+  },
+
+  _bindListe(l) {
+    const zone = document.querySelector('.liste-vue');
+    const repeindre = () => this._peindreListe();
+
+    zone.addEventListener('click', async e => {
+      const cible = sel => e.target.closest(sel);
+
+      if (cible('[data-retour-carrousel]')) {
+        this.listeOuverte = null;
+        return this.render();
+      }
+
+      if (cible('[data-voir-faites]')) {
+        this._voirFaitesListe = !this._voirFaitesListe;
+        return repeindre();
+      }
+
+      if (cible('[data-ajouter-tache]')) {
+        this._preparer();
+        // Un objet sans id : le formulaire s'ouvre en CRÉATION, la liste
+        // courante déjà choisie (Taches.ouvrirForm regarde t.liste_id).
+        return Taches.ouvrirForm(
+          this.listeOuverte === 'sans' ? null : { liste_id: this.listeOuverte },
+          repeindre);
+      }
+
+      if (cible('[data-regler-liste]')) {
+        this._preparer();
+        return Taches._formListe(async () => {
+          this._listes = await DataStore.getListes();
+          if (!this._listes.some(x => x.id === this.listeOuverte)) this.listeOuverte = null;
+          if (this.listeOuverte) await this._peindreListe(); else await this.render();
+        }, l);
+      }
+
+      /* ── Cocher / décocher, avec retour visuel immédiat ── */
+      const check = cible('.case[data-tache-id]');
+      if (check) {
+        const id    = check.dataset.tacheId;
+        const coche = !check.classList.contains('cochee');
+        check.classList.toggle('cochee', coche);
+        check.setAttribute('aria-checked', coche ? 'true' : 'false');
+        check.closest('.entree')?.classList.toggle('est-fait', coche);
+        try {
+          await DataStore.setTacheFait(id, coche);
+          updateJourneeBadge();
+          await repeindre();
+        } catch (err) {
+          check.classList.toggle('cochee', !coche);
+          Toast.show('Erreur : ' + esc(err.message), 'error');
+        }
+        return;
+      }
+
+      const migrer = cible('[data-migrer]');
+      if (migrer) {
+        try {
+          await DataStore.migrerTache(migrer.dataset.migrer,
+                                      Dates.iso(new Date(Date.now() + 86400000)));
+          Toast.show('Repoussée à demain', 'info');
+          updateJourneeBadge();
+          await repeindre();
+        } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
+        return;
+      }
+
+      /* ── Modifier : toucher la ligne ou le crayon ── */
+      const editer = cible('[data-editer-tache]') || cible('[data-tache-open]');
+      if (editer) {
+        const id = editer.dataset.editerTache || editer.dataset.tacheOpen;
+        this._preparer();
+        const t = await DataStore.getTache(id);
+        if (t) Taches.ouvrirForm(t, repeindre);
+        return;
+      }
+    });
+  },
+
+  /* ══════════════════════════════════════════════
+     BOUTON D'URGENCE — une tâche prioritaire en un geste
+  ══════════════════════════════════════════════ */
+  _urgence() {
+    Modal.open('Tâche urgente', `
+      <div class="field">
+        <label>Qu'y a-t-il d'urgent ? *</label>
+        <input id="uTitre" placeholder="Ex. Rappeler l'OPCO avant midi" maxlength="200" />
+      </div>
+      <p style="font-size:13px;color:var(--text-muted);margin-top:10px;">
+        La tâche est créée en <strong>priorité haute</strong> avec pour échéance
+        <strong>aujourd'hui</strong> : elle remonte en tête partout.
+      </p>`, [
+      { label: 'Annuler', cls: 'btn btn-secondary', action: () => Modal.close() },
+      { label: 'Créer l\'urgence', cls: 'btn btn-danger', action: async () => {
+          const titre = document.getElementById('uTitre').value.trim();
+          if (!titre) { Toast.show('Dites au moins de quoi il s\'agit', 'error'); return; }
+          try {
+            await DataStore.addTacheComplete({
+              description: titre, priorite: 'haute', echeance: Dates.aujourdhui()
+            });
+            Modal.close();
+            Toast.show('Tâche urgente créée', 'success');
+            updateJourneeBadge();
+            if (this.listeOuverte) await this._peindreListe();
+            else                   await this._rafraichir();
+          } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
+        } }
+    ], 'modal-sm');
+
+    const champ = document.getElementById('uTitre');
+    champ.focus();
+    champ.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.querySelector('#modalFooter .btn-danger')?.click();
+      }
+    });
   },
 
   /** Une tâche : case à cocher, texte, repères. Réutilisée par la page Tâches. */
@@ -391,6 +619,7 @@ const Hub = {
      résumé et on remplace le contenu des blocs concernés.
   ══════════════════════════════════════════════ */
   async _rafraichir() {
+    if (this.listeOuverte) return this._peindreListe();
     const hub = document.querySelector('.hub');
     if (!hub) return;
 
@@ -502,6 +731,20 @@ const Hub = {
         const n = await DataStore.getNote(note.dataset.noteId).catch(() => null);
         if (n) Notes.ouvrir(n, () => this._rafraichir());
         return;
+      }
+
+      if (cible('#hubUrgence')) return this._urgence();
+
+      /* ── Une carte du carrousel : la liste s'ouvre en pleine largeur ── */
+      const carteListe = cible('[data-ouvrir-liste]');
+      if (carteListe) return this.ouvrirListe(carteListe.dataset.ouvrirListe);
+
+      if (cible('[data-nouvelle-liste]')) {
+        this._preparer();
+        return Taches._formListe(async () => {
+          this._listes = await DataStore.getListes();
+          await this._rafraichir();
+        });
       }
 
       const creer = cible('[data-creer]');
