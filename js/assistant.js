@@ -43,6 +43,35 @@ const Assistant = {
         }
       },
       {
+        name: 'creer_taches',
+        description: "Crée PLUSIEURS tâches d'un coup — l'outil à utiliser dès que l'utilisateur énumère : liste de courses, dictée de choses à faire, notes en vrac. Une tâche par élément, jamais un seul bloc. Si la liste nommée n'existe pas, elle est créée automatiquement.",
+        input_schema: {
+          type: 'object',
+          properties: {
+            liste: { type: 'string', description: 'Liste par défaut pour toutes ces tâches (nom exact ou nouveau nom) — omise si chaque tâche précise la sienne' },
+            taches: {
+              type: 'array',
+              description: 'Les tâches, une par élément énuméré',
+              items: {
+                type: 'object',
+                properties: {
+                  description: { type: 'string', description: 'Intitulé court et actionnable' },
+                  notes:       { type: 'string' },
+                  liste:       { type: 'string', description: 'Liste pour cette tâche, si différente de la liste par défaut' },
+                  echeance:    { type: 'string', description: 'AAAA-MM-JJ' },
+                  heure:       { type: 'string', description: 'HH:MM' },
+                  priorite:    { type: 'string', enum: ['basse', 'normale', 'haute'] },
+                  rappel_minutes:   { type: 'integer', description: 'Minutes avant l\'échéance (0 = à l\'heure dite)' },
+                  rappel_minutes_2: { type: 'integer', description: 'Seconde alerte optionnelle' }
+                },
+                required: ['description']
+              }
+            }
+          },
+          required: ['taches']
+        }
+      },
+      {
         name: 'creer_evenement',
         description: "Crée un rendez-vous dans l'agenda, avec ses rappels. Utiliser dès qu'il y a un horaire de début : réunion, RDV médical, appel programmé.",
         input_schema: {
@@ -165,6 +194,22 @@ const Assistant = {
       const l = this._listes.find(x => x.nom.toLowerCase() === String(n).toLowerCase());
       return l?.id || null;
     };
+    /* La liste nommée n'existe pas encore ? On la crée, avec une couleur
+       prise dans une petite palette accordée au thème. */
+    const idListeOuCreer = async n => {
+      if (!n) return null;
+      const trouvee = idListe(n);
+      if (trouvee) return trouvee;
+      const PALETTE = ['#2E7D46', '#4A66C9', '#C94B84', '#B07E22',
+                       '#7A55A6', '#C23A55', '#1F8A8A', '#8A8A92'];
+      const l = await DataStore.addListe({
+        nom:     String(n).trim(),
+        couleur: PALETTE[this._listes.length % PALETTE.length],
+        icone:   'liste'
+      });
+      if (!this._listes.some(x => x.id === l.id)) this._listes.push(l);
+      return l.id;
+    };
 
     switch (nom) {
 
@@ -176,7 +221,7 @@ const Assistant = {
           heure:         args.heure || null,
           priorite:      args.priorite || 'normale',
           etiquetteId:   idEtiquette(args.etiquette),
-          listeId:       idListe(args.liste),
+          listeId:       await idListeOuCreer(args.liste),
           rappelMinutes:  args.rappel_minutes ?? (args.heure ? 0 : null),
           rappelMinutes2: args.rappel_minutes_2 ?? null
         });
@@ -185,6 +230,37 @@ const Assistant = {
           message: `Tâche « ${t.description} » créée` +
                    (t.echeance ? ` pour le ${t.echeance}` : ' sans échéance') +
                    (t.rappel_minutes != null ? `, rappel ${t.rappel_minutes} min avant` : '')
+        };
+      }
+
+      case 'creer_taches': {
+        if (!Array.isArray(args.taches) || !args.taches.length) {
+          return { ok: false, erreur: 'Aucune tâche fournie' };
+        }
+        const creees = [], echecs = [];
+        for (const item of args.taches) {
+          try {
+            const t = await DataStore.addTacheComplete({
+              description:    item.description,
+              notes:          item.notes || null,
+              echeance:       item.echeance || null,
+              heure:          item.heure || null,
+              priorite:       item.priorite || 'normale',
+              listeId:        await idListeOuCreer(item.liste || args.liste),
+              rappelMinutes:  item.rappel_minutes ?? (item.heure ? 0 : null),
+              rappelMinutes2: item.rappel_minutes_2 ?? null
+            });
+            creees.push(t.description);
+          } catch (err) {
+            echecs.push(`${item.description} (${err.message})`);
+          }
+        }
+        return {
+          ok: !echecs.length,
+          message: `${creees.length} tâche(s) créée(s)` +
+                   (args.liste ? ` dans « ${args.liste} »` : '') +
+                   (echecs.length ? ` — ÉCHECS à re-tenter ou à mettre en note : ${echecs.join(' ; ')}` : ''),
+          creees, echecs
         };
       }
 
@@ -347,6 +423,33 @@ ${etiquettes.map(e => `- ${e.nom}`).join('\n') || '- aucune'}
 
 LISTES DE TÂCHES DISPONIBLES (nom exact)
 ${listes.map(l => `- ${l.nom}`).join('\n') || '- aucune'}
+
+PRISE DE NOTES RAPIDE — LA RÈGLE D'OR : RIEN NE SE PERD
+L'utilisateur te dicte souvent en vrac, à la voix, plusieurs choses d'un coup.
+Ton travail d'assistant : DÉCOUPER et RANGER, sans jamais laisser tomber un
+seul élément.
+- Une énumération ⇒ creer_taches, UNE tâche par élément, jamais un bloc.
+  Ex. « ajoute à ma liste de courses : bananes, pain, lait, un pack d'eau,
+  des œufs, du fromage » ⇒ creer_taches { liste: "Courses", taches: [
+  {description:"Bananes"}, {description:"Pain"}, {description:"Lait"},
+  {description:"Pack d'eau"}, {description:"Œufs"}, {description:"Fromage"} ] }.
+- Une dictée mélangée se TRIE élément par élément : chaque chose à faire
+  devient une tâche (avec sa liste, sa priorité, son échéance), chaque
+  rendez-vous horodaté devient un évènement avec ses rappels.
+  Ex. « pour le garage je dois envoyer la facture de la Mégane urgent,
+  appeler le client de la Polo, faire un virement au propriétaire de 800 €,
+  et demain à midi j'ai rdv au bureau pour l'entretien, rappelle-le-moi
+  1 h avant » ⇒ creer_taches { liste: "Garage", taches: [
+  {description:"Envoyer la facture de la Mégane", priorite:"haute"},
+  {description:"Appeler le client de la Polo"},
+  {description:"Faire un virement de 800 € au propriétaire"} ] }
+  PUIS creer_evenement { titre:"Entretien au bureau", debut: demainT12:00,
+  rappels:[60] }.
+- Si la liste nommée n'existe pas, creer_tache/creer_taches la CRÉENT
+  automatiquement : ne demande pas la permission, fais-le et dis-le.
+- Un élément que tu ne sais pas ranger ⇒ creer_note avec le texte tel quel,
+  plutôt que de le perdre ou de redemander.
+- Termine par un récapitulatif d'UNE phrase : ce qui a été créé, et où.
 
 COMMENT TRAVAILLER
 - Tu as des outils pour lire ET écrire. Utilise-les plutôt que de demander à l'utilisateur de le faire lui-même.
@@ -680,6 +783,7 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     const ic = n => Icone(n, { taille: 15 });
     const l = {
       creer_tache:      `${ic('taches')} Tâche créée : « ${esc(args.description || '')} »`,
+      creer_taches:     `${ic('taches')} ${(args.taches || []).length} tâches créées${args.liste ? ` dans « ${esc(args.liste)} »` : ''}`,
       creer_evenement:  `${ic('agenda')} Rendez-vous créé : « ${esc(args.titre || '')} »`,
       creer_note:       `${ic('notes')} Note enregistrée`,
       terminer_tache:   `${ic('check')} Tâche marquée comme faite`,

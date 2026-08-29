@@ -222,10 +222,9 @@ body::before {
 .liste-chip.active .ic { color: #fff; }
 
 input, select, textarea, .search-input {
-  background: rgba(255, 255, 255, 0.72) !important;
+  background: rgba(255, 255, 255, 0.80) !important;
   border-color: var(--verre-filet) !important;
   border-radius: 12px !important;
-  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
 }
 input:focus, select:focus, textarea:focus, .search-input:focus {
   border-color: var(--rose-vif) !important;
@@ -272,7 +271,10 @@ input:focus, select:focus, textarea:focus, .search-input:focus {
 .liste-vue-feuille { border-top: 4px solid var(--lc, var(--rose-vif)); }
 
 /* ═══ 6. Modales, panneau de l'assistant, toasts ═══ */
-.modal { background: rgba(255, 255, 255, 0.72); }
+.modal {
+  background: rgba(255, 255, 255, 0.96);
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
 .modal-overlay, #modalOverlay { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .chatbot, .toast {
   background: rgba(255, 255, 255, 0.80);
@@ -436,3 +438,18 @@ input:focus, select:focus, textarea:focus, .search-input:focus {
   z-index: 5; position: relative;
   transition: transform 0.12s ease;
 }
+
+/* ═══ 12. Corrections d'affichage v15 (29/08/2026) ═══ */
+/* Téléphone : la modale est un tiroir posé au bord bas — angles du bas
+   droits, et un matelas pour la barre-geste de l'iPhone afin que les
+   boutons Annuler / Créer ne passent jamais dessous. */
+@media (max-width: 760px) {
+  .modal {
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    max-height: 92vh; max-height: 92dvh; overflow-y: auto;
+  }
+}
+/* Le chatbot aussi vit par-dessus la page : verre plus dense pour rester
+   lisible sur n'importe quel fond, sans flou imbriqué risqué sur iOS. */
+.chatbot { background: rgba(255, 255, 255, 0.94); }
