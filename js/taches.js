@@ -70,13 +70,14 @@ const Taches = {
 
   estMobile() { return window.matchMedia('(max-width: 760px)').matches; },
 
-  /* Les listes, la plus récemment ouverte d'abord — même ordre que le
-     carrousel du tableau de bord. */
+  /* La page Tâches suit l'ORDRE MANUEL (celui du glisser-déposer de la
+     mosaïque) ; à égalité (jamais réordonnées), la plus récente d'abord.
+     Le carrousel de l'accueil, lui, garde le tri par dernière utilisation. */
   _listesTriees() {
     return [...this._listes].sort((a, b) =>
-      String(b.utilisee_le || b.cree_le || '').localeCompare(
-      String(a.utilisee_le || a.cree_le || ''))
-      || (a.ordre ?? 0) - (b.ordre ?? 0));
+      (a.ordre ?? 50) - (b.ordre ?? 50)
+      || String(b.utilisee_le || b.cree_le || '').localeCompare(
+         String(a.utilisee_le || a.cree_le || '')));
   },
 
   async render() {
@@ -222,6 +223,78 @@ const Taches = {
       `<div class="taches-page">${filtres}${corps}</div>`;
 
     this._bind();
+    if (mobile) this._brancherDrag();
+  },
+
+  /* ── Réordonner les listes à la main (mosaïque) ──
+     Appui long (⅓ s) sur une carte : elle se soulève, on la glisse, les
+     autres s'écartent ; au relâchement l'ordre est enregistré. Un appui
+     bref reste un simple tap qui ouvre la liste. ── */
+  _dragVientDeFinir: false,
+
+  _brancherDrag() {
+    const zone = document.querySelector('.taches-mosaique');
+    if (!zone) return;
+
+    let carte = null, minuteur = null, envol = false, sx = 0, sy = 0;
+
+    // Une fois la carte soulevée, on confisque le défilement de la page
+    zone.addEventListener('touchmove', e => { if (envol) e.preventDefault(); },
+                          { passive: false });
+
+    zone.addEventListener('pointerdown', e => {
+      const c = e.target.closest('[data-focus-liste]');
+      if (!c || c.dataset.focusListe === 'sans') return;
+      carte = c; sx = e.clientX; sy = e.clientY; envol = false;
+      minuteur = setTimeout(() => {
+        envol = true;
+        carte.classList.add('en-vol');
+        navigator.vibrate?.(12);
+      }, 330);
+    });
+
+    zone.addEventListener('pointermove', e => {
+      if (!carte) return;
+      if (!envol) {
+        // On bouge avant l'appui long : c'est un défilement, pas un drag
+        if (Math.hypot(e.clientX - sx, e.clientY - sy) > 9) {
+          clearTimeout(minuteur); carte = null;
+        }
+        return;
+      }
+      const sous = document.elementFromPoint(e.clientX, e.clientY)
+                     ?.closest('[data-focus-liste]');
+      if (sous && sous !== carte && sous.dataset.focusListe !== 'sans') {
+        const r = sous.getBoundingClientRect();
+        const avant = e.clientY < r.top + r.height / 2
+                   || (e.clientY < r.bottom && e.clientX < r.left + r.width / 2);
+        zone.insertBefore(carte, avant ? sous : sous.nextSibling);
+      }
+    });
+
+    const lacher = async () => {
+      clearTimeout(minuteur);
+      if (carte && envol) {
+        carte.classList.remove('en-vol');
+        // Le tap qui suit le relâchement ne doit pas ouvrir la liste
+        this._dragVientDeFinir = true;
+        setTimeout(() => { this._dragVientDeFinir = false; }, 400);
+
+        const ids = [...zone.querySelectorAll('[data-focus-liste]')]
+          .map(x => x.dataset.focusListe).filter(id => id !== 'sans');
+        ids.forEach((id, i) => {
+          const l = this._listes.find(x => x.id === id);
+          if (l) l.ordre = i;
+        });
+        try {
+          await DataStore.reordonnerListes(ids);
+          Toast.show('Ordre des listes enregistré', 'success');
+        } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
+      }
+      carte = null; envol = false;
+    };
+    zone.addEventListener('pointerup', lacher);
+    zone.addEventListener('pointercancel', lacher);
   },
 
   /* ── Téléphone : une liste affichée en principal, retour vers la mosaïque ── */
@@ -304,6 +377,7 @@ const Taches = {
       /* ── Mosaïque (téléphone) : ouvrir une liste en principal ── */
       const mini = cible('[data-focus-liste]');
       if (mini) {
+        if (this._dragVientDeFinir) return;   // relâchement d'un glisser-déposer
         this.listeActive = mini.dataset.focusListe;
         if (this.listeActive !== 'sans') DataStore.toucherListe(this.listeActive);
         this._peindreFocus();

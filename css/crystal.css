@@ -422,3 +422,17 @@ input:focus, select:focus, textarea:focus, .search-input:focus {
 @media (max-width: 760px) {
   .taches-board { grid-template-columns: 1fr; }
 }
+
+/* ═══ 11. Glisser-déposer des listes dans la mosaïque (v14) ═══ */
+.taches-mosaique [data-focus-liste] {
+  touch-action: pan-y;          /* le défilement vertical reste possible… */
+  user-select: none; -webkit-user-select: none;
+}
+.taches-mosaique .liste-carte.en-vol {
+  opacity: 0.92;
+  transform: scale(1.06) rotate(1.5deg);
+  box-shadow: 0 18px 44px -12px rgba(120, 60, 100, 0.45),
+              0 0 0 2px var(--lc, var(--rose-vif)), var(--reflet);
+  z-index: 5; position: relative;
+  transition: transform 0.12s ease;
+}

@@ -103,6 +103,17 @@ Object.assign(DataStore, {
     if (error) this._handleError(error, 'deleteListe');
   },
 
+  /** Enregistre l'ordre manuel des listes (glisser-déposer de la mosaïque).
+      ids : tableau d'identifiants dans le nouvel ordre. */
+  async reordonnerListes(ids) {
+    const uid = await this._uid();
+    for (let i = 0; i < ids.length; i++) {
+      const { error } = await supa.from('listes')
+        .update({ ordre: i }).eq('id', ids[i]).eq('user_id', uid);
+      if (error) this._handleError(error, 'reordonnerListes');
+    }
+  },
+
   /** Horodate l'ouverture d'une liste : c'est ce qui ordonne le carrousel du
       tableau de bord. Silencieux si la migration v12 n'est pas encore jouée. */
   async toucherListe(id) {
