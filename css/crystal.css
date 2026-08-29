@@ -1,0 +1,316 @@
+/* ═════════════════════════════════════════════════════════════════════════════
+   IDEAFORMA — Thème « CRYSTAL » (29/08/2026)
+   Chargé APRÈS styles.css, vie.css et bujo.css : il ne redessine pas les
+   composants, il remplace la matière. Le papier du carnet devient du verre.
+
+   Les principes :
+   1. TOUJOURS CLAIR. Aucune zone sombre, jamais — le mode sombre est retiré.
+   2. Le fond est une aurore très pâle (rose, lavande, eau) qui ne bouge pas
+      derrière le contenu ; une lumière d'eau y ondule lentement.
+   3. Toute surface posée dessus est du VERRE : blanc translucide, flou
+      d'arrière-plan, liseré clair en haut (le reflet), ombre rose très douce.
+   4. La couleur vient des touches de rose (actions, en-tête) et des teintes
+      des listes de l'utilisatrice — le verre, lui, reste neutre.
+   5. Typographie moderne : tout en sans-serif système, les titres gras et
+      resserrés. Plus d'écriture manuscrite ni de serif.
+   Contraste : l'encre reste quasi noire (#171717) sur des verres ≥ 82 %
+   d'opacité perçue une fois posés sur le fond clair — jamais sous 4,5:1.
+═════════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── La matière ── */
+  --verre:        rgba(255, 255, 255, 0.62);
+  --verre-dense:  rgba(255, 255, 255, 0.78);
+  --verre-bord:   rgba(255, 255, 255, 0.85);
+  --verre-filet:  rgba(158, 48, 87, 0.14);
+  --reflet:       inset 0 1px 0 rgba(255, 255, 255, 0.95),
+                  inset 0 -1px 0 rgba(255, 255, 255, 0.35);
+  --ombre-verre:  0 10px 34px -14px rgba(158, 48, 87, 0.28),
+                  0 2px 8px rgba(120, 80, 120, 0.08);
+  --flou:         blur(22px) saturate(1.5);
+
+  /* ── Les roses ── */
+  --rose-vif:     #D6427E;                    /* surfaces et dégradés */
+  --rose-profond: #A62B5E;
+  --encre-rose:   #A82D5F;                    /* texte d'action, 5,6:1 sur blanc */
+  --encre-rose-vif:#8C1F4B;
+
+  /* ── Remplacement du papier ── */
+  --papier:       #FBF6F9;
+  --papier-creux: rgba(255, 255, 255, 0.45);
+  --pois:         transparent;                /* plus de points de carnet */
+  --regle:        var(--verre-filet);
+  --white:        #FFFFFF;
+
+  /* Les pastels des post-it deviennent des voiles de verre teinté */
+  --pastel-rose:   rgba(246, 173, 205, 0.34);
+  --pastel-peche:  rgba(250, 196, 158, 0.30);
+  --pastel-jaune:  rgba(247, 226, 140, 0.30);
+  --pastel-vert:   rgba(168, 224, 188, 0.32);
+  --pastel-menthe: rgba(153, 222, 214, 0.32);
+  --pastel-ciel:   rgba(166, 200, 247, 0.32);
+  --pastel-lilas:  rgba(203, 181, 244, 0.32);
+  --pastel-gris:   rgba(224, 224, 230, 0.38);
+
+  /* Barre latérale et en-tête : verre blanc / verre rosé */
+  --lateral-bg:    rgba(255, 255, 255, 0.55);
+  --lateral-filet: rgba(158, 48, 87, 0.12);
+  --lateral-actif: rgba(255, 255, 255, 0.92);
+  --entete-bg:     rgba(249, 214, 229, 0.55);
+  --entete-filet:  rgba(158, 48, 87, 0.16);
+  --jaune-pale:    rgba(255, 255, 255, 0.50); /* les feuilles jaunes deviennent du verre */
+  --jaune-pale-2:  rgba(255, 244, 250, 0.65);
+  --jaune-regle:   rgba(158, 48, 87, 0.12);
+
+  /* Typographie : moderne partout */
+  --manuscrit: var(--sans);
+  --serif:     var(--sans);
+
+  --primary:       var(--encre-rose);
+  --primary-hover: var(--encre-rose-vif);
+  --ombre-postit:  var(--ombre-verre);
+  --ombre-feuille: var(--ombre-verre);
+}
+
+/* ═══ 1. L'aurore de fond et la lumière d'eau ═══ */
+body, .app-layout {
+  background-color: var(--papier);
+  background-image:
+    radial-gradient(1100px 700px at 12% -8%,  rgba(246, 167, 202, 0.42), transparent 60%),
+    radial-gradient(900px 640px  at 88% 4%,   rgba(196, 181, 245, 0.34), transparent 62%),
+    radial-gradient(1000px 720px at 78% 96%,  rgba(160, 216, 235, 0.32), transparent 60%),
+    radial-gradient(760px 560px  at 6% 88%,   rgba(250, 205, 164, 0.22), transparent 62%),
+    linear-gradient(165deg, #FDF7FB 0%, #F6F3FC 48%, #F1F7FB 100%);
+  background-attachment: fixed;
+  background-size: auto, auto, auto, auto, auto;
+}
+
+/* Les reflets d'eau : deux nappes de lumière qui ondulent très lentement.
+   Posés sur un calque fixe pour ne pas repeindre le contenu. */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    linear-gradient(112deg, transparent 38%, rgba(255, 255, 255, 0.50) 46%,
+                    transparent 54%, transparent 70%,
+                    rgba(255, 255, 255, 0.32) 78%, transparent 86%),
+    radial-gradient(58% 42% at 50% 118%, rgba(255, 255, 255, 0.55), transparent 70%);
+  background-size: 320% 100%, 100% 100%;
+  mix-blend-mode: soft-light;
+  animation: eau-caustique 17s ease-in-out infinite alternate;
+}
+@keyframes eau-caustique {
+  from { background-position: 0% 0, 0 0; opacity: .75; }
+  50%  { opacity: 1; }
+  to   { background-position: 100% 0, 0 0; opacity: .75; }
+}
+@media (prefers-reduced-motion: reduce) { body::before { animation: none; } }
+
+/* Le contenu au-dessus du calque de lumière */
+.app-layout { position: relative; z-index: 1; background-attachment: fixed; }
+
+/* ═══ 2. Le verre — la recette commune ═══ */
+.section-card, .doc-carte, .modal, .feuille,
+.postit, .hub-tuile, .hub-urgence, .liste-carte,
+.hub-groupe, .taches-feuille .hub-groupe,
+.note-carte, .stat-card, .alert-note {
+  background-color: var(--verre);
+  -webkit-backdrop-filter: var(--flou);
+  backdrop-filter: var(--flou);
+  border: 1px solid var(--verre-bord);
+  box-shadow: var(--ombre-verre), var(--reflet);
+}
+.section-card, .doc-carte, .modal, .feuille { border-radius: 20px; }
+.postit { border-radius: 22px; }
+.hub-tuile, .liste-carte, .hub-urgence { border-radius: 18px; }
+.hub-groupe { border-radius: 16px; overflow: hidden; }
+
+/* Les post-it gardent leur teinte choisie, en voile par-dessus le verre */
+.postit {
+  background-image: linear-gradient(180deg, var(--pastel, var(--pastel-gris)),
+                                    rgba(255, 255, 255, 0.10) 82%);
+}
+
+/* La feuille des pages Agenda / Tâches (ex-jaune) : verre neutre */
+.agenda-page .feuille, .taches-feuille { background-color: var(--verre); }
+.taches-feuille .hub-groupe { background: var(--verre-dense); border-color: var(--verre-bord); }
+
+/* Le reflet qui glisse quand on passe sur une carte */
+.hub-tuile, .liste-carte, .postit, .hub-urgence { position: relative; }
+.hub-tuile::after, .liste-carte::after, .hub-urgence::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 42%,
+              rgba(255, 255, 255, 0.55) 50%, transparent 58%);
+  background-size: 280% 100%; background-position: 120% 0;
+  transition: background-position 0.9s ease, opacity 0.3s;
+  opacity: 0;
+}
+.hub-tuile:hover::after, .liste-carte:hover::after, .hub-urgence:hover::after {
+  opacity: 1; background-position: -20% 0;
+}
+
+/* ═══ 3. Barre latérale et en-tête en verre ═══ */
+.sidebar {
+  background: var(--lateral-bg);
+  -webkit-backdrop-filter: var(--flou);
+  backdrop-filter: var(--flou);
+  border-right: 1px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 8px 0 32px -18px rgba(158, 48, 87, 0.25);
+}
+.page-header {
+  background: var(--entete-bg);
+  -webkit-backdrop-filter: var(--flou);
+  backdrop-filter: var(--flou);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.70);
+  box-shadow: 0 8px 28px -20px rgba(158, 48, 87, 0.35),
+              inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+.sidebar-logo { border-bottom: 1px solid rgba(158, 48, 87, 0.10); }
+.sidebar-logo img {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 16px;
+  box-shadow: 0 6px 22px -10px rgba(158, 48, 87, 0.35),
+              inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.nav-item { border-radius: 12px; }
+.nav-item.active {
+  background: var(--lateral-actif);
+  box-shadow: 0 4px 14px -6px rgba(158, 48, 87, 0.30),
+              inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+.sidebar-footer { border-top: 1px solid rgba(158, 48, 87, 0.10); }
+
+/* Titres : modernes, gras, resserrés — plus de manuscrit */
+.page-title {
+  font-family: var(--sans); font-weight: 800; letter-spacing: -0.02em;
+}
+.postit-titre, .section-card-title, .hub-sous-titre {
+  font-family: var(--sans); letter-spacing: 0.05em;
+}
+
+/* ═══ 4. Boutons, champs, puces ═══ */
+.btn-primary {
+  background: linear-gradient(135deg, var(--rose-vif), var(--rose-profond));
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 8px 20px -8px rgba(198, 55, 116, 0.55),
+              inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #DE5590, var(--rose-profond));
+  box-shadow: 0 10px 26px -8px rgba(198, 55, 116, 0.65),
+              inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.btn-secondary, .btn-icon, .postit-btn, .liste-chip, .agenda-filtre,
+.chat-suggestion, .rappel-case {
+  background: var(--verre-dense);
+  border: 1px solid var(--verre-bord);
+  box-shadow: 0 3px 10px -4px rgba(158, 48, 87, 0.18),
+              inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.btn, .btn-sm, .liste-chip { border-radius: 999px; }
+.btn-icon, .postit-btn { border-radius: 12px; }
+.liste-chip.active {
+  background: linear-gradient(135deg, var(--rose-vif), var(--rose-profond));
+  border-color: rgba(255, 255, 255, 0.55); color: #fff;
+}
+.liste-chip.active .ic { color: #fff; }
+
+input, select, textarea, .search-input {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border-color: var(--verre-filet) !important;
+  border-radius: 12px !important;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+}
+input:focus, select:focus, textarea:focus, .search-input:focus {
+  border-color: var(--rose-vif) !important;
+  box-shadow: 0 0 0 3px rgba(214, 66, 126, 0.18) !important;
+}
+
+/* ═══ 5. Tuiles, urgence, carrousel ═══ */
+.hub-tuile { border-left: 1px solid var(--verre-bord); }
+.hub-tuile::before {
+  content: ''; position: absolute; left: 0; top: 12px; bottom: 12px;
+  width: 4px; border-radius: 4px; background: var(--t, var(--encre-rose));
+  box-shadow: 0 0 12px 0 var(--t, var(--encre-rose));
+  opacity: .85;
+}
+.hub-tuile { padding-left: 18px; }
+.hub-urgence {
+  background: linear-gradient(140deg, rgba(224, 74, 120, 0.92), rgba(163, 35, 66, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.55); color: #fff;
+  box-shadow: 0 10px 26px -10px rgba(198, 40, 90, 0.65),
+              inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.hub-urgence:hover { background: linear-gradient(140deg, rgba(230, 90, 134, 0.95), rgba(163, 35, 66, 0.98)); }
+
+.liste-carte {
+  background-color: var(--verre);
+  background-image: linear-gradient(180deg,
+      color-mix(in srgb, var(--lc, #D6427E) 22%, transparent),
+      transparent 68%);
+  border-top: 1px solid var(--verre-bord);
+}
+.liste-carte::before {
+  content: ''; position: absolute; left: 12px; right: 12px; top: 0;
+  height: 4px; border-radius: 0 0 6px 6px;
+  background: var(--lc, #D6427E);
+  box-shadow: 0 2px 10px 0 var(--lc, #D6427E);
+}
+.liste-carte-plus {
+  background-color: rgba(255, 255, 255, 0.35);
+  background-image: none;
+  border: 1.5px dashed rgba(158, 48, 87, 0.30);
+  box-shadow: none;
+}
+.liste-carte-plus::before { display: none; }
+.liste-vue-feuille { border-top: 4px solid var(--lc, var(--rose-vif)); }
+
+/* ═══ 6. Modales, panneau de l'assistant, toasts ═══ */
+.modal { background: rgba(255, 255, 255, 0.82); }
+.modal-overlay, #modalOverlay { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.chatbot, .toast {
+  background: rgba(255, 255, 255, 0.80);
+  -webkit-backdrop-filter: var(--flou); backdrop-filter: var(--flou);
+  border: 1px solid var(--verre-bord);
+  box-shadow: var(--ombre-verre);
+}
+.chatbot-bouton {
+  background: linear-gradient(135deg, var(--rose-vif), var(--rose-profond));
+  box-shadow: 0 10px 26px -8px rgba(198, 55, 116, 0.6),
+              inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+/* ═══ 7. Plus de mode sombre ═══ */
+.dark-toggle, #darkToggle { display: none !important; }
+
+/* ═══ 8. Finitions ═══ */
+/* Les bandeaux colorés gardent leur couleur franche mais prennent un éclat
+   de verre : un voile de lumière en haut, comme le reste. */
+.hub-groupe-bande {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.24),
+                    rgba(255, 255, 255, 0) 60%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+/* Le bouton dangereux (Supprimer, Créer l'urgence) : verre rouge franc */
+.btn-danger {
+  background: linear-gradient(135deg, #E0517C, #B22946);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  color: #fff;
+  box-shadow: 0 8px 20px -8px rgba(178, 41, 70, 0.55),
+              inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.btn-danger:hover { background: linear-gradient(135deg, #E9648C, #B22946); }
+
+/* La page de connexion sur la même aurore, la carte en verre */
+.login-page { background: transparent; }
+.login-card {
+  background: var(--verre-dense);
+  -webkit-backdrop-filter: var(--flou); backdrop-filter: var(--flou);
+  border: 1px solid var(--verre-bord);
+  border-radius: 24px;
+  box-shadow: var(--ombre-verre), var(--reflet);
+}

@@ -66,16 +66,15 @@ const Loading = {
 const DarkMode = {
   KEY: 'ideaforma_theme',
 
+  /* Thème crystal (v13) : l'application est TOUJOURS claire.
+     Le mode sombre est retiré à la demande de l'utilisatrice — ne pas le
+     réintroduire. Le bouton lune est masqué par css/crystal.css. */
   init() {
-    const saved       = localStorage.getItem(this.KEY);
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    this.apply(saved ? saved === 'dark' : prefersDark, false);
+    localStorage.removeItem(this.KEY);
+    this.apply(false, false);
   },
 
-  toggle() {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    this.apply(!isDark);
-  },
+  toggle() { /* plus de mode sombre */ },
 
   apply(dark, save = true) {
     document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
