@@ -16,7 +16,11 @@
    Dépendance : web-push (déclarée dans package.json à la racine).
 ──────────────────────────────────────────────────────────────────────────────*/
 
-const webpush = require('web-push');
+/* Chargée prudemment : si la dépendance manque ou casse, on veut répondre
+   une erreur LISIBLE, pas un FUNCTION_INVOCATION_FAILED muet. */
+let webpush = null, webpushErreur = null;
+try { webpush = require('web-push'); }
+catch (e) { webpushErreur = 'Dépendance web-push introuvable : ' + e.message; }
 
 const LOT_MAX = 200;   // garde-fou : on ne traite pas plus de 200 rappels par minute
 
@@ -50,6 +54,33 @@ function db() {
 }
 
 module.exports = async function handler(req, res) {
+  /* ── Mode santé : dit quelles variables d'environnement sont présentes,
+       sans jamais révéler leur valeur. Sert au diagnostic dans Paramètres →
+       Notifications. GET /api/rappels?sante=1 ── */
+  if (req.method === 'GET' && req.query && req.query.sante !== undefined) {
+    let vapidValides = false, probleme = webpushErreur;
+    if (webpush && process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+      try {
+        webpush.setVapidDetails(
+          process.env.VAPID_SUBJECT || 'mailto:contact.ideaforma@gmail.com',
+          process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+        vapidValides = true;
+      } catch (e) { probleme = probleme || ('Clés VAPID invalides : ' + e.message); }
+    }
+    return res.status(200).json({
+      sante: {
+        SUPABASE_URL:              !!process.env.SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        VAPID_PUBLIC_KEY:          !!process.env.VAPID_PUBLIC_KEY,
+        VAPID_PRIVATE_KEY:         !!process.env.VAPID_PRIVATE_KEY,
+        RAPPELS_SECRET:            !!process.env.RAPPELS_SECRET,
+        WEB_PUSH:                  !!webpush,
+        VAPID_VALIDES:             vapidValides
+      },
+      probleme: probleme || null
+    });
+  }
+
   /* ── Cette route n'est appelée que par le cron ── */
   const secret = process.env.RAPPELS_SECRET;
   if (!secret) return res.status(500).json({ error: 'RAPPELS_SECRET non configurée' });
@@ -63,13 +94,22 @@ module.exports = async function handler(req, res) {
   const pub  = process.env.VAPID_PUBLIC_KEY;
   const priv = process.env.VAPID_PRIVATE_KEY;
   if (!pub || !priv) return res.status(500).json({ error: 'Clés VAPID non configurées' });
+  if (!webpush)      return res.status(500).json({ error: webpushErreur });
 
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT || 'mailto:contact.ideaforma@gmail.com',
-    pub, priv
-  );
+  try {
+    webpush.setVapidDetails(
+      process.env.VAPID_SUBJECT || 'mailto:contact.ideaforma@gmail.com',
+      pub, priv
+    );
+  } catch (e) {
+    return res.status(500).json({
+      error: 'Clés VAPID invalides (mal recopiées dans Vercel ?) : ' + e.message
+    });
+  }
 
-  const sql = db();
+  let sql;
+  try { sql = db(); }
+  catch (e) { return res.status(500).json({ error: e.message }); }
 
   let lignes;
   try {

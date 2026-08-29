@@ -94,4 +94,16 @@ union all
 select '7. Derniers rappels (statut · erreur)',
        coalesce((select string_agg(statut || coalesce(' [' || left(erreur, 60) || ']', ''), ' | ')
                    from (select statut, erreur from public.rappels
-                          order by cree_le desc limit 5) r), 'aucun');
+                          order by cree_le desc limit 5) r), 'aucun')
+union all
+select '8. Dernières réponses du serveur au cron',
+       coalesce((select string_agg(
+                   coalesce('HTTP ' || status_code::text, 'échec réseau : ' || left(error_msg, 60))
+                   || coalesce(' · ' || left(content, 80), ''), ' | ')
+                   from (select status_code, error_msg, content::text as content
+                           from net._http_response order by id desc limit 3) h), 'aucune');
+-- Lecture de la ligne 8 : HTTP 200 = la chaîne marche ; HTTP 401 = le secret
+-- RAPPELS_SECRET de Vercel ne correspond pas au secret « rappels_secret » du
+-- Vault ; HTTP 500 = variable manquante côté Vercel (voir Paramètres →
+-- Notifications dans l'app, qui liste précisément lesquelles) ; « échec
+-- réseau » = adresse app_url encore fausse.

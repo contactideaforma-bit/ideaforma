@@ -440,14 +440,29 @@ input:focus, select:focus, textarea:focus, .search-input:focus {
 }
 
 /* ═══ 12. Corrections d'affichage v15 (29/08/2026) ═══ */
-/* Téléphone : la modale est un tiroir posé au bord bas — angles du bas
-   droits, et un matelas pour la barre-geste de l'iPhone afin que les
-   boutons Annuler / Créer ne passent jamais dessous. */
+/* Téléphone : la modale est désormais ANCRÉE EN HAUT de l'écran — ancrée en
+   bas, elle passait sous le clavier dès qu'on touchait un champ (bouton
+   Urgence, formulaire de tâche). En haut, le clavier s'ouvre en dessous et
+   la fenêtre reste entièrement visible. */
 @media (max-width: 760px) {
+  .modal-overlay {
+    align-items: flex-start !important;
+    padding: max(12px, env(safe-area-inset-top)) 10px
+             calc(12px + env(safe-area-inset-bottom)) !important;
+  }
   .modal {
-    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
-    padding-bottom: env(safe-area-inset-bottom);
-    max-height: 92vh; max-height: 92dvh; overflow-y: auto;
+    border-radius: 20px !important;
+    /* bujo pose margin-top:auto (feuille du bas) : on l'annule, sinon la
+       fenêtre reste collée en bas malgré l'ancrage haut */
+    margin-top: 0 !important; margin-bottom: auto !important;
+    max-height: 88vh; max-height: 88dvh; overflow-y: auto;
+  }
+  /* La barre latérale ouverte en tiroir : OPAQUE. Translucide, elle laissait
+     voir le voile sombre au travers et paraissait grisée (et Safari iOS rate
+     souvent le flou sur un élément en cours de glissement). */
+  .sidebar {
+    background: #FDF8FB;
+    -webkit-backdrop-filter: none; backdrop-filter: none;
   }
 }
 /* Le chatbot aussi vit par-dessus la page : verre plus dense pour rester

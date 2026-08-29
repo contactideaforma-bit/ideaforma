@@ -179,6 +179,23 @@ const SettingsPage = {
         : { ok: false, detail: d.error || `Le serveur répond ${res.status}.` };
     } catch (err) { serveur = { ok: false, detail: 'Le serveur de notifications ne répond pas : ' + err.message }; }
 
+    /* Diagnostic fin : quelles variables manquent côté Vercel ? (booléens
+       seulement, la route ne révèle jamais les valeurs) */
+    let sante = null, santeProbleme = null;
+    try {
+      const r2 = await fetch('/api/rappels?sante=1', { cache: 'no-store' });
+      const d2 = await r2.json().catch(() => ({}));
+      if (d2.sante) { sante = d2.sante; santeProbleme = d2.probleme || null; }
+    } catch { /* la route peut être absente sur une vieille version */ }
+    const manquantes = sante
+      ? Object.keys(sante).filter(k => !sante[k] && !['WEB_PUSH', 'VAPID_VALIDES'].includes(k))
+      : [];
+
+    /* Un rappel resté « en_attente » alors que son heure est passée depuis
+       plus de 3 minutes = le cron Supabase n'appelle pas le serveur. */
+    const bloque = recents.find(r => r.statut === 'en_attente'
+      && new Date(r.envoyer_a) < new Date(Date.now() - 3 * 60000));
+
     const bandeau = {
       accorde:      ['ok',      Icone('cloche', { taille: 17 }), 'Les notifications sont autorisées sur cet appareil.'],
       a_demander:   ['attente', Icone('clocheOff', { taille: 17 }), 'Les notifications ne sont pas encore activées sur cet appareil.'],
@@ -210,6 +227,30 @@ const SettingsPage = {
             <span class="notif-etat-ic">${Icone(serveur.ok ? 'check' : 'alerte', { taille: 17 })}</span>
             <span>${esc(serveur.detail)}${serveur.ok ? '' : ' — vérifiez les variables VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, SUPABASE_SERVICE_ROLE_KEY et RAPPELS_SECRET dans Vercel.'}</span>
           </div>
+          ${sante ? `
+            <div class="notif-etat ${manquantes.length ? 'ko' : 'ok'}" style="margin-top:8px;">
+              <span class="notif-etat-ic">${Icone(manquantes.length ? 'alerte' : 'check', { taille: 17 })}</span>
+              <span>${manquantes.length
+                ? `Variables manquantes dans Vercel : <strong>${manquantes.join(', ')}</strong>.
+                   Ajoutez-les (Settings → Environment Variables) puis redéployez.`
+                : 'Toutes les variables serveur sont renseignées dans Vercel.'}</span>
+            </div>` : ''}
+          ${santeProbleme ? `
+            <div class="notif-etat ko" style="margin-top:8px;">
+              <span class="notif-etat-ic">${Icone('alerte', { taille: 17 })}</span>
+              <span><strong>Problème serveur identifié :</strong> ${esc(santeProbleme)}
+              ${/VAPID/i.test(santeProbleme)
+                ? ' — recopiez les clés VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY dans Vercel (sans espace ni retour à la ligne), puis redéployez.'
+                : ''}</span>
+            </div>` : ''}
+          ${bloque ? `
+            <div class="notif-etat ko" style="margin-top:8px;">
+              <span class="notif-etat-ic">${Icone('alerte', { taille: 17 })}</span>
+              <span>Un rappel est resté <strong>en attente</strong> après son heure :
+              le déclencheur Supabase n'appelle pas le serveur. Exécutez
+              <strong>setup_update14.sql</strong> dans Supabase → SQL Editor,
+              puis relancez le test.</span>
+            </div>` : ''}
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${etat === 'accorde'
