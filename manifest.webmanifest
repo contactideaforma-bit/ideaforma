@@ -72,8 +72,9 @@
       ]
     },
     {
-      "name": "Assistant",
-      "url": "/app.html#assistant",
+      "name": "Parler à Nanika",
+      "short_name": "Nanika",
+      "url": "/app.html#vocal",
       "icons": [
         {
           "src": "/icons/icon-192.png",

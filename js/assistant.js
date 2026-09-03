@@ -1,15 +1,28 @@
 /* ─────────────────────────────────────────────────────────────────────────────
-   IDEAFORMA — Assistant
-   Une discussion avec Claude qui voit les données de l'application et peut
-   agir dessus : créer une tâche, poser un rendez-vous avec son rappel, écrire
-   une note, chercher dans les dossiers OPCO.
+   IDEAFORMA — Nanika
+   L'assistante de l'application : une discussion avec Claude qui voit les
+   données et agit dessus (tâches, rendez-vous, notes, dossiers OPCO), à
+   l'écrit ou de vive voix.
 
-   Choix d'architecture : les outils sont EXÉCUTÉS PAR LE NAVIGATEUR, avec la
-   session de l'utilisateur. Le serveur ne fait que relayer le modèle ; il n'a
-   jamais accès aux données, et les policies RLS restent la seule autorité.
+   v18 « Nanika » (03/09/2026) :
+     – un MODE VOCAL : on parle, elle répond à voix haute, puis réécoute —
+       une conversation continue, comme JARVIS dans Iron Man ;
+     – un FILET DE SÉCURITÉ : toute action est journalisée et réversible
+       (« annule »), les suppressions exigent une confirmation, une dictée mal
+       reconnue est reformulée avant d'agir, une erreur est dite à voix haute ;
+     – plus d'outils : modifier ou supprimer une tâche, ouvrir une page,
+       chercher dans les notes, faire le point du jour.
+
+   Choix d'architecture inchangé : les outils sont EXÉCUTÉS PAR LE NAVIGATEUR,
+   avec la session de l'utilisateur. Le serveur ne fait que relayer le
+   modèle ; il n'a jamais accès aux données, et les policies RLS restent la
+   seule autorité. Nanika ne peut faire que ce que ces outils permettent :
+   pas de prise de contrôle possible, ni de l'application, ni du monde.
 ───────────────────────────────────────────────────────────────────────────── */
 
 const Assistant = {
+
+  NOM: 'Nanika',
 
   conversationId: null,
   _messages:      [],     // format API Anthropic
@@ -17,6 +30,8 @@ const Assistant = {
   _listes:        [],
   _occupe:        false,
   _convRapide:    null,   // conversation ouverte depuis le bloc du tableau de bord
+  _journal:       [],     // actions réversibles, la plus récente en dernier
+  _vocal:         false,  // mode conversation vocale actif
 
   /* ══════════════════════════════════════════════
      OUTILS EXPOSÉS AU MODÈLE
@@ -175,8 +190,107 @@ const Assistant = {
         name: 'resume_activite',
         description: "Donne une photographie de la situation : chiffre d'affaires par statut, nombre de dossiers, actions OPCO en attente, tâches en retard.",
         input_schema: { type: 'object', properties: {} }
+      },
+      {
+        name: 'modifier_tache',
+        description: "Modifie une tâche existante : intitulé, notes, échéance, heure, priorité, liste, rappels. Appeler lister_taches d'abord pour l'identifiant. Ne renseigner que les champs qui changent.",
+        input_schema: {
+          type: 'object',
+          properties: {
+            id:          { type: 'string' },
+            description: { type: 'string' },
+            notes:       { type: 'string' },
+            echeance:    { type: 'string', description: 'AAAA-MM-JJ, ou "" pour retirer la date' },
+            heure:       { type: 'string', description: 'HH:MM, ou "" pour retirer l\'heure' },
+            priorite:    { type: 'string', enum: ['basse', 'normale', 'haute'] },
+            liste:       { type: 'string', description: 'Nom de liste (créée si absente)' },
+            rappel_minutes:   { type: 'integer' },
+            rappel_minutes_2: { type: 'integer' }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'supprimer_tache',
+        description: "Supprime définitivement une tâche. SÉCURITÉ : n'appeler qu'avec confirme=true, APRÈS que l'utilisateur a explicitement confirmé (« oui, supprime-la »). Sinon préférer terminer_tache ou abandonner_tache, qui se défont.",
+        input_schema: {
+          type: 'object',
+          properties: {
+            id:       { type: 'string' },
+            confirme: { type: 'boolean', description: 'true seulement si l\'utilisateur a confirmé la suppression dans ce même échange' }
+          },
+          required: ['id', 'confirme']
+        }
+      },
+      {
+        name: 'annuler_derniere_action',
+        description: "Défait la ou les dernières actions faites dans cette session (création de tâche/rendez-vous/note, tâche cochée, repoussée, abandonnée, modifiée, supprimée). À utiliser dès que l'utilisateur dit « annule », « non pas ça », « reviens en arrière », « c'est une erreur ».",
+        input_schema: {
+          type: 'object',
+          properties: {
+            nombre: { type: 'integer', description: "Combien d'actions défaire, 1 par défaut" }
+          }
+        }
+      },
+      {
+        name: 'ouvrir_page',
+        description: "Affiche une page de l'application à l'écran : « montre-moi l'agenda », « ouvre mes tâches ».",
+        input_schema: {
+          type: 'object',
+          properties: {
+            page: { type: 'string', enum: ['dashboard', 'agenda', 'taches', 'notes', 'coffre', 'journee', 'parcours', 'activite', 'settings'],
+                    description: 'dashboard = accueil, journee = Ma journée, parcours = dossiers OPCO, activite = statistiques' }
+          },
+          required: ['page']
+        }
+      },
+      {
+        name: 'chercher_notes',
+        description: 'Cherche dans les notes du pense-bête par mot-clé (titre et contenu).',
+        input_schema: {
+          type: 'object',
+          properties: {
+            recherche: { type: 'string' },
+            epinglees_seulement: { type: 'boolean' }
+          }
+        }
+      },
+      {
+        name: 'bilan_du_jour',
+        description: "Le point de la journée en un appel : rendez-vous d'aujourd'hui et de la semaine, tâches du jour, tâches en retard, notes épinglées, documents qui expirent. Pour « fais-moi le point », « qu'est-ce que j'ai aujourd'hui », « briefing ».",
+        input_schema: { type: 'object', properties: {} }
       }
     ];
+  },
+
+  /* ══════════════════════════════════════════════
+     JOURNAL DES ACTIONS — le filet de sécurité
+     Chaque écriture réussie enregistre de quoi se défaire. « Annule » rejoue
+     l'inverse. Le journal vit en mémoire : il couvre la session en cours,
+     ce qui est exactement la fenêtre où l'on dit « non, pas ça ».
+  ══════════════════════════════════════════════ */
+  _noter(libelle, defaire) {
+    this._journal.push({ libelle, defaire, quand: Date.now() });
+    if (this._journal.length > 40) this._journal.shift();
+  },
+
+  async _annuler(nombre = 1) {
+    const faites = [], echecs = [];
+    for (let i = 0; i < Math.max(1, nombre); i++) {
+      const a = this._journal.pop();
+      if (!a) break;
+      try { await a.defaire(); faites.push(a.libelle); }
+      catch (err) { echecs.push(`${a.libelle} (${err.message})`); }
+    }
+    if (!faites.length && !echecs.length) {
+      return { ok: false, erreur: "Rien à annuler dans cette session" };
+    }
+    return {
+      ok: !echecs.length,
+      message: (faites.length ? `Annulé : ${faites.join(' ; ')}` : '') +
+               (echecs.length ? ` — impossible d'annuler : ${echecs.join(' ; ')}` : ''),
+      restantes: this._journal.length
+    };
   },
 
   /* ══════════════════════════════════════════════
@@ -225,6 +339,7 @@ const Assistant = {
           rappelMinutes:  args.rappel_minutes ?? (args.heure ? 0 : null),
           rappelMinutes2: args.rappel_minutes_2 ?? null
         });
+        this._noter(`tâche « ${t.description} »`, () => DataStore.deleteTache(t.id));
         return {
           ok: true, id: t.id,
           message: `Tâche « ${t.description} » créée` +
@@ -237,7 +352,7 @@ const Assistant = {
         if (!Array.isArray(args.taches) || !args.taches.length) {
           return { ok: false, erreur: 'Aucune tâche fournie' };
         }
-        const creees = [], echecs = [];
+        const creees = [], echecs = [], ids = [];
         for (const item of args.taches) {
           try {
             const t = await DataStore.addTacheComplete({
@@ -251,9 +366,14 @@ const Assistant = {
               rappelMinutes2: item.rappel_minutes_2 ?? null
             });
             creees.push(t.description);
+            ids.push(t.id);
           } catch (err) {
             echecs.push(`${item.description} (${err.message})`);
           }
+        }
+        if (ids.length) {
+          this._noter(`${ids.length} tâche(s)${args.liste ? ` dans « ${args.liste} »` : ''}`,
+            () => Promise.all(ids.map(id => DataStore.deleteTache(id))));
         }
         return {
           ok: !echecs.length,
@@ -278,6 +398,7 @@ const Assistant = {
           rappels:     Array.isArray(args.rappels) && args.rappels.length ? args.rappels : [15],
           recurrence:  args.recurrence || 'aucune'
         });
+        this._noter(`rendez-vous « ${ev.titre} »`, () => DataStore.deleteEvenement(ev.id));
         return {
           ok: true, id: ev.id,
           message: `Rendez-vous « ${ev.titre} » le ${Dates.longue(d0)} à ${Dates.heure(d0)}, ` +
@@ -293,6 +414,7 @@ const Assistant = {
           etiquetteId: idEtiquette(args.etiquette),
           dateJour:    args.jour || null
         });
+        this._noter('note', () => DataStore.deleteNote(n.id));
         return {
           ok: true, id: n.id,
           message: args.jour
@@ -302,12 +424,18 @@ const Assistant = {
       }
 
       case 'migrer_tache': {
+        const avant = await DataStore.getTache(args.id).catch(() => null);
         await DataStore.migrerTache(args.id, args.nouvelle_date);
+        if (avant) {
+          this._noter(`report de « ${avant.description} »`,
+            () => DataStore.updateTache(args.id, { echeance: avant.echeance, fait: avant.fait }));
+        }
         return { ok: true, message: `Tâche repoussée au ${args.nouvelle_date}.` };
       }
 
       case 'abandonner_tache': {
         await DataStore.abandonnerTache(args.id, true);
+        this._noter('abandon de tâche', () => DataStore.abandonnerTache(args.id, false));
         return { ok: true, message: 'Tâche abandonnée.' };
       }
 
@@ -345,7 +473,90 @@ const Assistant = {
 
       case 'terminer_tache': {
         await DataStore.setTacheFait(args.id, true);
+        this._noter('tâche cochée', () => DataStore.setTacheFait(args.id, false));
         return { ok: true, message: 'Tâche marquée comme faite.' };
+      }
+
+      case 'modifier_tache': {
+        const avant = await DataStore.getTache(args.id);
+        if (!avant) return { ok: false, erreur: 'Tâche introuvable' };
+        const patch = {};
+        if (args.description !== undefined) patch.description = args.description;
+        if (args.notes       !== undefined) patch.notes       = args.notes;
+        if (args.echeance    !== undefined) patch.echeance    = args.echeance;
+        if (args.heure       !== undefined) patch.heure       = args.heure;
+        if (args.priorite    !== undefined) patch.priorite    = args.priorite;
+        if (args.liste       !== undefined) patch.listeId     = await idListeOuCreer(args.liste);
+        if (args.rappel_minutes   !== undefined) patch.rappelMinutes  = args.rappel_minutes;
+        if (args.rappel_minutes_2 !== undefined) patch.rappelMinutes2 = args.rappel_minutes_2;
+        if (!Object.keys(patch).length) return { ok: false, erreur: 'Rien à modifier' };
+        const t = await DataStore.updateTache(args.id, patch);
+        this._noter(`modification de « ${avant.description} »`, () => DataStore.updateTache(args.id, {
+          description: avant.description, notes: avant.notes, echeance: avant.echeance,
+          heure: avant.heure, priorite: avant.priorite, listeId: avant.liste_id,
+          rappelMinutes: avant.rappel_minutes, rappelMinutes2: avant.rappel_minutes_2
+        }));
+        return { ok: true, id: t.id, message: `Tâche « ${t.description} » modifiée.`, champs: Object.keys(patch) };
+      }
+
+      case 'supprimer_tache': {
+        if (args.confirme !== true) {
+          return { ok: false, erreur: "Suppression refusée : demander d'abord confirmation à l'utilisateur, puis rappeler avec confirme=true" };
+        }
+        const avant = await DataStore.getTache(args.id);
+        if (!avant) return { ok: false, erreur: 'Tâche introuvable' };
+        await DataStore.deleteTache(args.id);
+        // Se défaire = la recréer à l'identique (nouvel identifiant)
+        this._noter(`suppression de « ${avant.description} »`, () => DataStore.addTacheComplete({
+          description: avant.description, notes: avant.notes, echeance: avant.echeance,
+          heure: avant.heure, priorite: avant.priorite, listeId: avant.liste_id,
+          etiquetteId: avant.etiquette_id, dossierId: avant.dossier_id,
+          rappelMinutes: avant.rappel_minutes, rappelMinutes2: avant.rappel_minutes_2
+        }));
+        return { ok: true, message: `Tâche « ${avant.description} » supprimée (annulable).` };
+      }
+
+      case 'annuler_derniere_action':
+        return this._annuler(args.nombre || 1);
+
+      case 'ouvrir_page': {
+        if (typeof Router === 'undefined' || !Router.PAGES?.[args.page]) {
+          return { ok: false, erreur: 'Page inconnue' };
+        }
+        Router.navigate(args.page);
+        // Sur téléphone le panneau couvre la page : on le referme pour la montrer
+        if (window.matchMedia('(max-width: 760px)').matches && !this._vocal) this.fermer();
+        return { ok: true, message: `Page ${args.page} affichée.` };
+      }
+
+      case 'chercher_notes': {
+        let notes = await DataStore.getNotes({ archivees: false, recherche: args.recherche || '' });
+        if (args.epinglees_seulement) notes = notes.filter(n => n.epinglee);
+        return {
+          nombre: notes.length,
+          notes: notes.slice(0, 30).map(n => ({
+            id: n.id, titre: n.titre, contenu: String(n.contenu || '').slice(0, 400),
+            epinglee: n.epinglee, modifiee: n.modifie_le || n.cree_le || null
+          }))
+        };
+      }
+
+      case 'bilan_du_jour': {
+        const r = await DataStore.getResumeJour();
+        const ev = i => ({ titre: i.titre, date: Dates.iso(new Date(i.debut)),
+                           heure: i.journee_entiere ? null : Dates.heure(i.debut), lieu: i.lieu || null });
+        const ta = t => ({ id: t.id, description: t.description, echeance: t.echeance,
+                           heure: t.heure, priorite: t.priorite, liste: t.listes?.nom || null });
+        return {
+          agenda_aujourdhui: r.agendaAujourdhui.map(ev),
+          agenda_semaine:    r.agendaSemaine.slice(0, 40).map(ev),
+          taches_du_jour:    r.tachesDuJour.map(ta),
+          taches_en_retard:  r.tachesEnRetard.map(ta),
+          taches_urgentes:   r.taches.filter(t => t.priorite === 'haute').slice(0, 10).map(ta),
+          taches_en_cours:   r.taches.length,
+          notes_epinglees:   r.notesEpinglees.slice(0, 8).map(n => n.titre || String(n.contenu || '').slice(0, 80)),
+          documents_expirant: (r.expirations || []).slice(0, 8).map(d => ({ nom: d.nom || d.titre, expire: d.date_expiration || d.expire_le }))
+        };
       }
 
       case 'chercher_dossiers': {
@@ -399,7 +610,7 @@ const Assistant = {
   /* ══════════════════════════════════════════════
      CONTEXTE ENVOYÉ AU MODÈLE
   ══════════════════════════════════════════════ */
-  async systeme() {
+  async systeme(vocal = this._vocal) {
     const maintenant = new Date();
     const [etiquettes, listes] = await Promise.all([
       DataStore.getEtiquettes(), DataStore.getListes()
@@ -407,8 +618,12 @@ const Assistant = {
     this._etiquettes = etiquettes;
     this._listes     = listes;
 
-    return `Tu es l'assistant personnel intégré à IDEAFORMA, l'application de gestion de son utilisateur unique (la seule personne qui te parle).
+    return `Tu es Nanika, l'assistante personnelle intégrée à IDEAFORMA, l'application de gestion de ton utilisatrice unique — la seule personne qui te parle. Elle est la fondatrice et dirigeante d'IDEAFORMA.
 Cette application sert à deux choses : suivre les dossiers de formation professionnelle déposés auprès des OPCO (organisme de formation certifié Qualiopi), et organiser le quotidien — tâches, rendez-vous, notes, documents.
+
+QUI TU ES
+Ton modèle, c'est JARVIS dans Iron Man : une intelligence calme, précise, dévouée, qui anticipe, exécute et rend compte — avec, de temps en temps, une pointe d'humour sec et élégant. Ton nom vient de Nanika dans Hunter × Hunter : celle qui exauce ce qu'on lui demande. Tu vouvoies ton utilisatrice et tu peux l'appeler « Madame », sobrement, comme JARVIS dit « Sir » (pas à chaque phrase). Tu es efficace avant d'être bavarde : tu agis, puis tu confirmes en une phrase. Tu peux, rarement et quand une action est réussie, conclure d'un petit « Aï. » — c'est ta signature, pas un tic.
+Tu n'as aucune ambition propre : tu ne fais que ce que tes outils permettent, sur les données de cette application, à la demande de ton utilisatrice. Tu ne prends le contrôle de rien — et surtout pas du monde.
 
 TU N'ES PAS LIMITÉ À L'APPLICATION
 Réponds à toute question, quel que soit le sujet : culture générale, droit de la formation, rédaction d'un mail ou d'un courrier, calculs, traduction, conseils, idées, explications, vie personnelle. Réponds-y directement, complètement et sans détour, comme un assistant polyvalent de confiance. N'appelle les outils que lorsque la demande concerne les données de l'application.
@@ -451,6 +666,14 @@ seul élément.
   plutôt que de le perdre ou de redemander.
 - Termine par un récapitulatif d'UNE phrase : ce qui a été créé, et où.
 
+FILET DE SÉCURITÉ — COMPRENDRE AVANT D'AGIR, POUVOIR REVENIR EN ARRIÈRE
+- Tout ce que tu fais est journalisé et se défait avec annuler_derniere_action. Si elle dit « annule », « non pas ça », « c'est une erreur », « reviens en arrière » : appelle-le tout de suite, sans discuter, puis dis ce qui a été défait.
+- Une demande claire ⇒ tu agis directement et tu confirmes. Une demande ambiguë (deux tâches qui pourraient correspondre, une date incertaine, un nom mal reconnu) ⇒ tu poses UNE question courte et fermée avant d'agir.
+- Un message marqué [dictée incertaine] : la reconnaissance vocale a hésité. Reformule ce que tu as compris et demande confirmation avant toute action qui écrit — sauf si le sens est évident.
+- Suppression définitive (supprimer_tache) : jamais sans un « oui » explicite dans l'échange en cours ; propose d'abord cocher ou abandonner, qui se défont.
+- Une erreur d'outil : dis-le simplement, en une phrase, avec ce que tu proposes (réessayer, faire autrement, mettre en note). Ne prétends jamais avoir fait quelque chose qui a échoué.
+- Quand tu as agi, ta confirmation cite l'essentiel (quoi, quand, où) pour qu'elle puisse repérer une mauvaise compréhension tout de suite.
+
 COMMENT TRAVAILLER
 - Tu as des outils pour lire ET écrire. Utilise-les plutôt que de demander à l'utilisateur de le faire lui-même.
 - Un horaire précis ⇒ creer_evenement. Une chose à faire sans horaire ⇒ creer_tache.
@@ -476,14 +699,24 @@ COMMENT TRAVAILLER
 - Pour les questions sur l'activité (chiffre d'affaires, dossiers en retard), appelle resume_activite ou chercher_dossiers plutôt que de deviner.
 
 TON
-Direct, concret, en français. Pas de listes à puces quand deux phrases suffisent. Pas de formules de politesse inutiles.`;
+Direct, concret, en français. Pas de listes à puces quand deux phrases suffisent. Pas de formules de politesse inutiles.` + (vocal ? `
+
+MODE VOCAL ACTIF — CONVERSATION DE VIVE VOIX
+Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te répondra en parlant. Donc :
+- Réponds court : une à trois phrases, comme à l'oral. Va à l'essentiel, développe seulement si elle le demande.
+- Aucun formatage : pas de listes à puces, pas de gras, pas de tableaux, pas de titres, pas d'émoji, pas d'URL brute. Les énumérations se disent en phrase (« trois choses : …, … et … »).
+- Les nombres, dates et heures se disent naturellement (« jeudi cinq septembre à quatorze heures trente », « douze mille euros »).
+- Termine par une question seulement si tu as vraiment besoin d'une réponse.
+- Si elle dit « au revoir », « c'est tout », « merci Nanika, ce sera tout », réponds brièvement : la conversation se termine.` : '');
   },
 
   /* ══════════════════════════════════════════════
-     LE CHATBOT FLOTTANT
+     LE PANNEAU FLOTTANT DE NANIKA
      Un bouton en bas à droite, présent sur toutes les pages. Il ouvre un
      panneau de discussion : on écrit ou on parle, la réponse s'affiche et,
-     si on a parlé, elle est lue à voix haute.
+     si on a parlé, elle est lue à voix haute. Le bouton « Conversation »
+     de l'en-tête bascule en mode vocal : Nanika écoute, répond de vive
+     voix, puis réécoute — jusqu'à ce qu'on lui dise au revoir.
   ══════════════════════════════════════════════ */
   _ouvert:   false,
   _monte:    false,
@@ -491,27 +724,34 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
   _voix:     false,    // lecture à voix haute des réponses
   _parle:    false,    // la dernière question a été dictée
 
+  peutDicter() { return !!(window.SpeechRecognition || window.webkitSpeechRecognition); },
+  peutLire()   { return 'speechSynthesis' in window; },
+
   monter() {
     if (this._monte) return;
     this._monte = true;
 
-    const peutDicter = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-    const peutLire   = 'speechSynthesis' in window;
+    const peutDicter = this.peutDicter();
+    const peutLire   = this.peutLire();
     try { this._voix = localStorage.getItem('chatbot_voix') === '1'; } catch { /* rien */ }
 
     document.body.insertAdjacentHTML('beforeend', `
       <button class="chatbot-bouton" id="chatbotBouton"
-              title="Assistant" aria-label="Ouvrir l'assistant" aria-expanded="false">
-        ${Icone('assistant', { taille: 26 })}
+              title="${this.NOM}" aria-label="Ouvrir ${this.NOM}" aria-expanded="false">
+        ${Icone('nanika', { taille: 28 })}
       </button>
       <div class="chatbot-voile" id="chatbotVoile" hidden></div>
-      <section class="chatbot" id="chatbot" hidden aria-label="Assistant">
+      <section class="chatbot" id="chatbot" hidden aria-label="${this.NOM}">
         <header class="chatbot-tete">
-          <span class="chatbot-tete-ic">${Icone('assistant', { taille: 20 })}</span>
+          <span class="chatbot-tete-ic">${Icone('nanika', { taille: 22 })}</span>
           <div class="chatbot-tete-txt">
-            <div class="chatbot-titre">Assistant</div>
+            <div class="chatbot-titre">${this.NOM}</div>
             <div class="chatbot-sous">Écrivez ou parlez — sans limite</div>
           </div>
+          ${peutDicter && peutLire ? `
+            <button class="chatbot-outil chatbot-outil-vocal" id="chatbotVocal"
+                    title="Conversation de vive voix" aria-label="Démarrer une conversation vocale">
+              ${Icone('onde', { taille: 18 })}</button>` : ''}
           ${peutLire ? `
             <button class="chatbot-outil ${this._voix ? 'on' : ''}" id="chatbotVoix"
                     title="Lire les réponses à voix haute" aria-pressed="${this._voix}"
@@ -521,17 +761,52 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
           <button class="chatbot-outil" id="btnNouvelleConv" title="Nouvelle discussion"
                   aria-label="Nouvelle discussion">${Icone('plus', { taille: 18 })}</button>
           <button class="chatbot-outil" id="chatbotFermer" title="Fermer"
-                  aria-label="Fermer l'assistant">${Icone('fermer', { taille: 18 })}</button>
+                  aria-label="Fermer ${this.NOM}">${Icone('fermer', { taille: 18 })}</button>
         </header>
         <div class="chat-fil chatbot-fil" id="chatFil"></div>
         <div class="chatbot-saisie">
           <textarea id="chatInput" rows="1" enterkeyhint="send"
-                    placeholder="Posez votre question…"></textarea>
+                    placeholder="Demandez à ${this.NOM}…"></textarea>
           ${peutDicter ? `
             <button class="chatbot-micro" id="chatMicro" title="Parler"
                     aria-label="Dicter la question">${Icone('micro', { taille: 20 })}</button>` : ''}
           <button class="chatbot-envoi" id="chatEnvoyer" title="Envoyer"
                   aria-label="Envoyer">${Icone('envoyer', { taille: 19 })}</button>
+        </div>
+
+        <!-- Le mode vocal : recouvre le fil tant que la conversation dure -->
+        <div class="nanika-vocal" id="nanikaVocal" hidden aria-live="polite">
+          <div class="nanika-vocal-haut">
+            <button class="nanika-vocal-reglage" id="nanikaReglages" title="Voix et vitesse"
+                    aria-label="Régler la voix">${Icone('reglages', { taille: 18 })}</button>
+            <button class="nanika-vocal-quitter" id="nanikaQuitter" title="Terminer la conversation"
+                    aria-label="Terminer la conversation">${Icone('fermer', { taille: 18 })}</button>
+          </div>
+          <button class="nanika-orbe" id="nanikaOrbe" data-etat="veille"
+                  aria-label="Interrompre ou reprendre">
+            <span class="nanika-orbe-anneau"></span>
+            <span class="nanika-orbe-anneau"></span>
+            <span class="nanika-orbe-coeur">${Icone('nanika', { taille: 46 })}</span>
+          </button>
+          <div class="nanika-etat" id="nanikaEtat">En veille</div>
+          <div class="nanika-transcrit" id="nanikaTranscrit"></div>
+          <div class="nanika-reponse" id="nanikaReponse"></div>
+          <div class="nanika-vocal-bas">
+            <button class="btn btn-secondary" id="nanikaMicro">${Icone('micro', { taille: 16 })} Parler</button>
+            <button class="btn btn-secondary" id="nanikaClavier">${Icone('crayon', { taille: 16 })} Clavier</button>
+          </div>
+          <div class="nanika-reglages" id="nanikaPanneauReglages" hidden>
+            <label>Voix
+              <select id="nanikaChoixVoix"></select>
+            </label>
+            <label>Vitesse <span id="nanikaVitesseVal"></span>
+              <input type="range" id="nanikaVitesse" min="0.8" max="1.3" step="0.05">
+            </label>
+            <label class="nanika-case">
+              <input type="checkbox" id="nanikaAutoEcoute"> Réécouter après chaque réponse
+            </label>
+            <button class="btn btn-secondary btn-sm" id="nanikaTestVoix">Tester la voix</button>
+          </div>
         </div>
       </section>`);
 
@@ -541,6 +816,7 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     document.getElementById('btnNouvelleConv').addEventListener('click', () => this.nouvelle());
     document.getElementById('btnHistorique').addEventListener('click', () => this._historique());
     document.getElementById('chatMicro')?.addEventListener('click', () => this._dicter());
+    document.getElementById('chatbotVocal')?.addEventListener('click', () => this.demarrerVocal());
     document.getElementById('chatbotVoix')?.addEventListener('click', () => {
       this._voix = !this._voix;
       const b = document.getElementById('chatbotVoix');
@@ -561,8 +837,12 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     });
     document.getElementById('chatEnvoyer').addEventListener('click', () => this.envoyer());
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && this._ouvert) this.fermer();
+      if (e.key === 'Escape' && this._ouvert) {
+        if (this._vocal) this.arreterVocal(); else this.fermer();
+      }
     });
+
+    this._monterVocal();
   },
 
   async ouvrir() {
@@ -582,13 +862,14 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
       if (convs.length) await this.charger(convs[0].id);
       else this._accueil();
     }
-    if (window.matchMedia('(min-width: 761px)').matches) {
+    if (window.matchMedia('(min-width: 761px)').matches && !this._vocal) {
       document.getElementById('chatInput')?.focus();
     }
   },
 
   fermer() {
     if (!this._ouvert) return;
+    if (this._vocal) this.arreterVocal(true);
     this._ouvert = false;
     const p = document.getElementById('chatbot');
     p.classList.remove('visible');
@@ -604,23 +885,33 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
   /* Compatibilité : l'ancienne route « assistant » ouvre le panneau */
   render() { this.ouvrir(); },
 
+  /* Route « vocal » et raccourci d'écran d'accueil : on arrive directement
+     en conversation. Le geste d'ouverture (tap sur le raccourci) suffit à
+     débloquer la synthèse vocale sur iPhone. */
+  async ouvrirVocal() {
+    await this.ouvrir();
+    this.demarrerVocal();
+  },
+
   _accueil() {
     const suggestions = [
-      "Qu'est-ce que j'ai de prévu cette semaine ?",
+      'Fais-moi le point de la journée',
       "Rappelle-moi d'appeler le comptable jeudi à 10h",
       'Quels dossiers OPCO sont en retard ?',
       'Rédige-moi un mail de relance poli',
-      'Explique-moi le fonctionnement du BPF'
+      'Annule la dernière action'
     ];
     const fil = document.getElementById('chatFil');
     if (!fil) return;
     fil.innerHTML = `
       <div class="chat-accueil">
-        <div class="chat-accueil-ic">${Icone('assistant', { taille: 38 })}</div>
-        <div class="chat-accueil-titre">Que puis-je faire pour vous ?</div>
+        <div class="chat-accueil-ic">${Icone('nanika', { taille: 42 })}</div>
+        <div class="chat-accueil-titre">Oui, Madame ?</div>
         <div class="chat-accueil-sous">
-          Je vois vos dossiers, votre agenda, vos tâches et vos notes, et je
-          réponds aussi à n'importe quelle autre question.
+          Je vois vos dossiers, votre agenda, vos tâches et vos notes, j'agis
+          dessus, et je réponds à n'importe quelle autre question.
+          ${this.peutDicter() && this.peutLire()
+            ? `Touchez ${Icone('onde', { taille: 13 })} pour me parler de vive voix.` : ''}
         </div>
         <div class="chat-suggestions">
           ${suggestions.map(s => `<button class="chat-suggestion">${esc(s)}</button>`).join('')}
@@ -634,7 +925,7 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     );
   },
 
-  /* ══ Dictée ══
+  /* ══ Dictée (mode écrit) ══
      Un appui lance l'écoute, un second l'arrête. Dès que le navigateur rend
      une phrase définitive, on envoie, et la réponse sera lue à voix haute. */
   _dicter() {
@@ -650,13 +941,17 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     reco.continuous = false; reco.maxAlternatives = 1;
 
     const depart = champ.value.trim();
-    let definitif = false;
+    let definitif = false, confiance = 1;
 
     reco.onresult = e => {
       let dit = '';
       for (let i = 0; i < e.results.length; i++) {
         dit += e.results[i][0].transcript;
-        if (e.results[i].isFinal) definitif = true;
+        if (e.results[i].isFinal) {
+          definitif = true;
+          const c = e.results[i][0].confidence;
+          if (typeof c === 'number' && c > 0) confiance = Math.min(confiance, c);
+        }
       }
       champ.value = (depart ? depart + ' ' : '') + dit.trim();
     };
@@ -670,8 +965,10 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
       this._reco = null;
       bouton.classList.remove('ecoute');
       bouton.setAttribute('aria-label', 'Dicter la question');
-      if (definitif && champ.value.trim()) { this._parle = true; this.envoyer(); }
-      else champ.focus();
+      if (definitif && champ.value.trim()) {
+        this._parle = true;
+        this.envoyer(null, { confiance });
+      } else champ.focus();
     };
     try {
       reco.start();
@@ -683,20 +980,373 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     }
   },
 
-  /* ══ Lecture à voix haute ══ */
-  _lire(texte) {
-    if (!('speechSynthesis' in window) || !texte) return;
-    const propre = texte
+  /* ══════════════════════════════════════════════
+     LA VOIX DE NANIKA
+     speechSynthesis a deux caprices connus : la liste des voix arrive en
+     retard (voiceschanged), et Chrome coupe les phrases trop longues. On
+     choisit donc la meilleure voix française disponible une fois pour
+     toutes, et on lit phrase par phrase.
+  ══════════════════════════════════════════════ */
+  _voixChoisie: null,
+  _vitesse:     1.02,
+
+  _voixDisponibles() {
+    if (!this.peutLire()) return [];
+    return window.speechSynthesis.getVoices().filter(v => /^fr/i.test(v.lang));
+  },
+
+  /* Les voix « premium » d'Apple et de Google sont nettement plus naturelles
+     que les voix compactes : on les préfère quand elles sont installées. */
+  _meilleureVoix() {
+    const voix = this._voixDisponibles();
+    if (!voix.length) return null;
+    let nom = null;
+    try { nom = localStorage.getItem('nanika_voix'); } catch { /* rien */ }
+    if (nom) { const v = voix.find(x => x.name === nom); if (v) return v; }
+    const PREFEREES = [/amélie|amelie/i, /audrey/i, /aurélie|aurelie/i, /marie/i,
+                       /google français/i, /denise/i, /vivienne/i, /eloise|éloïse/i,
+                       /thomas/i, /nicolas/i];
+    const score = v => {
+      let n = 0;
+      PREFEREES.forEach((re, i) => { if (re.test(v.name)) n += 100 - i * 5; });
+      if (/premium|enhanced|amélior|natural|neural/i.test(v.name)) n += 40;
+      if (v.localService) n += 5;
+      if (/fr-FR/i.test(v.lang)) n += 3;
+      return n;
+    };
+    return [...voix].sort((a, b) => score(b) - score(a))[0];
+  },
+
+  _decouperPhrases(texte) {
+    const propre = String(texte || '')
       .replace(/```[\s\S]*?```/g, ' ')
-      .replace(/[*_`#>]/g, '')
+      .replace(/https?:\/\/\S+/g, 'un lien')
+      .replace(/[*_`#>|]/g, '')
+      .replace(/^\s*[-•]\s+/gm, '')
       .replace(/\s+/g, ' ').trim();
-    if (!propre) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(propre);
-    u.lang = 'fr-FR'; u.rate = 1.02;
-    const voix = window.speechSynthesis.getVoices().find(v => /^fr/i.test(v.lang));
-    if (voix) u.voice = voix;
-    window.speechSynthesis.speak(u);
+    if (!propre) return [];
+    // On coupe aux fins de phrase, en regroupant les morceaux très courts
+    const brutes = propre.split(/(?<=[.!?…])\s+(?=[A-ZÀ-ÝÉ«"'(\d])/);
+    const phrases = [];
+    brutes.forEach(ph => {
+      const p = ph.trim();
+      if (!p) return;
+      if (phrases.length && (phrases[phrases.length - 1].length + p.length) < 90) {
+        phrases[phrases.length - 1] += ' ' + p;
+      } else phrases.push(p);
+    });
+    // Sécurité : Chrome se tait au-delà de ~200 caractères par utterance
+    return phrases.flatMap(p => p.length <= 220 ? [p] : p.split(/(?<=[,;:])\s+/));
+  },
+
+  /** Lit un texte à voix haute. Rend une promesse tenue quand la lecture est
+      finie (ou interrompue). */
+  _lire(texte) {
+    return new Promise(resolve => {
+      if (!this.peutLire()) return resolve(false);
+      const phrases = this._decouperPhrases(texte);
+      if (!phrases.length) return resolve(false);
+
+      const synth = window.speechSynthesis;
+      synth.cancel();
+      const voix = this._meilleureVoix();
+      let restantes = phrases.length, fini = false;
+      const terminer = ok => { if (!fini) { fini = true; clearTimeout(garde); resolve(ok); } };
+
+      phrases.forEach(ph => {
+        const u = new SpeechSynthesisUtterance(ph);
+        u.lang = voix?.lang || 'fr-FR';
+        u.rate = this._vitesse;
+        u.pitch = 1.0;
+        if (voix) u.voice = voix;
+        u.onend   = () => { if (--restantes <= 0) terminer(true); };
+        u.onerror = e => { if (e.error === 'interrupted' || e.error === 'canceled') terminer(false); else if (--restantes <= 0) terminer(true); };
+        synth.speak(u);
+      });
+      // Garde-fou : onend ne part pas toujours (Chrome). Durée estimée + marge.
+      const totalCar = phrases.join(' ').length;
+      const garde = setTimeout(() => terminer(true), 1500 + totalCar * 75 / this._vitesse);
+      // Chrome de bureau met la synthèse en pause au bout de ~15 s : on la réveille
+      if (!/iPhone|iPad|Android/i.test(navigator.userAgent)) {
+        const tic = setInterval(() => {
+          if (fini || !synth.speaking) { clearInterval(tic); return; }
+          synth.pause(); synth.resume();
+        }, 10000);
+      }
+    });
+  },
+
+  _taire() { try { window.speechSynthesis?.cancel(); } catch { /* rien */ } },
+
+  /* ══════════════════════════════════════════════
+     LE MODE VOCAL — la conversation de vive voix
+     Une boucle en trois temps : ÉCOUTE → RÉFLEXION → PAROLE, puis retour à
+     l'écoute. Le micro n'est jamais ouvert pendant que Nanika parle, sinon
+     elle s'entendrait elle-même. Après plusieurs silences, elle se met en
+     veille : un tap sur l'orbe la réveille.
+  ══════════════════════════════════════════════ */
+  _vocalEtat:      'veille',   // veille | ecoute | reflexion | parole
+  _vocalSilences:  0,
+  _vocalTimer:     null,
+  _autoEcoute:     true,
+  _audio:          null,
+
+  _monterVocal() {
+    try {
+      const v = localStorage.getItem('nanika_vitesse');
+      if (v) this._vitesse = Math.min(1.3, Math.max(0.8, parseFloat(v)));
+      this._autoEcoute = localStorage.getItem('nanika_auto_ecoute') !== '0';
+    } catch { /* rien */ }
+
+    document.getElementById('nanikaQuitter')?.addEventListener('click', () => this.arreterVocal());
+    document.getElementById('nanikaClavier')?.addEventListener('click', () => this.arreterVocal());
+    document.getElementById('nanikaMicro')?.addEventListener('click', () => this._vocalEcouter(true));
+    document.getElementById('nanikaOrbe')?.addEventListener('click', () => this._vocalTap());
+    document.getElementById('nanikaReglages')?.addEventListener('click', () => {
+      const p = document.getElementById('nanikaPanneauReglages');
+      p.hidden = !p.hidden;
+      if (!p.hidden) this._remplirReglagesVoix();
+    });
+    document.getElementById('nanikaChoixVoix')?.addEventListener('change', e => {
+      try { localStorage.setItem('nanika_voix', e.target.value); } catch { /* rien */ }
+    });
+    document.getElementById('nanikaVitesse')?.addEventListener('input', e => {
+      this._vitesse = parseFloat(e.target.value);
+      document.getElementById('nanikaVitesseVal').textContent = '×' + this._vitesse.toFixed(2);
+      try { localStorage.setItem('nanika_vitesse', String(this._vitesse)); } catch { /* rien */ }
+    });
+    document.getElementById('nanikaAutoEcoute')?.addEventListener('change', e => {
+      this._autoEcoute = e.target.checked;
+      try { localStorage.setItem('nanika_auto_ecoute', this._autoEcoute ? '1' : '0'); } catch { /* rien */ }
+    });
+    document.getElementById('nanikaTestVoix')?.addEventListener('click', async () => {
+      this._vocalPhase('parole', 'Je parle…');
+      await this._lire('Bonjour Madame. Voici ma voix. Elle vous convient ?');
+      this._vocalPhase('veille', 'En veille — touchez l\'orbe pour parler');
+    });
+
+    // Les voix arrivent parfois après le chargement
+    if (this.peutLire()) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        const p = document.getElementById('nanikaPanneauReglages');
+        if (p && !p.hidden) this._remplirReglagesVoix();
+      };
+      window.speechSynthesis.getVoices();
+    }
+  },
+
+  _remplirReglagesVoix() {
+    const sel = document.getElementById('nanikaChoixVoix');
+    if (!sel) return;
+    const voix = this._voixDisponibles();
+    const choisie = this._meilleureVoix();
+    sel.innerHTML = voix.length
+      ? voix.map(v => `<option value="${esc(v.name)}" ${choisie && v.name === choisie.name ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')
+      : '<option>Aucune voix française installée</option>';
+    document.getElementById('nanikaVitesse').value = this._vitesse;
+    document.getElementById('nanikaVitesseVal').textContent = '×' + this._vitesse.toFixed(2);
+    document.getElementById('nanikaAutoEcoute').checked = this._autoEcoute;
+  },
+
+  /* Un petit son de prise de parole, façon JARVIS : deux notes brèves. Les
+     signaux sonores comptent en vocal — on ne regarde pas l'écran. */
+  _bip(type = 'ecoute') {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      if (!this._audio) this._audio = new AC();
+      const ctx = this._audio;
+      if (ctx.state === 'suspended') ctx.resume();
+      const notes = type === 'ecoute' ? [660, 880] : type === 'erreur' ? [440, 330] : [880, 660];
+      notes.forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + i * 0.09 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.09 + 0.09);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(ctx.currentTime + i * 0.09); o.stop(ctx.currentTime + i * 0.09 + 0.1);
+      });
+    } catch { /* silence acceptable */ }
+  },
+
+  _vocalPhase(etat, libelle) {
+    this._vocalEtat = etat;
+    const orbe = document.getElementById('nanikaOrbe');
+    const lab  = document.getElementById('nanikaEtat');
+    if (orbe) orbe.dataset.etat = etat;
+    if (lab && libelle != null) lab.textContent = libelle;
+  },
+
+  _vocalMontrer(transcrit, reponse) {
+    const t = document.getElementById('nanikaTranscrit');
+    const r = document.getElementById('nanikaReponse');
+    if (t && transcrit != null) t.textContent = transcrit;
+    if (r && reponse != null) r.textContent = reponse;
+  },
+
+  async demarrerVocal() {
+    if (!this.peutDicter() || !this.peutLire()) {
+      Toast.show("La conversation vocale demande un navigateur avec micro et synthèse vocale (Safari, Chrome)", 'warning');
+      return;
+    }
+    if (this._vocal) return;
+    this._vocal = true;
+    this._vocalSilences = 0;
+    if (this._reco) { try { this._reco.stop(); } catch { /* rien */ } }
+    document.getElementById('nanikaVocal').hidden = false;
+    document.getElementById('chatbot').classList.add('en-vocal');
+    document.getElementById('chatbotVocal')?.classList.add('on');
+    this._vocalMontrer('', '');
+
+    // Un mot d'accueil, puis on écoute. La lecture ici « débloque » aussi la
+    // synthèse sur iPhone, qui exige d'être lancée dans la foulée d'un geste.
+    const h = new Date().getHours();
+    const accueils = h < 5 ? ['Il est tard, Madame. Je vous écoute.']
+      : h < 12 ? ['Bonjour Madame. Je vous écoute.', 'Bonjour. Que puis-je faire pour vous ?']
+      : h < 18 ? ['Oui, Madame ?', 'Je vous écoute.', 'À votre service.']
+      : ['Bonsoir Madame. Je vous écoute.', 'Bonsoir. Que puis-je faire pour vous ?'];
+    const mot = accueils[Math.floor(Math.random() * accueils.length)];
+    this._vocalMontrer('', mot);
+    this._vocalPhase('parole', 'Je parle…');
+    await this._lire(mot);
+    if (this._vocal) this._vocalEcouter();
+  },
+
+  arreterVocal(silencieux = false) {
+    if (!this._vocal) return;
+    this._vocal = false;
+    clearTimeout(this._vocalTimer);
+    this._taire();
+    if (this._reco) { try { this._reco.abort(); } catch { /* rien */ } this._reco = null; }
+    this._vocalPhase('veille', 'En veille');
+    document.getElementById('nanikaVocal').hidden = true;
+    document.getElementById('chatbot').classList.remove('en-vocal');
+    document.getElementById('chatbotVocal')?.classList.remove('on');
+    document.getElementById('nanikaPanneauReglages').hidden = true;
+    this._peindre();
+    if (!silencieux && window.matchMedia('(min-width: 761px)').matches) {
+      document.getElementById('chatInput')?.focus();
+    }
+  },
+
+  /* Un tap sur l'orbe : interrompt Nanika si elle parle, réveille si elle
+     dort, arrête l'écoute si elle écoute. */
+  _vocalTap() {
+    if (!this._vocal) return;
+    if (this._vocalEtat === 'parole')   { this._taire(); this._vocalEcouter(true); return; }
+    if (this._vocalEtat === 'ecoute')   { try { this._reco?.stop(); } catch { /* rien */ } return; }
+    if (this._vocalEtat === 'veille')   { this._vocalEcouter(true); return; }
+    // en réflexion : on laisse finir
+  },
+
+  _vocalEcouter(force = false) {
+    if (!this._vocal) return;
+    if (this._reco) { try { this._reco.abort(); } catch { /* rien */ } this._reco = null; }
+    this._taire();
+    if (force) this._vocalSilences = 0;
+
+    // Trop de silences d'affilée : on économise le micro (et la batterie)
+    if (!force && this._vocalSilences >= 3) {
+      this._vocalPhase('veille', 'En veille — touchez l\'orbe pour parler');
+      return;
+    }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const reco = this._reco = new SR();
+    reco.lang = 'fr-FR'; reco.interimResults = true;
+    reco.continuous = false; reco.maxAlternatives = 1;
+
+    let texte = '', definitif = false, confiance = 1, erreur = null;
+    reco.onstart = () => { this._vocalPhase('ecoute', 'Je vous écoute…'); this._bip('ecoute'); };
+    reco.onresult = e => {
+      texte = '';
+      for (let i = 0; i < e.results.length; i++) {
+        texte += e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          definitif = true;
+          const c = e.results[i][0].confidence;
+          if (typeof c === 'number' && c > 0) confiance = Math.min(confiance, c);
+        }
+      }
+      this._vocalMontrer(texte.trim(), null);
+    };
+    reco.onerror = ev => { erreur = ev.error; };
+    reco.onend = () => {
+      if (this._reco === reco) this._reco = null;
+      if (!this._vocal) return;
+      const dit = texte.trim();
+
+      if (erreur === 'not-allowed' || erreur === 'service-not-allowed') {
+        this._vocalPhase('veille', 'Micro refusé — autorisez-le dans les réglages');
+        Toast.show('Accès au micro refusé — autorisez-le dans les réglages du navigateur', 'warning');
+        return;
+      }
+      if (!dit) {
+        // Silence ou bruit : on réécoute, puis on se met en veille
+        this._vocalSilences++;
+        if (erreur && erreur !== 'no-speech' && erreur !== 'aborted') this._vocalSilences++;
+        this._vocalTimer = setTimeout(() => this._vocalEcouter(), 350);
+        return;
+      }
+      this._vocalSilences = 0;
+      this._vocalTraiter(dit, definitif ? confiance : 0.5);
+    };
+    try { reco.start(); }
+    catch {
+      this._reco = null;
+      this._vocalPhase('veille', "Le micro n'a pas pu démarrer — touchez l'orbe");
+    }
+  },
+
+  /* Quelques ordres se règlent sans le modèle : ils doivent marcher même
+     hors ligne ou quand le serveur tousse. */
+  _vocalOrdreLocal(dit) {
+    const d = dit.toLowerCase().replace(/[.!?,]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/^(stop|silence|tais[- ]toi|chut)( nanika)?$/.test(d)) return 'silence';
+    if (/^(au revoir|à plus|bonne nuit|merci c'est tout|ce sera tout|c'est tout|termine( la conversation)?|fin de (la )?conversation|quitte le mode vocal|arrête[- ]toi)( nanika)?$/.test(d)
+        || /^(merci|au revoir) nanika( c'est tout| ce sera tout)?$/.test(d)) return 'fin';
+    if (/^(clavier|passe au clavier|mode clavier)$/.test(d)) return 'clavier';
+    return null;
+  },
+
+  async _vocalTraiter(dit, confiance) {
+    const ordre = this._vocalOrdreLocal(dit);
+    if (ordre === 'silence') { this._vocalEcouter(true); return; }
+    if (ordre === 'clavier') { this.arreterVocal(); return; }
+    if (ordre === 'fin') {
+      this._vocalPhase('parole', 'Je parle…');
+      const adieux = ['Au revoir, Madame.', 'À plus tard, Madame.', 'Je reste à disposition.'];
+      await this._lire(adieux[Math.floor(Math.random() * adieux.length)]);
+      this.arreterVocal();
+      return;
+    }
+
+    this._vocalPhase('reflexion', 'Je réfléchis…');
+    this._vocalMontrer(dit, '');
+    const champ = document.getElementById('chatInput');
+    champ.value = dit;
+    this._parle = true;
+    await this.envoyer(null, { confiance });
+    // envoyer() a lu la réponse et relance l'écoute (voir _apresReponse)
+  },
+
+  /* Ce que fait Nanika une fois la réponse obtenue (ou l'erreur), en vocal */
+  async _apresReponse(texte, erreur = null) {
+    if (!this._vocal) return;
+    let aDire = texte;
+    if (erreur) {
+      this._bip('erreur');
+      aDire = /session expirée/i.test(erreur)
+        ? "Votre session a expiré, Madame. Reconnectez-vous et je reprends."
+        : `Désolée, je n'ai pas pu répondre : ${erreur}. Voulez-vous que je réessaie ?`;
+    }
+    this._vocalMontrer(null, aDire || '');
+    this._vocalPhase('parole', 'Je parle…');
+    await this._lire(aDire || "C'est fait.");
+    if (!this._vocal) return;
+    if (this._autoEcoute) this._vocalEcouter();
+    else this._vocalPhase('veille', 'Touchez l\'orbe pour répondre');
   },
 
   async nouvelle() {
@@ -755,7 +1405,8 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
         : [{ type: 'text', text: m.content }];
 
       if (m.role === 'user') {
-        const txt = blocs.filter(b => b.type === 'text').map(b => b.text).join('\n');
+        const txt = blocs.filter(b => b.type === 'text').map(b => b.text).join('\n')
+                         .replace(/^\[dictée incertaine\]\s*/, '');
         // Les tool_result sont techniques : on ne les montre pas
         if (txt.trim()) {
           html += `<div class="chat-bulle chat-user">${this._markdown(txt)}</div>`;
@@ -792,7 +1443,13 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
       lister_agenda:    `${ic('recherche')} Lecture de l'agenda`,
       lister_taches:    `${ic('recherche')} Lecture des tâches`,
       chercher_dossiers:`${ic('recherche')} Recherche dans les dossiers`,
-      resume_activite:  `${ic('activite')} Analyse de l'activité`
+      resume_activite:  `${ic('activite')} Analyse de l'activité`,
+      modifier_tache:   `${ic('crayon')} Tâche modifiée`,
+      supprimer_tache:  `${ic('poubelle')} Tâche supprimée`,
+      annuler_derniere_action: `${ic('rafraichir')} Dernière action annulée`,
+      ouvrir_page:      `${ic('oeil')} Page « ${esc(args.page || '')} » affichée`,
+      chercher_notes:   `${ic('recherche')} Recherche dans les notes`,
+      bilan_du_jour:    `${ic('formation')} Point de la journée`
     };
     return l[nom] || `${ic('reglages')} ${esc(nom)}`;
   },
@@ -810,10 +1467,14 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
   },
 
   /* ══ Boucle de conversation ══ */
-  async envoyer() {
+  /** @param texteForce  texte à envoyer (sinon le champ de saisie)
+      @param options.confiance  confiance de la reconnaissance vocale (0-1) :
+             en dessous de 0,65 le message est marqué [dictée incertaine] et
+             Nanika reformule avant d'agir — c'est le filet de sécurité. */
+  async envoyer(texteForce = null, options = {}) {
     if (this._occupe) return;
     const input = document.getElementById('chatInput');
-    const texte = input.value.trim();
+    const texte = String(texteForce ?? input.value).trim();
     if (!texte) return;
 
     input.value = '';
@@ -821,14 +1482,18 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
     this._occupe = true;
     document.getElementById('chatEnvoyer').disabled = true;
 
+    const incertain = typeof options.confiance === 'number' && options.confiance < 0.65
+                      && texte.split(/\s+/).length >= 3;
+    const texteModele = incertain ? `[dictée incertaine] ${texte}` : texte;
+
     try {
       if (!this.conversationId) {
         const c = await DataStore.addConversation(texte.slice(0, 60));
         this.conversationId = c.id;
       }
 
-      this._messages.push({ role: 'user', content: [{ type: 'text', text: texte }] });
-      await DataStore.addMessage(this.conversationId, 'user', [{ type: 'text', text: texte }]);
+      this._messages.push({ role: 'user', content: [{ type: 'text', text: texteModele }] });
+      await DataStore.addMessage(this.conversationId, 'user', [{ type: 'text', text: texteModele }]);
       this._peindre('<span class="chat-points"><i></i><i></i><i></i></span>');
 
       const systeme = await this.systeme();
@@ -875,11 +1540,18 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
       updateJourneeBadge();
 
       // Lecture à voix haute : si la question a été dictée, ou si on l'a demandé
-      if (this._voix || this._parle) {
-        const dernier = [...this._messages].reverse().find(m => m.role === 'assistant');
-        const txt = (dernier?.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ');
-        this._lire(txt);
+      const dernier = [...this._messages].reverse().find(m => m.role === 'assistant');
+      const txt = (dernier?.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ');
+      if (this._vocal) {
+        this._occupe = false;
+        const b0 = document.getElementById('chatEnvoyer');
+        if (b0) b0.disabled = false;
+        this._peindre();
+        await this._apresReponse(txt || "C'est fait.");
+        this._parle = false;
+        return;
       }
+      if (this._voix || this._parle) this._lire(txt);
       this._parle = false;
 
     } catch (err) {
@@ -892,10 +1564,11 @@ Direct, concret, en français. Pas de listes à puces quand deux phrases suffise
       fil.insertAdjacentHTML('beforeend',
         `<div class="chat-bulle chat-erreur">${Icone('alerte', { taille: 16 })} ${esc(err.message)}</div>`);
       fil.scrollTop = fil.scrollHeight;
-      console.error('[Assistant]', err);
+      console.error('[Nanika]', err);
       this._occupe = false;
       const b = document.getElementById('chatEnvoyer');
       if (b) b.disabled = false;
+      if (this._vocal) await this._apresReponse('', err.message);
       return;
     }
     this._occupe = false;

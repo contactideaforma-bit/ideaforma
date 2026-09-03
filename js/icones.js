@@ -28,6 +28,9 @@ const TRACES = {
   /* ── Navigation ── */
   tableau:    '<rect x="3" y="3" width="7" height="8" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="3" y="15" width="7" height="6" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/>',
   assistant:  '<path d="M12 3v2.5"/><rect x="4" y="5.5" width="16" height="13" rx="3.5"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><path d="M9.5 15.5h5"/><path d="M2 11v3M22 11v3"/>',
+  /* Nanika : l'orbe de l'assistante, et l'onde de la conversation vocale */
+  nanika:     '<circle cx="12" cy="12.5" r="8.2"/><circle cx="9.2" cy="11.4" r="1.15" fill="currentColor" stroke="none"/><circle cx="14.8" cy="11.4" r="1.15" fill="currentColor" stroke="none"/><path d="M8.6 14.8c1.9 2 4.9 2 6.8 0"/><path d="M12 4.3V2"/><path d="M4.2 6.2l1.6 1.2M19.8 6.2l-1.6 1.2"/>',
+  onde:       '<path d="M2.5 12h1.8M6.5 8.5v7M10.5 4.5v15M14.5 7.5v9M18.5 10v4M21.5 12h-1"/>',
   agenda:     '<rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   taches:     '<path d="M4 7.5l2 2 3.5-3.5"/><path d="M4 17l2 2 3.5-3.5"/><path d="M13 8h7M13 17h7"/>',
   notes:      '<path d="M5 4.5h9.5L19 9v10.5a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 4 19.5v-13A1.5 1.5 0 0 1 5.5 5"/><path d="M14 4.5V9h4.5"/><path d="M8 13h7M8 16.5h4.5"/>',

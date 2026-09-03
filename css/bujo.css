@@ -489,6 +489,100 @@ html, body { overflow-x: hidden; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   7b. Nanika en conversation — le mode vocal
+   Un voile clair recouvre le fil ; au centre, l'orbe respire selon l'état :
+   veille (immobile), écoute (anneaux qui s'élargissent), réflexion (pulsation
+   lente), parole (oscillation). Tout en teintes claires, jamais de zone sombre.
+═══════════════════════════════════════════════════════════════════════════ */
+.chatbot-outil-vocal.on { background: #fff; color: var(--encre-rose); }
+.chatbot.en-vocal .chatbot-saisie { display: none; }
+
+.nanika-vocal {
+  position: absolute; inset: 60px 0 0 0; z-index: 3;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 18px calc(16px + env(safe-area-inset-bottom));
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 214, 230, .55), transparent 55%),
+    var(--papier, #FDF6F4);
+  overflow-y: auto; text-align: center;
+}
+.nanika-vocal[hidden] { display: none; }
+.nanika-vocal-haut {
+  width: 100%; display: flex; justify-content: space-between; flex-shrink: 0;
+}
+.nanika-vocal-reglage, .nanika-vocal-quitter {
+  width: 36px; height: 36px; border-radius: 9px; border: 1px solid var(--regle);
+  background: rgba(255,255,255,.7); color: var(--encre); display: flex;
+  align-items: center; justify-content: center; transition: var(--transition);
+}
+.nanika-vocal-reglage:hover, .nanika-vocal-quitter:hover { border-color: var(--encre-rose); color: var(--encre-rose); }
+.nanika-vocal-reglage .ic, .nanika-vocal-quitter .ic { vertical-align: 0; }
+
+.nanika-orbe {
+  position: relative; width: 150px; height: 150px; margin: 18px 0 14px;
+  border: none; background: transparent; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.nanika-orbe-coeur {
+  position: relative; z-index: 2;
+  width: 108px; height: 108px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff;
+  background: linear-gradient(135deg, var(--rose-vif, #E2679A), var(--rose-profond, #B03A63));
+  box-shadow: 0 14px 34px -10px rgba(176, 58, 99, .55), inset 0 1px 0 rgba(255,255,255,.45);
+  transition: transform .25s ease, box-shadow .25s ease;
+}
+.nanika-orbe-coeur .ic { vertical-align: 0; }
+.nanika-orbe-anneau {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 2px solid rgba(198, 55, 116, .35); opacity: 0;
+}
+.nanika-orbe[data-etat="veille"] .nanika-orbe-coeur { filter: saturate(.6); opacity: .85; }
+.nanika-orbe[data-etat="ecoute"] .nanika-orbe-anneau { animation: nanika-onde 1.8s ease-out infinite; }
+.nanika-orbe[data-etat="ecoute"] .nanika-orbe-anneau:nth-child(2) { animation-delay: .9s; }
+.nanika-orbe[data-etat="ecoute"] .nanika-orbe-coeur { transform: scale(1.04); }
+.nanika-orbe[data-etat="reflexion"] .nanika-orbe-coeur { animation: nanika-pense 1.6s ease-in-out infinite; }
+.nanika-orbe[data-etat="parole"] .nanika-orbe-coeur { animation: nanika-parle .55s ease-in-out infinite alternate; }
+@keyframes nanika-onde  { 0% { transform: scale(.72); opacity: .8; } 100% { transform: scale(1.25); opacity: 0; } }
+@keyframes nanika-pense { 0%, 100% { transform: scale(1); filter: brightness(1); } 50% { transform: scale(.94); filter: brightness(1.12); } }
+@keyframes nanika-parle { from { transform: scale(1); } to { transform: scale(1.07); box-shadow: 0 18px 40px -10px rgba(176, 58, 99, .7); } }
+
+.nanika-etat {
+  font-family: var(--titre, var(--sans)); text-transform: uppercase; letter-spacing: .08em;
+  font-weight: 700; font-size: 12px; color: var(--encre-rose); margin-bottom: 10px;
+}
+.nanika-transcrit {
+  font-size: 14px; color: var(--encre-douce); min-height: 20px; max-width: 34ch;
+  font-style: italic;
+}
+.nanika-transcrit:not(:empty)::before { content: '« '; }
+.nanika-transcrit:not(:empty)::after  { content: ' »'; }
+.nanika-reponse {
+  margin-top: 10px; font-size: 15.5px; line-height: 1.45; color: var(--encre);
+  max-width: 38ch; min-height: 24px;
+}
+.nanika-vocal-bas { display: flex; gap: 8px; margin-top: auto; padding-top: 16px; flex-shrink: 0; }
+.nanika-vocal-bas .btn .ic { vertical-align: -3px; margin-right: 4px; }
+
+.nanika-reglages {
+  position: absolute; top: 56px; left: 14px; right: 14px; z-index: 4;
+  background: rgba(255,255,255,.97); border: 1px solid var(--regle);
+  border-radius: 14px; padding: 14px; text-align: left;
+  display: flex; flex-direction: column; gap: 10px; font-size: 13.5px;
+  box-shadow: var(--shadow-lg);
+}
+.nanika-reglages[hidden] { display: none; }
+.nanika-reglages label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.nanika-reglages select, .nanika-reglages input[type="range"] { width: 100%; font-size: 14px; }
+.nanika-reglages .nanika-case { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; }
+
+@media (max-width: 760px) {
+  .nanika-orbe { width: 170px; height: 170px; }
+  .nanika-orbe-coeur { width: 124px; height: 124px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    8. L'entrée — la ligne, partout dans l'application
 ═══════════════════════════════════════════════════════════════════════════ */
 .log { display: flex; flex-direction: column; min-width: 0; }
