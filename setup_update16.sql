@@ -32,3 +32,8 @@ alter table public.mails enable row level security;
 drop policy if exists mails_own on public.mails;
 create policy mails_own on public.mails for all to authenticated
   using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+-- PostgREST (l'API que l'application interroge) garde le schéma en cache :
+-- sans ce signal, l'application peut répondre « Could not find the table
+-- 'public.mails' in the schema cache » pendant un moment après la création.
+notify pgrst, 'reload schema';
