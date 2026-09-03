@@ -941,15 +941,34 @@ function rendreFocus(id) {
 
 /* Encart d'erreur commun : sans lui, une table absente ou une session expirée
    laissait la page bloquée sur « Chargement… » sans rien dire. */
+/* Quelle migration crée quoi : pour dire la bonne, pas « update8 » à tout coup */
+const MIGRATION_PAR_TABLE = {
+  etiquettes: 'setup_update8.sql', listes: 'setup_update8.sql', evenements: 'setup_update8.sql',
+  notes: 'setup_update8.sql', coffre: 'setup_update8.sql', rappels: 'setup_update8.sql',
+  push_subscriptions: 'setup_update8.sql', ia_conversations: 'setup_update8.sql',
+  ia_messages: 'setup_update8.sql', v_agenda: 'setup_update8.sql',
+  coffre_categories: 'setup_update9.sql', preferences: 'setup_update10.sql',
+  mails: 'setup_update16.sql'
+};
+
 function peindreErreur(err) {
+  const msg = String(err?.message || err || '');
+  const m = msg.match(/(?:table|relation|view)\s+'?(?:public\.)?([a-z_]+)'?/i);
+  const table = m?.[1];
+  const migration = table ? MIGRATION_PAR_TABLE[table] : null;
+  const conseil = migration
+    ? `La table <strong>${esc(table)}</strong> n'existe pas encore : jouez
+       <strong>${migration}</strong> dans Supabase → SQL Editor, <em>sur le projet
+       de cette application</em> (vérifiez le nom du projet en haut de l'éditeur).`
+    : `Si le message évoque une table ou une vue absente, une migration
+       <strong>setup_update…sql</strong> n'a pas encore été jouée dans Supabase.`;
   document.getElementById('pageContent').innerHTML = `
     <div class="section-card"><div class="section-card-body">
       <div class="empty-state">
         <div class="empty-icon">${Icone('alerte', { taille: 34 })}</div>
         Impossible de charger cette page.<br>
-        <small style="color:var(--text-muted)">${esc(err?.message || err)}</small><br><br>
-        <small>Si le message évoque une table ou une vue absente, la migration
-        <strong>setup_update8.sql</strong> n'a pas encore été jouée dans Supabase.</small>
+        <small style="color:var(--text-muted)">${esc(msg)}</small><br><br>
+        <small>${conseil}</small>
       </div>
     </div></div>`;
 }
