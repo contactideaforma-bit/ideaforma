@@ -21,16 +21,50 @@ const Mails = {
     return String(session?.user?.email || '').toLowerCase();
   },
 
-  /** Normalise une saisie de destinataires : « moi », virgules, espaces,
-      points-virgules, doublons. Rend { a, invalide } */
+  _contacts: null,
+  async contacts(force = false) {
+    if (!this._contacts || force) this._contacts = await DataStore.getContacts().catch(() => []);
+    return this._contacts;
+  },
+  _norm(t) { return String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); },
+
+  /** Retrouve un contact par prénom, « prénom nom », nom, société ou e-mail.
+      Rend { contact } ou { candidats } si plusieurs correspondent. */
+  async trouverContact(saisie) {
+    const q = this._norm(saisie);
+    if (!q) return { contact: null, candidats: [] };
+    const liste = await this.contacts();
+    const exact = liste.filter(c =>
+      this._norm(c.email) === q ||
+      this._norm(c.prenom) === q ||
+      this._norm(`${c.prenom} ${c.nom || ''}`) === q ||
+      this._norm(`${c.nom || ''} ${c.prenom}`) === q);
+    if (exact.length === 1) return { contact: exact[0], candidats: exact };
+    if (exact.length > 1)  return { contact: null, candidats: exact };
+    const partiel = liste.filter(c =>
+      this._norm(`${c.prenom} ${c.nom || ''} ${c.societe || ''} ${c.email}`).includes(q));
+    return { contact: partiel.length === 1 ? partiel[0] : null, candidats: partiel };
+  },
+
+  /** Normalise une saisie de destinataires : « moi », prénoms du carnet,
+      adresses, séparateurs variés, doublons. Rend { a, invalide, ambigus } */
   async destinataires(saisie) {
     const moi = await this.monEmail();
-    const brut = Array.isArray(saisie) ? saisie : String(saisie || '').split(/[,;\s]+/);
-    const a = [...new Set(brut
-      .map(x => String(x || '').trim())
-      .filter(Boolean)
-      .map(x => /^moi$/i.test(x) ? moi : x.toLowerCase()))];
-    return { a, moi, invalide: a.find(x => !this.EMAIL_RE.test(x)) || null };
+    const brut = Array.isArray(saisie) ? saisie : String(saisie || '').split(/[,;\n]+/);
+    const a = [], ambigus = [], inconnus = [];
+    for (const item of brut) {
+      const x = String(item || '').trim();
+      if (!x) continue;
+      if (/^moi$/i.test(x)) { a.push(moi); continue; }
+      if (this.EMAIL_RE.test(x)) { a.push(x.toLowerCase()); continue; }
+      const { contact, candidats } = await this.trouverContact(x);
+      if (contact) a.push(contact.email);
+      else if (candidats.length > 1) ambigus.push({ saisie: x, candidats });
+      else inconnus.push(x);
+    }
+    const uniques = [...new Set(a)];
+    return { a: uniques, moi, ambigus, inconnus,
+             invalide: uniques.find(x => !this.EMAIL_RE.test(x)) || inconnus[0] || null };
   },
 
   /** Envoie et journalise. `confirme` doit être vrai pour tout destinataire
@@ -92,8 +126,9 @@ const MailPage = {
           <div class="mail-form">
             <label class="form-group">
               <span>À</span>
-              <input type="text" id="mailA" placeholder="adresse@exemple.fr, une autre… ou « moi »"
+              <input type="text" id="mailA" placeholder="Roger, adresse@exemple.fr, « moi »…"
                      autocomplete="off" autocapitalize="off" spellcheck="false">
+              <div class="mail-suggestions" id="mailSuggestions" hidden></div>
             </label>
             <label class="form-group">
               <span>Objet</span>
@@ -112,6 +147,14 @@ const MailPage = {
               </div>
             </div>
           </div>
+        </section>
+
+        <section class="section-card mail-contacts">
+          <div class="section-card-header">
+            <div class="section-card-title">${Icone('carte', { taille: 16 })} Contacts</div>
+            <button class="btn btn-sm btn-secondary" id="btnNouveauContact">${Icone('plus', { taille: 15 })} Contact</button>
+          </div>
+          <div id="contactsListe" class="contacts-liste"></div>
         </section>
 
         <section class="section-card mail-historique">
@@ -134,6 +177,8 @@ const MailPage = {
       document.getElementById('mailObjetP').focus();
     });
     document.getElementById('btnMailNanika').addEventListener('click', () => this._redigerAvecNanika());
+    document.getElementById('btnNouveauContact').addEventListener('click', () => this.formContact());
+    this._brancherSuggestions();
     let minuteur = null;
     document.getElementById('mailRecherche').addEventListener('input', e => {
       clearTimeout(minuteur);
@@ -144,8 +189,127 @@ const MailPage = {
     ['mailA', 'mailObjetP', 'mailCorpsP'].forEach(id =>
       document.getElementById(id).addEventListener('input', () => this._garderBrouillon()));
 
-    try { await this._chargerHistorique(); }
-    catch (err) { peindreErreur(err); }
+    try {
+      await Promise.all([this._chargerHistorique(), this._chargerContacts()]);
+    } catch (err) { peindreErreur(err); }
+  },
+
+  /* ── Carnet de contacts ── */
+  _contacts: [],
+  async _chargerContacts() {
+    this._contacts = await Mails.contacts(true);
+    this._peindreContacts();
+  },
+
+  _peindreContacts() {
+    const zone = document.getElementById('contactsListe');
+    if (!zone) return;
+    if (!this._contacts.length) {
+      zone.innerHTML = `<div class="empty-state">Aucun contact. Ajoutez-en un, ou dites à Nanika
+        « ajoute Roger Martin, roger@exemple.fr, dans mes contacts ».</div>`;
+      return;
+    }
+    zone.innerHTML = this._contacts.map(c => `
+      <div class="contact-carte" data-contact="${c.id}">
+        <div class="contact-avatar">${esc((c.prenom || '?')[0].toUpperCase())}</div>
+        <div class="contact-corps">
+          <div class="contact-nom">${esc(c.prenom)}${c.nom ? ' ' + esc(c.nom) : ''}
+            ${c.societe ? `<span class="contact-societe">· ${esc(c.societe)}</span>` : ''}</div>
+          <div class="contact-email">${esc(c.email)}${c.fonction ? ` · ${esc(c.fonction)}` : ''}</div>
+        </div>
+        <button class="btn btn-sm btn-secondary" data-ecrire="${c.id}" title="Écrire à ${esc(c.prenom)}">${Icone('envoyer', { taille: 14 })}</button>
+        <button class="btn-icon" data-modifier="${c.id}" title="Modifier" aria-label="Modifier">${Icone('crayon', { taille: 15 })}</button>
+      </div>`).join('');
+    zone.onclick = e => {
+      const ec = e.target.closest('[data-ecrire]');
+      if (ec) {
+        const c = this._contacts.find(x => x.id === ec.dataset.ecrire);
+        const champ = document.getElementById('mailA');
+        const deja = champ.value.trim();
+        champ.value = deja ? `${deja}, ${c.prenom}${c.nom ? ' ' + c.nom : ''}` : `${c.prenom}${c.nom ? ' ' + c.nom : ''}`;
+        this._garderBrouillon();
+        document.getElementById('mailObjetP').focus();
+        return;
+      }
+      const mo = e.target.closest('[data-modifier]');
+      if (mo) this.formContact(this._contacts.find(x => x.id === mo.dataset.modifier));
+    };
+  },
+
+  formContact(c = null) {
+    const v = k => esc(c?.[k] || '');
+    Modal.open(c ? 'Modifier le contact' : 'Nouveau contact', `
+      <div class="contact-form">
+        <div class="contact-form-ligne">
+          <label class="form-group"><span>Prénom *</span><input id="cPrenom" value="${v('prenom')}" autofocus></label>
+          <label class="form-group"><span>Nom</span><input id="cNom" value="${v('nom')}"></label>
+        </div>
+        <label class="form-group"><span>E-mail *</span><input id="cEmail" type="email" value="${v('email')}" autocapitalize="off"></label>
+        <div class="contact-form-ligne">
+          <label class="form-group"><span>Téléphone</span><input id="cTel" value="${v('telephone')}"></label>
+          <label class="form-group"><span>Société</span><input id="cSociete" value="${v('societe')}"></label>
+        </div>
+        <label class="form-group"><span>Fonction</span><input id="cFonction" value="${v('fonction')}" placeholder="Directeur, comptable, formateur…"></label>
+        <label class="form-group"><span>Notes</span><textarea id="cNotes" rows="2">${v('notes')}</textarea></label>
+      </div>`, [
+      ...(c ? [{ label: `${Icone('poubelle', { taille: 14 })} Supprimer`, cls: 'btn btn-secondary danger', action: async () => {
+        await DataStore.deleteContact(c.id); Modal.close();
+        await this._chargerContacts(); Toast.show('Contact supprimé', 'info');
+      } }] : []),
+      { label: 'Annuler', cls: 'btn btn-secondary', action: () => Modal.close() },
+      { label: 'Enregistrer', cls: 'btn btn-primary', action: async () => {
+        const d = {
+          prenom: document.getElementById('cPrenom').value.trim(),
+          nom: document.getElementById('cNom').value.trim(),
+          email: document.getElementById('cEmail').value.trim(),
+          telephone: document.getElementById('cTel').value.trim(),
+          societe: document.getElementById('cSociete').value.trim(),
+          fonction: document.getElementById('cFonction').value.trim(),
+          notes: document.getElementById('cNotes').value.trim()
+        };
+        if (!d.prenom) { Toast.show('Le prénom est obligatoire', 'warning'); return; }
+        if (!Mails.EMAIL_RE.test(d.email)) { Toast.show('Adresse e-mail invalide', 'warning'); return; }
+        try {
+          if (c) await DataStore.updateContact(c.id, d); else await DataStore.addContact(d);
+          Modal.close(); await this._chargerContacts();
+          Toast.show(c ? 'Contact modifié' : `${d.prenom} ajouté aux contacts`, 'success');
+        } catch (err) { Toast.show(err.message, 'error'); }
+      } }
+    ]);
+  },
+
+  /* Suggestions du carnet pendant la saisie du champ « À » */
+  _brancherSuggestions() {
+    const champ = document.getElementById('mailA');
+    const boite = document.getElementById('mailSuggestions');
+    const dernierMorceau = () => champ.value.split(/[,;]/).pop().trim();
+    const montrer = () => {
+      const q = Mails._norm(dernierMorceau());
+      if (q.length < 1) { boite.hidden = true; return; }
+      const trouves = this._contacts.filter(c =>
+        Mails._norm(`${c.prenom} ${c.nom || ''} ${c.societe || ''} ${c.email}`).includes(q)).slice(0, 6);
+      if (!trouves.length) { boite.hidden = true; return; }
+      boite.innerHTML = trouves.map(c => `
+        <button type="button" class="mail-suggestion" data-id="${c.id}">
+          <strong>${esc(c.prenom)}${c.nom ? ' ' + esc(c.nom) : ''}</strong> <span>${esc(c.email)}</span>
+        </button>`).join('');
+      boite.hidden = false;
+    };
+    champ.addEventListener('input', montrer);
+    champ.addEventListener('focus', montrer);
+    champ.addEventListener('blur', () => setTimeout(() => { boite.hidden = true; }, 150));
+    boite.addEventListener('mousedown', e => {
+      const b = e.target.closest('[data-id]');
+      if (!b) return;
+      e.preventDefault();
+      const c = this._contacts.find(x => x.id === b.dataset.id);
+      const parts = champ.value.split(/[,;]/); parts.pop();
+      parts.push(` ${c.prenom}${c.nom ? ' ' + c.nom : ''}`);
+      champ.value = parts.map(x => x.trim()).filter(Boolean).join(', ');
+      boite.hidden = true;
+      this._garderBrouillon();
+      document.getElementById('mailObjetP').focus();
+    });
   },
 
   /* ── Brouillon : on ne perd pas un mail à moitié écrit en changeant d'onglet ── */
@@ -184,10 +348,18 @@ const MailPage = {
 
   async _envoyerFormulaire() {
     const bouton = document.getElementById('mailEnvoyer');
-    const { a, moi, invalide } = await Mails.destinataires(document.getElementById('mailA').value);
+    const { a, moi, invalide, ambigus, inconnus } = await Mails.destinataires(document.getElementById('mailA').value);
     const objet = document.getElementById('mailObjetP').value.trim();
     const corps = document.getElementById('mailCorpsP').value.trim();
 
+    if (ambigus.length) {
+      Toast.show(`Plusieurs contacts pour « ${ambigus[0].saisie} » : ${ambigus[0].candidats.map(c => `${c.prenom} ${c.nom || ''}`.trim()).join(', ')} — précisez`, 'warning', 6000);
+      return;
+    }
+    if (inconnus.length) {
+      Toast.show(`« ${inconnus[0]} » n'est ni une adresse ni un contact connu`, 'warning', 5000);
+      return;
+    }
     if (!a.length)  { Toast.show('Indiquez au moins un destinataire', 'warning'); return; }
     if (invalide)   { Toast.show(`Adresse invalide : ${invalide}`, 'warning'); return; }
     if (!objet)     { Toast.show("L'objet est vide", 'warning'); return; }

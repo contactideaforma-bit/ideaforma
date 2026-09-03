@@ -831,6 +831,53 @@ Object.assign(DataStore, {
     if (error) this._handleError(error, 'deleteMail');
   },
 
+  /* ══════════════════════════════════════════════
+     CONTACTS — le carnet d'adresses (setup_update17.sql)
+  ══════════════════════════════════════════════ */
+  async getContacts(recherche = '') {
+    const { data, error } = await supa.from('contacts').select('*')
+      .order('prenom', { ascending: true });
+    if (error) this._handleError(error, 'getContacts');
+    const r = String(recherche || '').trim().toLowerCase();
+    if (!r) return data || [];
+    return (data || []).filter(c =>
+      [c.prenom, c.nom, c.email, c.societe, c.fonction].some(v => (v || '').toLowerCase().includes(r)));
+  },
+
+  async addContact(d) {
+    const uid = await this._uid();
+    const { data, error } = await supa.from('contacts').insert({
+      user_id:   uid,
+      prenom:    String(d.prenom || '').trim(),
+      nom:       d.nom || null,
+      email:     String(d.email || '').trim().toLowerCase(),
+      telephone: d.telephone || null,
+      societe:   d.societe || null,
+      fonction:  d.fonction || null,
+      notes:     d.notes || null
+    }).select().single();
+    if (error) this._handleError(error, 'addContact');
+    return data;
+  },
+
+  async updateContact(id, d) {
+    const uid = await this._uid();
+    const patch = {};
+    ['prenom', 'nom', 'email', 'telephone', 'societe', 'fonction', 'notes'].forEach(k => {
+      if (d[k] !== undefined) patch[k] = d[k] === '' ? null : (k === 'email' ? String(d[k]).trim().toLowerCase() : d[k]);
+    });
+    const { data, error } = await supa.from('contacts')
+      .update(patch).eq('id', id).eq('user_id', uid).select().single();
+    if (error) this._handleError(error, 'updateContact');
+    return data;
+  },
+
+  async deleteContact(id) {
+    const uid = await this._uid();
+    const { error } = await supa.from('contacts').delete().eq('id', id).eq('user_id', uid);
+    if (error) this._handleError(error, 'deleteContact');
+  },
+
   async getResumeJour() {
     const debutJour = new Date(); debutJour.setHours(0, 0, 0, 0);
     const finJour   = new Date(debutJour.getTime() + 86400000);
@@ -948,7 +995,7 @@ const MIGRATION_PAR_TABLE = {
   push_subscriptions: 'setup_update8.sql', ia_conversations: 'setup_update8.sql',
   ia_messages: 'setup_update8.sql', v_agenda: 'setup_update8.sql',
   coffre_categories: 'setup_update9.sql', preferences: 'setup_update10.sql',
-  mails: 'setup_update16.sql'
+  mails: 'setup_update16.sql', contacts: 'setup_update17.sql'
 };
 
 function peindreErreur(err) {

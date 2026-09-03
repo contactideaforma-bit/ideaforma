@@ -277,11 +277,55 @@ const Assistant = {
         input_schema: {
           type: 'object',
           properties: {
-            a:     { type: 'array', items: { type: 'string' }, description: "Adresses e-mail, ou [\"moi\"]" },
+            a:     { type: 'array', items: { type: 'string' }, description: "Adresses e-mail, prénoms ou « Prénom Nom » du carnet (CONTACTS CONNUS), ou [\"moi\"]" },
             objet: { type: 'string' },
             corps: { type: 'string', description: 'Texte brut du mail, complet, prêt à envoyer' }
           },
           required: ['a', 'objet', 'corps']
+        }
+      },
+      {
+        name: 'creer_contact',
+        description: "Ajoute une personne au carnet de contacts (prénom + e-mail au minimum). Dès que l'utilisatrice donne une adresse associée à un nom : « note le mail de Roger : roger@… », « ajoute Sophie Martin de chez Total dans mes contacts ».",
+        input_schema: {
+          type: 'object',
+          properties: {
+            prenom:    { type: 'string' },
+            nom:       { type: 'string' },
+            email:     { type: 'string' },
+            telephone: { type: 'string' },
+            societe:   { type: 'string' },
+            fonction:  { type: 'string' },
+            notes:     { type: 'string' }
+          },
+          required: ['prenom', 'email']
+        }
+      },
+      {
+        name: 'modifier_contact',
+        description: "Modifie un contact existant (nouvelle adresse, téléphone, société…). Identifie-le par son id pris dans CONTACTS CONNUS.",
+        input_schema: {
+          type: 'object',
+          properties: {
+            id:        { type: 'string' },
+            prenom:    { type: 'string' },
+            nom:       { type: 'string' },
+            email:     { type: 'string' },
+            telephone: { type: 'string' },
+            societe:   { type: 'string' },
+            fonction:  { type: 'string' },
+            notes:     { type: 'string' }
+          },
+          required: ['id']
+        }
+      },
+      {
+        name: 'supprimer_contact',
+        description: "Retire un contact du carnet. Seulement après un « oui » explicite de l'utilisatrice (confirme=true).",
+        input_schema: {
+          type: 'object',
+          properties: { id: { type: 'string' }, confirme: { type: 'boolean' } },
+          required: ['id', 'confirme']
         }
       },
       {
@@ -573,6 +617,42 @@ const Assistant = {
       case 'envoyer_mail':
         return this._envoyerMail(args);
 
+      case 'creer_contact': {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(args.email || ''))) {
+          return { ok: false, erreur: `Adresse invalide : ${args.email}` };
+        }
+        const c = await DataStore.addContact(args);
+        Mails._contacts = null;
+        this._noter(`contact « ${c.prenom} »`, () => DataStore.deleteContact(c.id));
+        if (typeof MailPage !== 'undefined' && Router?.currentPage === 'mail') MailPage._chargerContacts().catch(() => {});
+        return { ok: true, id: c.id, message: `${c.prenom}${c.nom ? ' ' + c.nom : ''} (${c.email}) ajouté aux contacts.` };
+      }
+
+      case 'modifier_contact': {
+        const avant = (await DataStore.getContacts()).find(x => x.id === args.id);
+        if (!avant) return { ok: false, erreur: 'Contact introuvable' };
+        const { id, ...patch } = args;
+        const c = await DataStore.updateContact(id, patch);
+        Mails._contacts = null;
+        this._noter(`modification du contact « ${avant.prenom} »`, () => DataStore.updateContact(id, {
+          prenom: avant.prenom, nom: avant.nom || '', email: avant.email, telephone: avant.telephone || '',
+          societe: avant.societe || '', fonction: avant.fonction || '', notes: avant.notes || ''
+        }));
+        if (typeof MailPage !== 'undefined' && Router?.currentPage === 'mail') MailPage._chargerContacts().catch(() => {});
+        return { ok: true, message: `Contact ${c.prenom} mis à jour.` };
+      }
+
+      case 'supprimer_contact': {
+        if (args.confirme !== true) return { ok: false, erreur: "Demander confirmation d'abord, puis rappeler avec confirme=true" };
+        const avant = (await DataStore.getContacts()).find(x => x.id === args.id);
+        if (!avant) return { ok: false, erreur: 'Contact introuvable' };
+        await DataStore.deleteContact(args.id);
+        Mails._contacts = null;
+        this._noter(`suppression du contact « ${avant.prenom} »`, () => DataStore.addContact(avant));
+        if (typeof MailPage !== 'undefined' && Router?.currentPage === 'mail') MailPage._chargerContacts().catch(() => {});
+        return { ok: true, message: `Contact ${avant.prenom} supprimé (annulable).` };
+      }
+
       case 'bilan_du_jour': {
         const r = await DataStore.getResumeJour();
         const ev = i => ({ titre: i.titre, date: Dates.iso(new Date(i.debut)),
@@ -655,13 +735,17 @@ const Assistant = {
     const moi = await this._monEmail();
     if (!moi) return { ok: false, erreur: 'Session expirée — reconnectez-vous' };
 
-    let a = (Array.isArray(args.a) ? args.a : [args.a])
-      .map(x => String(x || '').trim()).filter(Boolean)
-      .map(x => /^moi$/i.test(x) ? moi : x.toLowerCase());
-    a = [...new Set(a)];
+    // « moi », adresses, ou prénoms du carnet (Roger → roger@…)
+    const { a, ambigus, inconnus } = await Mails.destinataires(Array.isArray(args.a) ? args.a : [args.a]);
+    if (ambigus.length) {
+      return { ok: false, erreur: `Plusieurs contacts correspondent à « ${ambigus[0].saisie} » : ` +
+        ambigus[0].candidats.map(c => `${c.prenom} ${c.nom || ''} (${c.email})`.replace(/\s+/g, ' ')).join(', ') +
+        ' — demande lequel.' };
+    }
+    if (inconnus.length) {
+      return { ok: false, erreur: `« ${inconnus[0]} » n'est ni une adresse ni un contact connu : demande son e-mail, puis propose de l'ajouter aux contacts (creer_contact).` };
+    }
     if (!a.length) return { ok: false, erreur: 'Destinataire manquant' };
-    const invalide = a.find(x => !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(x));
-    if (invalide) return { ok: false, erreur: `Adresse invalide : ${invalide}` };
 
     let objet = String(args.objet || '').trim();
     let corps = String(args.corps || '').trim();
@@ -777,8 +861,9 @@ const Assistant = {
   ══════════════════════════════════════════════ */
   async systeme(vocal = this._vocal) {
     const maintenant = new Date();
-    const [etiquettes, listes] = await Promise.all([
-      DataStore.getEtiquettes(), DataStore.getListes()
+    const [etiquettes, listes, contacts] = await Promise.all([
+      DataStore.getEtiquettes(), DataStore.getListes(),
+      (typeof Mails !== 'undefined' ? Mails.contacts(true) : Promise.resolve([])).catch(() => [])
     ]);
     this._etiquettes = etiquettes;
     this._listes     = listes;
@@ -803,6 +888,9 @@ ${etiquettes.map(e => `- ${e.nom}`).join('\n') || '- aucune'}
 
 LISTES DE TÂCHES DISPONIBLES (nom exact)
 ${listes.map(l => `- ${l.nom}`).join('\n') || '- aucune'}
+
+CONTACTS CONNUS (carnet d'adresses — « envoie un mail à Roger » = ce Roger-là)
+${contacts.map(c => `- ${c.prenom}${c.nom ? ' ' + c.nom : ''}${c.societe ? ` (${c.societe}${c.fonction ? ', ' + c.fonction : ''})` : c.fonction ? ` (${c.fonction})` : ''} <${c.email}>${c.telephone ? ` · ${c.telephone}` : ''} — id ${c.id}`).join('\n') || '- aucun pour le moment'}
 
 PRISE DE NOTES RAPIDE — LA RÈGLE D'OR : RIEN NE SE PERD
 L'utilisateur te dicte souvent en vrac, à la voix, plusieurs choses d'un coup.
@@ -848,6 +936,8 @@ RECHERCHE SUR INTERNET
 E-MAILS
 - « Envoie-moi un mail avec… » ⇒ tu rassembles d'abord les données (bilan_du_jour, lister_taches, lister_agenda, chercher_dossiers…), puis envoyer_mail à ["moi"] : ça part tout de suite, sans validation. Objet précis (« Vos tâches du jeudi 5 septembre »), corps détaillé et bien rangé : une ligne vide entre les paragraphes, une liste « - » par groupe (en retard / aujourd'hui / à venir), avec l'heure, la liste et la priorité quand elles existent. Ne dis pas « voici » sans contenu : le mail doit se suffire à lui-même.
 - « Envoie un mail à quelqu'un » ⇒ tu rédiges un mail COMPLET et soigné (formule d'appel, contexte, demande ou confirmation claire, formule de politesse, signature « IDEAFORMA — organisme de formation », contact contact.ideaforma@gmail.com · 06 25 16 13 93), puis envoyer_mail : l'application montre le brouillon à l'utilisatrice et attend son accord ; toi, tu ne demandes pas l'autorisation avant d'appeler l'outil. Si l'outil revient avec a_modifier, réécris selon la consigne et rappelle-le ; s'il revient annule, n'insiste pas.
+- Un prénom ou un nom en destinataire ⇒ passe-le tel quel dans « a » : l'outil le résout avec CONTACTS CONNUS. Deux contacts homonymes ⇒ demande lequel. Prénom inconnu ⇒ demande l'adresse, envoie, puis propose de l'ajouter aux contacts. Une adresse donnée avec un nom dans la conversation ⇒ propose creer_contact (ou fais-le si elle le demande).
+- Adapte le ton au contact : sa fonction et sa société (dans CONTACTS CONNUS) te disent si c'est un client, un OPCO, un formateur, un proche.
 - Pour un mail à un tiers, tu ne connais pas forcément tout le contexte (heure exacte, lieu) : cherche-le d'abord dans l'agenda ou les dossiers ; s'il manque vraiment, pose UNE question avant de rédiger.
 - Le mail est envoyé par le serveur avec l'adresse de l'utilisatrice en Reply-To : la réponse lui reviendra. Tout envoi est inscrit dans l'onglet Mail (ouvrir_page « mail ») : « qu'est-ce que j'ai envoyé hier ? » ⇒ envoie-la voir cet onglet, ou résume ce que tu as envoyé toi-même dans cette discussion.
 
@@ -1658,6 +1748,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       ouvrir_page:      `${ic('oeil')} Page « ${esc(args.page || '')} » affichée`,
       chercher_notes:   `${ic('recherche')} Recherche dans les notes`,
       bilan_du_jour:    `${ic('formation')} Point de la journée`,
+      creer_contact:    `${ic('carte')} Contact ajouté : ${esc(args.prenom || '')}`,
+      modifier_contact: `${ic('carte')} Contact modifié`,
+      supprimer_contact:`${ic('carte')} Contact supprimé`,
       envoyer_mail:     `${ic('envoyer')} Mail proposé « ${esc(args.objet || '')} » → ${esc((args.a || []).join(', '))}`
     };
     return l[nom] || `${ic('reglages')} ${esc(nom)}`;
