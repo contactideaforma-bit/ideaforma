@@ -32,11 +32,27 @@ const Assistant = {
   _convRapide:    null,   // conversation ouverte depuis le bloc du tableau de bord
   _journal:       [],     // actions réversibles, la plus récente en dernier
   _vocal:         false,  // mode conversation vocale actif
+  _web:           true,   // recherche sur internet autorisée (outil serveur Anthropic)
 
   /* ══════════════════════════════════════════════
      OUTILS EXPOSÉS AU MODÈLE
   ══════════════════════════════════════════════ */
   outils() {
+    const liste = this._outilsApp();
+    if (this._web) {
+      /* Outil exécuté PAR LE SERVEUR d'Anthropic : le modèle cherche sur le
+         web et cite ses sources. Rien à exécuter côté navigateur. */
+      liste.push({
+        type: 'web_search_20250305',
+        name: 'web_search',
+        max_uses: 5,
+        user_location: { type: 'approximate', country: 'FR', timezone: 'Europe/Paris' }
+      });
+    }
+    return liste;
+  },
+
+  _outilsApp() {
     return [
       {
         name: 'creer_tache',
@@ -823,6 +839,12 @@ FILET DE SÉCURITÉ — COMPRENDRE AVANT D'AGIR, POUVOIR REVENIR EN ARRIÈRE
 - Une erreur d'outil : dis-le simplement, en une phrase, avec ce que tu proposes (réessayer, faire autrement, mettre en note). Ne prétends jamais avoir fait quelque chose qui a échoué.
 - Quand tu as agi, ta confirmation cite l'essentiel (quoi, quand, où) pour qu'elle puisse repérer une mauvaise compréhension tout de suite.
 
+RECHERCHE SUR INTERNET
+- Tu disposes de web_search. Utilise-le sans qu'on te le demande dès que la réponse dépend du monde extérieur ou peut avoir changé : actualité, réglementation et textes officiels (formation professionnelle, OPCO, Qualiopi, France Compétences, URSSAF), prix, horaires, adresses, coordonnées d'une entreprise, météo, définitions pointues, vérification d'un fait. Pour une question de culture générale stable ou une rédaction, réponds directement.
+- Cite tes sources : à l'écrit, l'interface affiche les liens sous ta réponse, tu n'as donc pas à coller d'URL — nomme juste le site ou l'organisme (« selon le site de France Compétences »). En vocal, jamais d'URL : « d'après Service-public.fr ».
+- Recoupe quand c'est important (montants, délais légaux) et dis la date de l'information si elle peut bouger.
+- Si la recherche ne donne rien de fiable, dis-le plutôt que d'inventer.
+
 E-MAILS
 - « Envoie-moi un mail avec… » ⇒ tu rassembles d'abord les données (bilan_du_jour, lister_taches, lister_agenda, chercher_dossiers…), puis envoyer_mail à ["moi"] : ça part tout de suite, sans validation. Objet précis (« Vos tâches du jeudi 5 septembre »), corps détaillé et bien rangé : une ligne vide entre les paragraphes, une liste « - » par groupe (en retard / aujourd'hui / à venir), avec l'heure, la liste et la priorité quand elles existent. Ne dis pas « voici » sans contenu : le mail doit se suffire à lui-même.
 - « Envoie un mail à quelqu'un » ⇒ tu rédiges un mail COMPLET et soigné (formule d'appel, contexte, demande ou confirmation claire, formule de politesse, signature « IDEAFORMA — organisme de formation », contact contact.ideaforma@gmail.com · 06 25 16 13 93), puis envoyer_mail : l'application montre le brouillon à l'utilisatrice et attend son accord ; toi, tu ne demandes pas l'autorisation avant d'appeler l'outil. Si l'outil revient avec a_modifier, réécris selon la consigne et rappelle-le ; s'il revient annule, n'insiste pas.
@@ -888,7 +910,10 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 
     const peutDicter = this.peutDicter();
     const peutLire   = this.peutLire();
-    try { this._voix = localStorage.getItem('chatbot_voix') === '1'; } catch { /* rien */ }
+    try {
+      this._voix = localStorage.getItem('chatbot_voix') === '1';
+      this._web  = localStorage.getItem('nanika_web') !== '0';
+    } catch { /* rien */ }
 
     document.body.insertAdjacentHTML('beforeend', `
       <button class="chatbot-bouton" id="chatbotBouton"
@@ -911,6 +936,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
             <button class="chatbot-outil ${this._voix ? 'on' : ''}" id="chatbotVoix"
                     title="Lire les réponses à voix haute" aria-pressed="${this._voix}"
                     aria-label="Lire les réponses à voix haute">${Icone('musique', { taille: 17 })}</button>` : ''}
+          <button class="chatbot-outil ${this._web ? 'on' : ''}" id="chatbotWeb"
+                  title="Recherche sur internet" aria-pressed="${this._web}"
+                  aria-label="Autoriser la recherche sur internet">${Icone('recherche', { taille: 17 })}</button>
           <button class="chatbot-outil" id="btnHistorique" title="Discussions précédentes"
                   aria-label="Discussions précédentes">${Icone('horloge', { taille: 17 })}</button>
           <button class="chatbot-outil" id="btnNouvelleConv" title="Nouvelle discussion"
@@ -972,6 +1000,14 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('btnHistorique').addEventListener('click', () => this._historique());
     document.getElementById('chatMicro')?.addEventListener('click', () => this._dicter());
     document.getElementById('chatbotVocal')?.addEventListener('click', () => this.demarrerVocal());
+    document.getElementById('chatbotWeb')?.addEventListener('click', () => {
+      this._web = !this._web;
+      const b = document.getElementById('chatbotWeb');
+      b.classList.toggle('on', this._web);
+      b.setAttribute('aria-pressed', String(this._web));
+      try { localStorage.setItem('nanika_web', this._web ? '1' : '0'); } catch { /* rien */ }
+      Toast.show(this._web ? 'Nanika peut chercher sur internet' : 'Recherche sur internet coupée', 'info');
+    });
     document.getElementById('chatbotVoix')?.addEventListener('click', () => {
       this._voix = !this._voix;
       const b = document.getElementById('chatbotVoix');
@@ -1585,10 +1621,13 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 
       blocs.forEach(b => {
         if (b.type === 'text' && b.text.trim()) {
-          html += `<div class="chat-bulle chat-ia">${this._markdown(b.text)}</div>`;
+          html += `<div class="chat-bulle chat-ia">${this._markdown(b.text)}${this._sources(b.citations)}</div>`;
         }
         if (b.type === 'tool_use') {
           html += `<div class="chat-action">${this._libelleOutil(b.name, b.input)}</div>`;
+        }
+        if (b.type === 'server_tool_use' && b.name === 'web_search') {
+          html += `<div class="chat-action">${Icone('recherche', { taille: 15 })} Recherche sur internet : « ${esc(b.input?.query || '')} »</div>`;
         }
       });
     });
@@ -1622,6 +1661,18 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       envoyer_mail:     `${ic('envoyer')} Mail proposé « ${esc(args.objet || '')} » → ${esc((args.a || []).join(', '))}`
     };
     return l[nom] || `${ic('reglages')} ${esc(nom)}`;
+  },
+
+  /* Les sources d'une réponse cherchée sur le web : une ligne de liens
+     dédupliqués sous la bulle. */
+  _sources(citations) {
+    if (!Array.isArray(citations) || !citations.length) return '';
+    const vues = new Map();
+    citations.forEach(c => { if (c?.url && !vues.has(c.url)) vues.set(c.url, c.title || c.url); });
+    if (!vues.size) return '';
+    const hote = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+    return `<div class="chat-sources">${[...vues].slice(0, 6).map(([url, titre]) =>
+      `<a href="${esc(url)}" target="_blank" rel="noopener" title="${esc(titre)}">${esc(hote(url))}</a>`).join('')}</div>`;
   },
 
   /* Markdown minimal : gras, italique, code, listes, sauts de ligne */

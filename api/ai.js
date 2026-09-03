@@ -145,7 +145,10 @@ module.exports = async function handler(req, res) {
     messages
   };
   if (Array.isArray(tools) && tools.length) {
-    corps.tools = tools.slice(0, 20);
+    /* Les outils « serveur » d'Anthropic (web_search_20250305…) passent tels
+       quels : c'est Anthropic qui les exécute, le navigateur n'a rien à faire.
+       Coût : ~10 $ pour 1 000 recherches, plafonné à max_uses par réponse. */
+    corps.tools = tools.slice(0, 30);
     if (tool_choice) corps.tool_choice = tool_choice;
   }
 
