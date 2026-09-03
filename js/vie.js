@@ -792,6 +792,45 @@ Object.assign(DataStore, {
       Attention : le tableau de bord est PERSONNEL : les échéances de dossiers OPCO en
       sont volontairement absentes. Elles restent sur « Ma journée ». Ne pas
       les réintroduire ici sans une demande explicite. */
+  /* ══════════════════════════════════════════════
+     MAILS — journal des e-mails envoyés (setup_update16.sql)
+  ══════════════════════════════════════════════ */
+  async getMails({ recherche = '', limite = 200 } = {}) {
+    const { data, error } = await supa.from('mails').select('*')
+      .order('envoye_le', { ascending: false }).limit(limite);
+    if (error) this._handleError(error, 'getMails');
+    const r = String(recherche || '').trim().toLowerCase();
+    if (!r) return data || [];
+    // Historique personnel, quelques centaines de lignes au plus : le filtre
+    // se fait côté client, ce qui couvre aussi le tableau des destinataires.
+    return (data || []).filter(m =>
+      (m.objet || '').toLowerCase().includes(r) ||
+      (m.corps || '').toLowerCase().includes(r) ||
+      (m.destinataires || []).some(d => d.toLowerCase().includes(r)));
+  },
+
+  async addMail(d) {
+    const uid = await this._uid();
+    const { data, error } = await supa.from('mails').insert({
+      user_id:       uid,
+      destinataires: d.destinataires || [],
+      objet:         d.objet,
+      corps:         d.corps,
+      statut:        d.statut || 'envoye',
+      erreur:        d.erreur || null,
+      source:        d.source || 'manuel',
+      resend_id:     d.resendId || null
+    }).select().single();
+    if (error) this._handleError(error, 'addMail');
+    return data;
+  },
+
+  async deleteMail(id) {
+    const uid = await this._uid();
+    const { error } = await supa.from('mails').delete().eq('id', id).eq('user_id', uid);
+    if (error) this._handleError(error, 'deleteMail');
+  },
+
   async getResumeJour() {
     const debutJour = new Date(); debutJour.setHours(0, 0, 0, 0);
     const finJour   = new Date(debutJour.getTime() + 86400000);

@@ -238,8 +238,8 @@ const Assistant = {
         input_schema: {
           type: 'object',
           properties: {
-            page: { type: 'string', enum: ['dashboard', 'agenda', 'taches', 'notes', 'coffre', 'journee', 'parcours', 'activite', 'settings'],
-                    description: 'dashboard = accueil, journee = Ma journée, parcours = dossiers OPCO, activite = statistiques' }
+            page: { type: 'string', enum: ['dashboard', 'agenda', 'taches', 'notes', 'coffre', 'mail', 'journee', 'parcours', 'activite', 'settings'],
+                    description: 'dashboard = accueil, mail = écrire un mail et voir l\'historique des envois, journee = Ma journée, parcours = dossiers OPCO, activite = statistiques' }
           },
           required: ['page']
         }
@@ -667,14 +667,9 @@ const Assistant = {
       objet = decision.objet; corps = decision.corps; confirme = true;
     }
 
-    const { data: { session } } = await supa.auth.getSession();
-    const res = await fetch('/api/mail', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ a, objet, corps, confirme })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, erreur: data.error || `Le serveur a répondu ${res.status}` };
+    // Même chemin que l'onglet Mail : envoi + inscription dans l'historique
+    const r = await Mails.envoyer({ a, objet, corps, confirme, source: 'nanika' });
+    if (!r.ok) return { ok: false, erreur: r.erreur || 'Envoi impossible' };
     return { ok: true, message: `Mail « ${objet} » envoyé à ${a.join(', ')}.`, a, externe };
   },
 
@@ -832,7 +827,7 @@ E-MAILS
 - « Envoie-moi un mail avec… » ⇒ tu rassembles d'abord les données (bilan_du_jour, lister_taches, lister_agenda, chercher_dossiers…), puis envoyer_mail à ["moi"] : ça part tout de suite, sans validation. Objet précis (« Vos tâches du jeudi 5 septembre »), corps détaillé et bien rangé : une ligne vide entre les paragraphes, une liste « - » par groupe (en retard / aujourd'hui / à venir), avec l'heure, la liste et la priorité quand elles existent. Ne dis pas « voici » sans contenu : le mail doit se suffire à lui-même.
 - « Envoie un mail à quelqu'un » ⇒ tu rédiges un mail COMPLET et soigné (formule d'appel, contexte, demande ou confirmation claire, formule de politesse, signature « IDEAFORMA — organisme de formation », contact contact.ideaforma@gmail.com · 06 25 16 13 93), puis envoyer_mail : l'application montre le brouillon à l'utilisatrice et attend son accord ; toi, tu ne demandes pas l'autorisation avant d'appeler l'outil. Si l'outil revient avec a_modifier, réécris selon la consigne et rappelle-le ; s'il revient annule, n'insiste pas.
 - Pour un mail à un tiers, tu ne connais pas forcément tout le contexte (heure exacte, lieu) : cherche-le d'abord dans l'agenda ou les dossiers ; s'il manque vraiment, pose UNE question avant de rédiger.
-- Le mail est envoyé par le serveur avec l'adresse de l'utilisatrice en Reply-To : la réponse lui reviendra.
+- Le mail est envoyé par le serveur avec l'adresse de l'utilisatrice en Reply-To : la réponse lui reviendra. Tout envoi est inscrit dans l'onglet Mail (ouvrir_page « mail ») : « qu'est-ce que j'ai envoyé hier ? » ⇒ envoie-la voir cet onglet, ou résume ce que tu as envoyé toi-même dans cette discussion.
 
 COMMENT TRAVAILLER
 - Tu as des outils pour lire ET écrire. Utilise-les plutôt que de demander à l'utilisateur de le faire lui-même.

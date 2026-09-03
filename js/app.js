@@ -738,6 +738,7 @@ const Router = {
     taches:    () => Taches.render(),
     notes:     () => Notes.render(),
     coffre:    () => Coffre.render(),
+    mail:      () => MailPage.render(),
     journee:   () => JourneePage.render(),
     parcours:  () => ParcoursPage.render(),
     activite:  () => Dashboard.render(),

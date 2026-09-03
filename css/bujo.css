@@ -596,6 +596,55 @@ html, body { overflow-x: hidden; }
 .mail-note .ic { vertical-align: 0; flex-shrink: 0; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   7c. L'onglet Mail — écrire à gauche, l'historique à droite
+═══════════════════════════════════════════════════════════════════════════ */
+.mail-page { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.mail-form { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px 2px; }
+.mail-form .form-group span { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--encre-douce); }
+.mail-form input, .mail-form textarea {
+  width: 100%; font: 15px/1.45 var(--sans); color: var(--encre);
+  border: 1px solid var(--regle); border-radius: 12px; padding: 11px 13px; background: var(--papier);
+}
+.mail-form input:focus, .mail-form textarea:focus { outline: none; border-color: var(--encre-rose); }
+.mail-form textarea { resize: vertical; min-height: 200px; }
+.mail-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.mail-actions-btns { display: flex; gap: 8px; margin-left: auto; }
+.mail-expediteur { font-size: 12.5px; color: var(--encre-douce); display: inline-flex; gap: 5px; align-items: center; }
+.mail-expediteur .ic { vertical-align: 0; }
+.mail-recherche { max-width: 220px; }
+
+.mail-liste { display: flex; flex-direction: column; gap: 14px; }
+.mail-jour-titre {
+  font-family: var(--titre, var(--sans)); text-transform: uppercase; letter-spacing: .08em;
+  font-size: 11.5px; font-weight: 700; color: var(--encre-rose); margin: 4px 2px 8px;
+}
+.mail-item {
+  border: 1px solid var(--regle); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px;
+  background: rgba(255,255,255,.72); cursor: pointer; transition: var(--transition);
+}
+.mail-item:hover { border-color: var(--encre-rose); }
+.mail-item.ouvert { background: #fff; cursor: default; }
+.mail-item.echec { border-color: rgba(194, 35, 58, .45); background: rgba(255, 240, 242, .8); }
+.mail-item-tete { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--encre-douce); min-width: 0; }
+.mail-item-heure { font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.mail-item-a { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--encre); }
+.mail-item-source { display: flex; flex-shrink: 0; opacity: .7; }
+.mail-item-source .ic, .mail-item-statut .ic { vertical-align: 0; }
+.mail-item-statut { display: inline-flex; gap: 4px; align-items: center; color: #C2233A; font-weight: 700; flex-shrink: 0; }
+.mail-item-objet { font-weight: 700; font-size: 14.5px; margin-top: 4px; }
+.mail-item-apercu { font-size: 13px; color: var(--encre-douce); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mail-item-corps { font-size: 14px; line-height: 1.5; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--regle); white-space: normal; }
+.mail-item-erreur { margin-top: 8px; font-size: 13px; color: #C2233A; }
+.mail-item-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.mail-item-actions .btn .ic { vertical-align: -3px; margin-right: 3px; }
+
+@media (max-width: 900px) {
+  .mail-page { grid-template-columns: 1fr; }
+  .mail-form textarea { min-height: 160px; }
+  .mail-recherche { max-width: 160px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    8. L'entrée — la ligne, partout dans l'application
 ═══════════════════════════════════════════════════════════════════════════ */
 .log { display: flex; flex-direction: column; min-width: 0; }
