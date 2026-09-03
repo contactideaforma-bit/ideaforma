@@ -40,7 +40,9 @@ const Toast = {
     // Le message peut contenir un peu de mise en forme volontaire (<strong>),
     // mais jamais de contenu tiers non échappé : tous les appels qui insèrent
     // un message d'erreur passent par esc() au point d'appel.
-    toast.innerHTML = `<span>${icons[type] || ''}</span> ${message}`;
+    // Le message vit dans son propre bloc : le toast est en flex, et sans ce
+    // bloc un <br> ne casse pas la ligne (« dans 2 min » partait à droite).
+    toast.innerHTML = `<span class="toast-ic">${icons[type] || ''}</span><span class="toast-msg">${message}</span>`;
     container.appendChild(toast);
     setTimeout(() => {
       toast.style.opacity = '0';

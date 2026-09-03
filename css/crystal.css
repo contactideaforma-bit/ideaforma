@@ -469,24 +469,30 @@ input:focus, select:focus, textarea:focus, .search-input:focus {
    lisible sur n'importe quel fond, sans flou imbriqué risqué sur iOS. */
 .chatbot { background: rgba(255, 255, 255, 0.94); }
 
-/* ═══ 13. Lisibilité des toasts et des bulles (v15) ═══
-   Le calque crystal avait blanchi le fond des toasts (règle commune avec le
-   chatbot) alors que leur texte restait blanc : blanc sur blanc, illisible.
-   Retour à des textes SOMBRES sur verre clair pour l'info, et textes blancs
-   uniquement sur les fonds pleins (succès, erreur). */
-.toast {
+/* ═══ 13. Les toasts — un seul design, celui du reste de l'appli (v18) ═══
+   Plus de pavés pleins (le marron-or des avertissements jurait avec tout le
+   reste). Toutes les alertes sont du verre clair, texte sombre ; seule la
+   couleur d'un liseré à gauche et de l'icône dit le type. */
+.toast, .toast.success, .toast.error, .toast.warning, .toast.info {
   background: rgba(255, 255, 255, 0.94);
   color: var(--encre);
   border: 1px solid var(--verre-bord);
+  border-left: 4px solid var(--encre-rose);
   box-shadow: var(--ombre-verre);
   font-weight: 600;
+  border-radius: 14px;
 }
-.toast .ic { color: var(--encre-rose); }
-/* Les variantes pleines gardent leur texte clair, lisible sur leur couleur */
-.toast.success, .toast.error { color: #fff; }
-.toast.success .ic, .toast.error .ic { color: #fff; }
-.toast.warning { color: #1c1c1c; }
-.toast.warning .ic { color: #1c1c1c; }
+.toast .ic { color: var(--encre-rose); flex-shrink: 0; }
+.toast.success { border-left-color: var(--encre-verte); }
+.toast.success .ic { color: var(--encre-verte); }
+.toast.error   { border-left-color: var(--encre-rouge); }
+.toast.error .ic { color: var(--encre-rouge); }
+.toast.warning { border-left-color: var(--rose-vif); }
+.toast.warning .ic { color: var(--rose-vif); }
+/* La mention de délai des rappels (« dans 2 min ») : discrète, à droite */
+.toast-ic { display: flex; flex-shrink: 0; }
+.toast-msg { flex: 1 1 auto; min-width: 0; line-height: 1.4; }
+.toast-msg strong { font-weight: 700; }
 
 /* Les bulles de l'assistant : la bulle de l'IA se détache du panneau par un
    voile rosé au lieu de se fondre blanc sur blanc. */
