@@ -636,6 +636,7 @@ html, body { overflow-x: hidden; }
 .nanika-reglages label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
 .nanika-reglages select, .nanika-reglages input[type="range"] { width: 100%; font-size: 14px; }
 .nanika-reglages .nanika-case { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; }
+.nanika-voix-info { font-weight: 500; color: var(--encre-douce); font-size: 12px; }
 
 @media (max-width: 760px) {
   .nanika-nuage { width: 240px; height: 240px; }

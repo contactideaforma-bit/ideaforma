@@ -1083,8 +1083,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
             <button class="btn btn-secondary" id="nanikaClavier">${Icone('crayon', { taille: 16 })} Clavier</button>
           </div>
           <div class="nanika-reglages" id="nanikaPanneauReglages" hidden>
-            <label>Voix
+            <label>Voix du téléphone
               <select id="nanikaChoixVoix"></select>
+              <small id="nanikaVoixInfo" class="nanika-voix-info"></small>
             </label>
             <label>Vitesse <span id="nanikaVitesseVal"></span>
               <input type="range" id="nanikaVitesse" min="0.8" max="1.3" step="0.05">
@@ -1298,19 +1299,36 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 
   /* Les voix « premium » d'Apple et de Google sont nettement plus naturelles
      que les voix compactes : on les préfère quand elles sont installées. */
+  /* Sur iPhone, la voix téléchargée « Amélie (Améliorée) » porte le MÊME nom
+     que la voix compacte de base : seule l'adresse interne (voiceURI) les
+     distingue (…enhanced… contre …compact…). On raisonne donc sur l'URI,
+     et on mémorise l'URI plutôt que le nom. */
+  _estAmelioree(v) { return /enhanced|premium|neural|natural|amélior|ameliore|superior/i.test(`${v.voiceURI || ''} ${v.name || ''}`); },
+  _libelleVoix(v) {
+    const base = v.name.replace(/\s*\((enhanced|premium|améliorée?)\)/i, '').trim();
+    return this._estAmelioree(v) ? `${base} (améliorée)` : /compact/i.test(v.voiceURI || '') ? `${base} (compacte)` : base;
+  },
+
   _meilleureVoix() {
     const voix = this._voixDisponibles();
     if (!voix.length) return null;
-    let nom = null;
-    try { nom = localStorage.getItem('nanika_voix'); } catch { /* rien */ }
-    if (nom) { const v = voix.find(x => x.name === nom); if (v) return v; }
+    let choix = null;
+    try { choix = localStorage.getItem('nanika_voix'); } catch { /* rien */ }
+    if (choix) {
+      // Choix mémorisé par URI (nouveau) ou par nom (ancien) ; à nom égal, l'améliorée gagne
+      const parUri = voix.find(x => x.voiceURI === choix);
+      if (parUri) return parUri;
+      const memesNoms = voix.filter(x => x.name === choix);
+      if (memesNoms.length) return memesNoms.find(x => this._estAmelioree(x)) || memesNoms[0];
+    }
     const PREFEREES = [/amélie|amelie/i, /audrey/i, /aurélie|aurelie/i, /marie/i,
                        /google français/i, /denise/i, /vivienne/i, /eloise|éloïse/i,
                        /thomas/i, /nicolas/i];
     const score = v => {
       let n = 0;
       PREFEREES.forEach((re, i) => { if (re.test(v.name)) n += 100 - i * 5; });
-      if (/premium|enhanced|amélior|natural|neural/i.test(v.name)) n += 40;
+      if (this._estAmelioree(v)) n += 80;
+      if (/compact/i.test(v.voiceURI || '')) n -= 30;
       if (v.localService) n += 5;
       if (/fr-FR/i.test(v.lang)) n += 3;
       return n;
@@ -1563,8 +1581,12 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     const voix = this._voixDisponibles();
     const choisie = this._meilleureVoix();
     sel.innerHTML = voix.length
-      ? voix.map(v => `<option value="${esc(v.name)}" ${choisie && v.name === choisie.name ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})</option>`).join('')
+      ? voix.map(v => `<option value="${esc(v.voiceURI)}" ${choisie && v.voiceURI === choisie.voiceURI ? 'selected' : ''}>${esc(this._libelleVoix(v))} — ${esc(v.lang)}</option>`).join('')
       : '<option>Aucune voix française installée</option>';
+    const info = document.getElementById('nanikaVoixInfo');
+    if (info) info.textContent = this._ttsIndisponible || !this._voixServeur
+      ? (choisie ? `Voix du téléphone utilisée : ${this._libelleVoix(choisie)}` : 'Aucune voix française trouvée')
+      : 'Voix naturelle (serveur) active si la clé est configurée, sinon celle-ci';
     document.getElementById('nanikaVitesse').value = this._vitesse;
     document.getElementById('nanikaVitesseVal').textContent = '×' + this._vitesse.toFixed(2);
     document.getElementById('nanikaAutoEcoute').checked = this._autoEcoute;
