@@ -139,10 +139,11 @@ Object.assign(DataStore, {
   ══════════════════════════════════════════════ */
 
   /** filtres : { listeId, etiquetteId, fait, horizonJours, dossierId, recherche } */
-  async getTachesFiltrees(f = {}) {
+  _avecPieces: true,   // passe à false si la migration 18 n'est pas encore jouée
+  async getTachesFiltrees(f = {}, _retente = false) {
     const uid = await this._uid();
     let q = supa.from('taches')
-      .select('*, listes(nom,couleur,icone), etiquettes(nom,couleur,icone)')
+      .select('*, listes(nom,couleur,icone), etiquettes(nom,couleur,icone)' + (this._avecPieces ? ', taches_pieces(id)' : ''))
       .eq('user_id', uid);
 
     if (f.listeId)     q = q.eq('liste_id', f.listeId);
@@ -165,7 +166,15 @@ Object.assign(DataStore, {
       .order('ordre',    { ascending: true })
       .limit(500);
 
-    if (error) this._handleError(error, 'getTachesFiltrees');
+    if (error) {
+      // Table des pièces jointes absente (migration 18 pas encore jouée) :
+      // on ne casse pas la page Tâches pour ça, on recharge sans elle.
+      if (this._avecPieces && !_retente && /taches_pieces/i.test(error.message || '')) {
+        this._avecPieces = false;
+        return this.getTachesFiltrees(f, true);
+      }
+      this._handleError(error, 'getTachesFiltrees');
+    }
     return data || [];
   },
 
@@ -832,6 +841,47 @@ Object.assign(DataStore, {
   },
 
   /* ══════════════════════════════════════════════
+     PIÈCES JOINTES DES TÂCHES (setup_update18.sql) — bucket « documents »
+  ══════════════════════════════════════════════ */
+  async getPiecesTache(tacheId) {
+    const { data, error } = await supa.from('taches_pieces').select('*')
+      .eq('tache_id', tacheId).order('cree_le', { ascending: true });
+    if (error) this._handleError(error, 'getPiecesTache');
+    return data || [];
+  },
+
+  async addPieceTache(tacheId, file) {
+    const uid  = await this._uid();
+    const safe = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${uid}/taches/${tacheId}/${Date.now()}_${safe}`;
+    const { error: upErr } = await supa.storage.from(DataStore.BUCKET)
+      .upload(path, file, { upsert: false, contentType: file.type || undefined });
+    if (upErr) this._handleError(upErr, 'addPieceTache');
+    const { data, error } = await supa.from('taches_pieces').insert({
+      user_id: uid, tache_id: tacheId, nom_fichier: file.name,
+      storage_path: path, mime: file.type || null, taille: file.size
+    }).select().single();
+    if (error) {
+      await supa.storage.from(DataStore.BUCKET).remove([path]);
+      this._handleError(error, 'addPieceTache.link');
+    }
+    return data;
+  },
+
+  async deletePieceTache(piece) {
+    const uid = await this._uid();
+    await supa.storage.from(DataStore.BUCKET).remove([piece.storage_path]).catch(() => {});
+    const { error } = await supa.from('taches_pieces').delete().eq('id', piece.id).eq('user_id', uid);
+    if (error) this._handleError(error, 'deletePieceTache');
+  },
+
+  async urlPiece(storagePath, secondes = 3600) {
+    const { data, error } = await supa.storage.from(DataStore.BUCKET).createSignedUrl(storagePath, secondes);
+    if (error) this._handleError(error, 'urlPiece');
+    return data?.signedUrl || null;
+  },
+
+  /* ══════════════════════════════════════════════
      CONTACTS — le carnet d'adresses (setup_update17.sql)
   ══════════════════════════════════════════════ */
   async getContacts(recherche = '') {
@@ -995,7 +1045,7 @@ const MIGRATION_PAR_TABLE = {
   push_subscriptions: 'setup_update8.sql', ia_conversations: 'setup_update8.sql',
   ia_messages: 'setup_update8.sql', v_agenda: 'setup_update8.sql',
   coffre_categories: 'setup_update9.sql', preferences: 'setup_update10.sql',
-  mails: 'setup_update16.sql', contacts: 'setup_update17.sql'
+  mails: 'setup_update16.sql', contacts: 'setup_update17.sql', taches_pieces: 'setup_update18.sql'
 };
 
 function peindreErreur(err) {

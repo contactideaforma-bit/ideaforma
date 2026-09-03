@@ -51,6 +51,8 @@ const Taches = {
             ${t.etiquettes ? pucePastille(t.etiquettes) : ''}
             ${t.dossier_id
                ? `<span title="Liée à un dossier de formation">${Icone('formation', { taille: 13 })}</span>` : ''}
+            ${Array.isArray(t.taches_pieces) && t.taches_pieces.length
+               ? `<span title="${t.taches_pieces.length} pièce(s) jointe(s)">${Icone('trombone', { taille: 13 })} ${t.taches_pieces.length}</span>` : ''}
           </span>
         </span>
         <span class="entree-outils">
@@ -134,12 +136,17 @@ const Taches = {
     return `
       <section class="taches-liste-carte" style="--lc:${esc(l.couleur || '#9E3057')}">
         <header class="tlc-tete">
-          <span class="tlc-titre" ${sans ? '' : `data-regler-liste="${id}"`}
-                ${sans ? '' : 'title="Régler la liste (nom, couleur, pictogramme)"'}>
+          <span class="tlc-titre" data-focus-liste="${id}" role="button" tabindex="0"
+                title="Ouvrir « ${esc(l.nom)} » en pleine page">
             ${Icone(l.icone, { taille: 17, defaut: 'liste' })}
             ${esc(l.nom)}
             <span class="hub-compteur">${enCours.length}</span>
           </span>
+          ${sans ? '' : `
+          <button class="btn-icon tlc-regler" data-regler-liste="${id}"
+                  title="Régler la liste (nom, couleur, pictogramme)"
+                  aria-label="Régler la liste ${esc(l.nom)}"
+                  >${Icone('crayon', { taille: 15 })}</button>`}
           <button class="btn-icon tlc-plus" data-ajout-liste="${id}"
                   title="Ajouter une tâche dans ${esc(l.nom)}"
                   aria-label="Ajouter une tâche dans ${esc(l.nom)}"
@@ -176,7 +183,8 @@ const Taches = {
 
   _peindre() {
     const mobile = this.estMobile();
-    if (mobile && this.listeActive) return this._peindreFocus();
+    // Une liste ouverte se lit en pleine page, sur téléphone comme sur ordinateur
+    if (this.listeActive) return this._peindreFocus();
 
     const listes  = this._listesTriees();
     const sans    = this._tachesDe('sans');
@@ -321,8 +329,8 @@ const Taches = {
       <div class="taches-page liste-vue" style="--lc:${esc(l.couleur || '#9E3057')}">
         <div class="liste-vue-tete">
           <button class="btn btn-secondary liste-vue-retour" data-retour-mosaique
-                  aria-label="Revenir à la mosaïque des listes">
-            ${Icone('chevron', { taille: 15 })} Retour
+                  aria-label="Revenir à toutes les listes">
+            ${Icone('chevron', { taille: 15 })} Toutes les listes
           </button>
           <span class="liste-vue-titre">
             ${Icone(l.icone, { taille: 20, defaut: 'liste' })}
@@ -527,8 +535,8 @@ const Taches = {
       <div class="tform">
         <input id="fTitre" class="tform-titre" placeholder="Que faut-il faire ?"
                value="${esc(t?.description)}" maxlength="300" autocomplete="off" />
-        <textarea id="fNotes" class="tform-notes" rows="2"
-                  placeholder="Note (facultatif)">${esc(t?.notes)}</textarea>
+        <textarea id="fNotes" class="tform-notes" rows="6"
+                  placeholder="Note, détails, consignes… (facultatif)">${esc(t?.notes)}</textarea>
 
         ${listePreset
           ? (listeFixe ? `
@@ -566,6 +574,18 @@ const Taches = {
           <p class="tform-aide">Les alertes partent par rapport à la date
           (à 9 h si aucune heure n'est donnée).</p>
         </div>
+
+        <div class="tform-pieces" id="fPieces">
+          <div class="tform-pieces-tete">
+            <span>${Icone('trombone', { taille: 15 })} Pièces jointes</span>
+            <label class="btn btn-sm btn-secondary tform-pieces-ajout">
+              ${Icone('plus', { taille: 14 })} Fichier ou photo
+              <input type="file" id="fFichiers" multiple hidden
+                     accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
+            </label>
+          </div>
+          <div class="tform-pieces-liste" id="fPiecesListe"></div>
+        </div>
       </div>`;
 
     Modal.open(edition ? 'Modifier la tâche' : 'Nouvelle tâche', corps, [
@@ -597,15 +617,89 @@ const Taches = {
             return;
           }
           try {
+            let idTache = t?.id;
             if (edition) await DataStore.updateTache(t.id, d);
-            else         await DataStore.addTacheComplete(d);
+            else         idTache = (await DataStore.addTacheComplete(d)).id;
+            // Pièces jointes en attente : téléversées maintenant qu'on a l'identifiant
+            const echecs = [];
+            for (const f of enAttente) {
+              try { await DataStore.addPieceTache(idTache, f); }
+              catch (err) { echecs.push(`${f.name} (${err.message})`); }
+            }
             Modal.close();
             if (apres) await apres(); else await this._charger();
             updateJourneeBadge();
-            Toast.show(edition ? 'Tâche modifiée' : 'Tâche créée', 'success');
+            if (echecs.length) Toast.show(`Tâche enregistrée, mais ${echecs.length} pièce(s) n'ont pas pu être jointes : ${esc(echecs.join(', '))}`, 'warning', 7000);
+            else Toast.show(edition ? 'Tâche modifiée' : 'Tâche créée', 'success');
           } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
         } }
     ], 'modal-sm');
+
+    /* ── Pièces jointes ──
+       Existantes (édition) : vignette ou nom, ouverture par lien signé,
+       suppression. Nouvelles : gardées en mémoire, envoyées à l'enregistrement. */
+    const enAttente = [];
+    const zonePieces = document.getElementById('fPiecesListe');
+    const estImage = m => /^image\//.test(m || '');
+    const taille = n => n > 1048576 ? (n / 1048576).toFixed(1) + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+    const peindrePieces = async () => {
+      let existantes = [];
+      if (edition) {
+        try { existantes = await DataStore.getPiecesTache(t.id); }
+        catch (err) { zonePieces.innerHTML = `<p class="tform-aide">${esc(err.message)}</p>`; return; }
+      }
+      if (!existantes.length && !enAttente.length) {
+        zonePieces.innerHTML = `<p class="tform-aide">Aucune pièce jointe. Ajoutez un PDF, une photo, une capture…</p>`;
+        return;
+      }
+      const vignettes = await Promise.all(existantes.map(async p => {
+        let url = null;
+        try { url = await DataStore.urlPiece(p.storage_path, 3600); } catch { /* lien indisponible */ }
+        return `
+          <div class="piece-carte" data-piece="${p.id}">
+            ${estImage(p.mime) && url
+              ? `<a href="${esc(url)}" target="_blank" rel="noopener" class="piece-vignette"><img src="${esc(url)}" alt=""></a>`
+              : `<a href="${esc(url || '#')}" target="_blank" rel="noopener" class="piece-vignette piece-fichier">${Icone(/pdf/.test(p.mime || '') ? 'document' : 'trombone', { taille: 22 })}</a>`}
+            <div class="piece-corps">
+              <a href="${esc(url || '#')}" target="_blank" rel="noopener" class="piece-nom">${esc(p.nom_fichier)}</a>
+              <span class="piece-meta">${taille(p.taille || 0)}</span>
+            </div>
+            <button type="button" class="btn-icon danger" data-piece-del="${p.id}" title="Retirer" aria-label="Retirer la pièce jointe">${Icone('poubelle', { taille: 14 })}</button>
+          </div>`;
+      }));
+      const nouvelles = enAttente.map((f, i) => `
+          <div class="piece-carte piece-attente">
+            <span class="piece-vignette piece-fichier">${estImage(f.type)
+              ? `<img src="${URL.createObjectURL(f)}" alt="">` : Icone('trombone', { taille: 22 })}</span>
+            <div class="piece-corps">
+              <span class="piece-nom">${esc(f.name)}</span>
+              <span class="piece-meta">${taille(f.size)} · sera jointe à l'enregistrement</span>
+            </div>
+            <button type="button" class="btn-icon" data-attente-del="${i}" title="Retirer" aria-label="Retirer">${Icone('fermer', { taille: 14 })}</button>
+          </div>`).join('');
+      zonePieces.innerHTML = vignettes.join('') + nouvelles;
+    };
+    document.getElementById('fFichiers').addEventListener('change', e => {
+      for (const f of e.target.files) {
+        if (f.size > 25 * 1048576) { Toast.show(`${f.name} dépasse 25 Mo`, 'warning'); continue; }
+        enAttente.push(f);
+      }
+      e.target.value = '';
+      peindrePieces();
+    });
+    zonePieces.addEventListener('click', async e => {
+      const del = e.target.closest('[data-piece-del]');
+      if (del) {
+        e.preventDefault();
+        const pieces = await DataStore.getPiecesTache(t.id);
+        const p = pieces.find(x => x.id === del.dataset.pieceDel);
+        if (p) { await DataStore.deletePieceTache(p); Toast.show('Pièce retirée', 'info'); peindrePieces(); }
+        return;
+      }
+      const att = e.target.closest('[data-attente-del]');
+      if (att) { enAttente.splice(Number(att.dataset.attenteDel), 1); peindrePieces(); }
+    });
+    peindrePieces();
 
     /* ── Comportement des trois boutons ── */
     const basculer = (btn, zone) => {

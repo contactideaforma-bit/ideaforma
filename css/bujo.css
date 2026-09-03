@@ -518,35 +518,95 @@ html, body { overflow-x: hidden; }
 .nanika-vocal-reglage:hover, .nanika-vocal-quitter:hover { border-color: var(--encre-rose); color: var(--encre-rose); }
 .nanika-vocal-reglage .ic, .nanika-vocal-quitter .ic { vertical-align: 0; }
 
-.nanika-orbe {
-  position: relative; width: 150px; height: 150px; margin: 18px 0 14px;
+/* ── Le champ de diffusion : un nuage rond, rose, pailleté ──
+   Quatre nappes floues qui dérivent lentement, un halo, des paillettes qui
+   scintillent, et un cœur lumineux. L'état module le rythme :
+   veille (à peine vivant), écoute (respiration ample + ondes qui partent),
+   réflexion (pulsation nette), parole (ondulation rapide et irrégulière). */
+.nanika-nuage {
+  position: relative; width: 200px; height: 200px; margin: 6px 0 10px;
   border: none; background: transparent; border-radius: 50%; cursor: pointer;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  -webkit-tap-highlight-color: transparent;
+  -webkit-tap-highlight-color: transparent; isolation: isolate;
+  --v: 1;   /* vivacité : amplitude des mouvements */
 }
-.nanika-orbe-coeur {
-  position: relative; z-index: 2;
-  width: 108px; height: 108px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  color: #fff;
-  background: linear-gradient(135deg, var(--rose-vif, #E2679A), var(--rose-profond, #B03A63));
-  box-shadow: 0 14px 34px -10px rgba(176, 58, 99, .55), inset 0 1px 0 rgba(255,255,255,.45);
-  transition: transform .25s ease, box-shadow .25s ease;
+.nanika-nuage > span { position: absolute; border-radius: 50%; pointer-events: none; }
+.nuage-halo {
+  inset: 8%; z-index: 1;
+  background: radial-gradient(circle, rgba(255, 196, 220, 1) 0%, rgba(240, 130, 178, .75) 40%, rgba(240, 130, 178, .18) 62%, rgba(240, 130, 178, 0) 74%);
+  filter: blur(5px);
+  box-shadow: 0 18px 50px -18px rgba(198, 55, 116, .45);
+  animation: nuage-respire 5.2s ease-in-out infinite;
 }
-.nanika-orbe-coeur .ic { vertical-align: 0; }
-.nanika-orbe-anneau {
-  position: absolute; inset: 0; border-radius: 50%;
-  border: 2px solid rgba(198, 55, 116, .35); opacity: 0;
+.nuage-blob {
+  width: 60%; height: 60%; z-index: 2; filter: blur(12px); mix-blend-mode: multiply; opacity: .95;
+  animation: nuage-derive 9s ease-in-out infinite;
 }
-.nanika-orbe[data-etat="veille"] .nanika-orbe-coeur { filter: saturate(.6); opacity: .85; }
-.nanika-orbe[data-etat="ecoute"] .nanika-orbe-anneau { animation: nanika-onde 1.8s ease-out infinite; }
-.nanika-orbe[data-etat="ecoute"] .nanika-orbe-anneau:nth-child(2) { animation-delay: .9s; }
-.nanika-orbe[data-etat="ecoute"] .nanika-orbe-coeur { transform: scale(1.04); }
-.nanika-orbe[data-etat="reflexion"] .nanika-orbe-coeur { animation: nanika-pense 1.6s ease-in-out infinite; }
-.nanika-orbe[data-etat="parole"] .nanika-orbe-coeur { animation: nanika-parle .55s ease-in-out infinite alternate; }
-@keyframes nanika-onde  { 0% { transform: scale(.72); opacity: .8; } 100% { transform: scale(1.25); opacity: 0; } }
-@keyframes nanika-pense { 0%, 100% { transform: scale(1); filter: brightness(1); } 50% { transform: scale(.94); filter: brightness(1.12); } }
-@keyframes nanika-parle { from { transform: scale(1); } to { transform: scale(1.07); box-shadow: 0 18px 40px -10px rgba(176, 58, 99, .7); } }
+.nuage-blob.b1 { left: 14%; top: 18%; background: radial-gradient(circle, #F07AA8 0%, rgba(240,122,168,0) 70%); animation-duration: 8.5s; }
+.nuage-blob.b2 { left: 30%; top: 30%; background: radial-gradient(circle, #FFB3CF 0%, rgba(255,179,207,0) 70%); animation-duration: 11s; animation-delay: -3s; }
+.nuage-blob.b3 { left: 26%; top: 12%; background: radial-gradient(circle, #FFE1B8 0%, rgba(255,225,184,0) 70%); animation-duration: 12.5s; animation-delay: -6s; opacity: .7; }
+.nuage-blob.b4 { left: 16%; top: 32%; background: radial-gradient(circle, #D9B8FF 0%, rgba(217,184,255,0) 70%); animation-duration: 10s; animation-delay: -1.5s; opacity: .55; }
+.nuage-coeur {
+  width: 26%; height: 26%; z-index: 4;
+  background: radial-gradient(circle, #fff 0%, rgba(255,255,255,.75) 35%, rgba(255,255,255,0) 72%);
+  filter: blur(2px);
+  animation: nuage-respire 4s ease-in-out infinite;
+}
+.nuage-paillettes { inset: 0; z-index: 5; border-radius: 0 !important; }
+.nuage-paillettes i {
+  position: absolute; left: var(--x); top: var(--y);
+  width: var(--s); height: var(--s); border-radius: 50%;
+  background: #fff; box-shadow: 0 0 5px 1.5px rgba(255, 244, 214, 1), 0 0 12px 3px rgba(255, 170, 210, .75);
+  opacity: 0; transform: translate(-50%, -50%) scale(.6);
+  animation: nuage-scintille 2.6s ease-in-out infinite; animation-delay: var(--d);
+}
+.nuage-paillettes i:nth-child(3n)   { background: #FFE9A8; }
+.nuage-paillettes i:nth-child(5n)   { background: #FFC7DD; }
+.nuage-onde {
+  inset: 10%; z-index: 0; opacity: 0;
+  border: 1.5px solid rgba(214, 66, 126, .35);
+  box-shadow: 0 0 18px rgba(255, 200, 224, .5) inset;
+}
+
+@keyframes nuage-respire   { 0%, 100% { transform: scale(1); } 50% { transform: scale(calc(1 + .06 * var(--v))); } }
+@keyframes nuage-derive    {
+  0%   { transform: translate(0, 0) scale(1); }
+  25%  { transform: translate(calc(9% * var(--v)), calc(-7% * var(--v))) scale(calc(1 + .08 * var(--v))); }
+  50%  { transform: translate(calc(-6% * var(--v)), calc(8% * var(--v))) scale(calc(1 - .05 * var(--v))); }
+  75%  { transform: translate(calc(-9% * var(--v)), calc(-4% * var(--v))) scale(calc(1 + .04 * var(--v))); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes nuage-scintille { 0%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(.5); } 45% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } 60% { opacity: .6; } }
+@keyframes nuage-onde      { 0% { transform: scale(.85); opacity: .7; } 100% { transform: scale(1.35); opacity: 0; } }
+@keyframes nuage-pense     { 0%, 100% { transform: scale(.94); filter: brightness(1) saturate(1); } 50% { transform: scale(1.06); filter: brightness(1.1) saturate(1.25); } }
+@keyframes nuage-parle     {
+  0%   { transform: scale(1) ; }
+  18%  { transform: scale(1.07) translateY(-1.5%); }
+  36%  { transform: scale(.97) translateX(1.5%); }
+  58%  { transform: scale(1.05) translateY(1%); }
+  76%  { transform: scale(.98) translateX(-1.5%); }
+  100% { transform: scale(1); }
+}
+
+/* Veille : presque immobile, un peu délavé */
+.nanika-nuage[data-etat="veille"]   { --v: .35; filter: saturate(.75) opacity(.85); }
+.nanika-nuage[data-etat="veille"] .nuage-paillettes i { animation-duration: 5s; }
+/* Écoute : respiration ample, ondes qui s'éloignent */
+.nanika-nuage[data-etat="ecoute"]   { --v: 1; }
+.nanika-nuage[data-etat="ecoute"] .nuage-onde { animation: nuage-onde 2.4s ease-out infinite; }
+.nanika-nuage[data-etat="ecoute"] .nuage-onde:nth-child(2) { animation-delay: 1.2s; }
+/* Réflexion : pulsation nette de tout le nuage, paillettes plus vives */
+.nanika-nuage[data-etat="reflexion"] { --v: 1.3; }
+.nanika-nuage[data-etat="reflexion"] .nuage-halo,
+.nanika-nuage[data-etat="reflexion"] .nuage-coeur { animation: nuage-pense 1.15s ease-in-out infinite; }
+.nanika-nuage[data-etat="reflexion"] .nuage-blob { animation-duration: 3.2s; }
+.nanika-nuage[data-etat="reflexion"] .nuage-paillettes i { animation-duration: 1.1s; }
+/* Parole : ondulation vive et un peu irrégulière */
+.nanika-nuage[data-etat="parole"]   { --v: 1.6; }
+.nanika-nuage[data-etat="parole"] .nuage-halo { animation: nuage-parle 1.3s ease-in-out infinite; }
+.nanika-nuage[data-etat="parole"] .nuage-blob { animation-duration: 2.2s; }
+.nanika-nuage[data-etat="parole"] .nuage-coeur { animation: nuage-parle .9s ease-in-out infinite reverse; }
+@media (prefers-reduced-motion: reduce) { .nanika-nuage * { animation-duration: 12s !important; } }
 
 .nanika-etat {
   font-family: var(--titre, var(--sans)); text-transform: uppercase; letter-spacing: .08em;
@@ -578,8 +638,7 @@ html, body { overflow-x: hidden; }
 .nanika-reglages .nanika-case { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; }
 
 @media (max-width: 760px) {
-  .nanika-orbe { width: 170px; height: 170px; }
-  .nanika-orbe-coeur { width: 124px; height: 124px; }
+  .nanika-nuage { width: 240px; height: 240px; }
 }
 
 /* Le brouillon de mail à valider (modale ouverte par Nanika) */
@@ -695,6 +754,28 @@ html, body { overflow-x: hidden; }
   .mail-page { grid-template-areas: 'compose' 'contacts' 'historique'; }
   .contact-form-ligne { grid-template-columns: 1fr; }
 }
+
+/* Formulaire de tâche : note plus ample, pièces jointes */
+.tform-notes { min-height: 120px; line-height: 1.45; }
+.tform-pieces { border-top: 1px dashed var(--regle); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.tform-pieces-tete { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--encre-douce); text-transform: uppercase; letter-spacing: .05em; }
+.tform-pieces-tete .ic { vertical-align: -3px; }
+.tform-pieces-ajout { cursor: pointer; text-transform: none; letter-spacing: 0; }
+.tform-pieces-liste { display: flex; flex-direction: column; gap: 6px; }
+.piece-carte { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border: 1px solid var(--regle); border-radius: 10px; background: rgba(255,255,255,.7); }
+.piece-carte.piece-attente { border-style: dashed; }
+.piece-vignette { width: 46px; height: 46px; border-radius: 8px; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--papier); color: var(--encre-rose); }
+.piece-vignette img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.piece-vignette .ic { vertical-align: 0; }
+.piece-corps { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.piece-nom { font-size: 13.5px; font-weight: 600; color: var(--encre); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.piece-meta { font-size: 11.5px; color: var(--encre-douce); }
+/* Board des listes (bureau) : le titre s'ouvre, le crayon règle */
+.tlc-titre[data-focus-liste] { cursor: pointer; }
+.tlc-titre[data-focus-liste]:hover { color: var(--encre-rose); }
+.tlc-regler { opacity: .55; }
+.taches-liste-carte:hover .tlc-regler { opacity: 1; }
+@media (min-width: 761px) { .liste-vue { max-width: 980px; } .liste-vue-feuille .entree { padding: 11px 6px; } }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    8. L'entrée — la ligne, partout dans l'application
