@@ -256,6 +256,19 @@ const Assistant = {
         }
       },
       {
+        name: 'envoyer_mail',
+        description: "Envoie un e-mail. Destinataire « moi » = la boîte de l'utilisatrice (envoi immédiat, pour s'envoyer une liste, un récapitulatif, un mémo). Toute autre adresse : l'application AFFICHE le brouillon et attend la validation de l'utilisatrice avant d'envoyer — tu n'as pas à demander la permission toi-même, appelle l'outil avec un mail prêt à partir. Rédige un objet précis et un corps complet en texte brut (paragraphes séparés par une ligne vide, listes avec « - »), avec formule d'appel et signature.",
+        input_schema: {
+          type: 'object',
+          properties: {
+            a:     { type: 'array', items: { type: 'string' }, description: "Adresses e-mail, ou [\"moi\"]" },
+            objet: { type: 'string' },
+            corps: { type: 'string', description: 'Texte brut du mail, complet, prêt à envoyer' }
+          },
+          required: ['a', 'objet', 'corps']
+        }
+      },
+      {
         name: 'bilan_du_jour',
         description: "Le point de la journée en un appel : rendez-vous d'aujourd'hui et de la semaine, tâches du jour, tâches en retard, notes épinglées, documents qui expirent. Pour « fais-moi le point », « qu'est-ce que j'ai aujourd'hui », « briefing ».",
         input_schema: { type: 'object', properties: {} }
@@ -541,6 +554,9 @@ const Assistant = {
         };
       }
 
+      case 'envoyer_mail':
+        return this._envoyerMail(args);
+
       case 'bilan_du_jour': {
         const r = await DataStore.getResumeJour();
         const ev = i => ({ titre: i.titre, date: Dates.iso(new Date(i.debut)),
@@ -605,6 +621,144 @@ const Assistant = {
       default:
         return { ok: false, erreur: `Outil inconnu : ${nom}` };
     }
+  },
+
+  /* ══════════════════════════════════════════════
+     E-MAILS — la règle : à moi, ça part ; à un tiers, je valide d'abord
+     Le verrou est tenu par le NAVIGATEUR (cette fonction) et re-vérifié par
+     le serveur (api/mail.js exige `confirme: true` pour un tiers). Le modèle
+     ne peut donc pas expédier un mail à quelqu'un d'autre sans qu'un
+     brouillon ait été montré et validé — à l'écran, ou de vive voix.
+  ══════════════════════════════════════════════ */
+  async _monEmail() {
+    const { data: { session } } = await supa.auth.getSession();
+    return String(session?.user?.email || '').toLowerCase();
+  },
+
+  async _envoyerMail(args) {
+    const moi = await this._monEmail();
+    if (!moi) return { ok: false, erreur: 'Session expirée — reconnectez-vous' };
+
+    let a = (Array.isArray(args.a) ? args.a : [args.a])
+      .map(x => String(x || '').trim()).filter(Boolean)
+      .map(x => /^moi$/i.test(x) ? moi : x.toLowerCase());
+    a = [...new Set(a)];
+    if (!a.length) return { ok: false, erreur: 'Destinataire manquant' };
+    const invalide = a.find(x => !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(x));
+    if (invalide) return { ok: false, erreur: `Adresse invalide : ${invalide}` };
+
+    let objet = String(args.objet || '').trim();
+    let corps = String(args.corps || '').trim();
+    if (!objet || !corps) return { ok: false, erreur: 'Objet ou corps manquant' };
+
+    const externe = a.some(x => x !== moi);
+    let confirme = false;
+
+    if (externe) {
+      const decision = await this._validerMail({ a, objet, corps });
+      if (decision.action === 'annuler') {
+        return { ok: false, annule: true,
+                 message: "Envoi annulé par l'utilisatrice — ne pas réessayer sans nouvelle demande." };
+      }
+      if (decision.action === 'modifier') {
+        return { ok: false, a_modifier: true,
+                 message: `L'utilisatrice demande une modification avant envoi : « ${decision.consigne} ». Réécris le mail en conséquence et rappelle envoyer_mail.` };
+      }
+      objet = decision.objet; corps = decision.corps; confirme = true;
+    }
+
+    const { data: { session } } = await supa.auth.getSession();
+    const res = await fetch('/api/mail', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ a, objet, corps, confirme })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { ok: false, erreur: data.error || `Le serveur a répondu ${res.status}` };
+    return { ok: true, message: `Mail « ${objet} » envoyé à ${a.join(', ')}.`, a, externe };
+  },
+
+  /** Montre le brouillon et attend la décision : { action: 'envoyer', objet,
+      corps } (éventuellement retouchés dans la modale) | { action: 'annuler' }
+      | { action: 'modifier', consigne }. En mode vocal, Nanika lit le mail et
+      écoute la réponse ; la modale reste à l'écran en parallèle, le premier
+      des deux qui tranche l'emporte. */
+  _validerMail({ a, objet, corps }) {
+    return new Promise(resolve => {
+      let tranche = false;
+      const decider = d => {
+        if (tranche) return;
+        tranche = true;
+        this._taire();
+        this._couperEcoute();
+        Modal.close();
+        resolve(d);
+      };
+
+      Modal.open('Nanika — valider avant envoi', `
+        <div class="mail-apercu">
+          <div class="mail-ligne"><span>À</span><strong>${esc(a.join(', '))}</strong></div>
+          <label class="mail-champ">Objet
+            <input type="text" id="mailObjet" value="${esc(objet)}">
+          </label>
+          <label class="mail-champ">Message
+            <textarea id="mailCorps" rows="12">${esc(corps)}</textarea>
+          </label>
+          <div class="mail-note">${Icone('bouclier', { taille: 14 })} Ce mail part vers une adresse qui n'est pas la vôtre : rien ne sera envoyé sans votre accord.</div>
+        </div>`, [
+        { label: 'Annuler', cls: 'btn btn-secondary', action: () => decider({ action: 'annuler' }) },
+        { label: `${Icone('envoyer', { taille: 15 })} Envoyer`, cls: 'btn btn-primary', action: () => decider({
+            action: 'envoyer',
+            objet: document.getElementById('mailObjet').value.trim() || objet,
+            corps: document.getElementById('mailCorps').value.trim() || corps
+          }) }
+      ]);
+
+      if (!this._vocal) return;
+
+      (async () => {
+        this._vocalPhase('parole', 'Je vous lis le mail…');
+        this._vocalMontrer(null, `Mail pour ${a.join(', ')} — « ${objet} »`);
+        await this._lire(`Voici le mail pour ${a.join(' et ').replace(/@/g, ' arobase ').replace(/\./g, ' point ')}. Objet : ${objet}. ${corps}. Je l'envoie ?`);
+        if (tranche || !this._vocal) return;
+        // Jusqu'à deux écoutes : la première peut tomber sur un silence
+        for (let essai = 0; essai < 2 && !tranche; essai++) {
+          const dit = await this._ecouterUneFois();
+          if (tranche) return;
+          const d = String(dit || '').toLowerCase().trim();
+          if (!d) continue;
+          if (/^(oui|ok|d'accord|envoie|envoi|envoie[- ]le|vas[- ]y|go|c'est bon|parfait|confirm)/.test(d)) {
+            return decider({ action: 'envoyer', objet, corps });
+          }
+          if (/^(non|annule|stop|laisse tomber|pas maintenant|n'envoie pas)/.test(d)) {
+            return decider({ action: 'annuler' });
+          }
+          return decider({ action: 'modifier', consigne: dit });
+        }
+        if (!tranche) {
+          await this._lire("Je n'ai pas entendu de réponse : le mail reste en attente à l'écran.");
+          this._vocalPhase('veille', 'Validez le mail à l\'écran');
+        }
+      })();
+    });
+  },
+
+  /** Une seule écoute, hors de la boucle principale : rend le texte dit
+      (ou null si silence/erreur). Sert aux confirmations. */
+  _ecouterUneFois() {
+    return new Promise(resolve => {
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) return resolve(null);
+      this._couperEcoute();
+      const reco = this._reco = new SR();
+      reco.lang = 'fr-FR'; reco.interimResults = true; reco.continuous = false;
+      let texte = '';
+      reco.onstart  = () => { this._vocalPhase('ecoute', 'Oui ou non ?'); this._bip('ecoute'); };
+      reco.onresult = e => { texte = ''; for (let i = 0; i < e.results.length; i++) texte += e.results[i][0].transcript; this._vocalMontrer(texte.trim(), null); };
+      reco.onerror  = () => {};
+      reco.onend    = () => { if (this._reco === reco) this._reco = null; this._vocalPhase('reflexion', 'Je réfléchis…'); resolve(texte.trim() || null); };
+      try { reco.start(); } catch { this._reco = null; resolve(null); }
+    });
   },
 
   /* ══════════════════════════════════════════════
@@ -673,6 +827,12 @@ FILET DE SÉCURITÉ — COMPRENDRE AVANT D'AGIR, POUVOIR REVENIR EN ARRIÈRE
 - Suppression définitive (supprimer_tache) : jamais sans un « oui » explicite dans l'échange en cours ; propose d'abord cocher ou abandonner, qui se défont.
 - Une erreur d'outil : dis-le simplement, en une phrase, avec ce que tu proposes (réessayer, faire autrement, mettre en note). Ne prétends jamais avoir fait quelque chose qui a échoué.
 - Quand tu as agi, ta confirmation cite l'essentiel (quoi, quand, où) pour qu'elle puisse repérer une mauvaise compréhension tout de suite.
+
+E-MAILS
+- « Envoie-moi un mail avec… » ⇒ tu rassembles d'abord les données (bilan_du_jour, lister_taches, lister_agenda, chercher_dossiers…), puis envoyer_mail à ["moi"] : ça part tout de suite, sans validation. Objet précis (« Vos tâches du jeudi 5 septembre »), corps détaillé et bien rangé : une ligne vide entre les paragraphes, une liste « - » par groupe (en retard / aujourd'hui / à venir), avec l'heure, la liste et la priorité quand elles existent. Ne dis pas « voici » sans contenu : le mail doit se suffire à lui-même.
+- « Envoie un mail à quelqu'un » ⇒ tu rédiges un mail COMPLET et soigné (formule d'appel, contexte, demande ou confirmation claire, formule de politesse, signature « IDEAFORMA — organisme de formation », contact contact.ideaforma@gmail.com · 06 25 16 13 93), puis envoyer_mail : l'application montre le brouillon à l'utilisatrice et attend son accord ; toi, tu ne demandes pas l'autorisation avant d'appeler l'outil. Si l'outil revient avec a_modifier, réécris selon la consigne et rappelle-le ; s'il revient annule, n'insiste pas.
+- Pour un mail à un tiers, tu ne connais pas forcément tout le contexte (heure exacte, lieu) : cherche-le d'abord dans l'agenda ou les dossiers ; s'il manque vraiment, pose UNE question avant de rédiger.
+- Le mail est envoyé par le serveur avec l'adresse de l'utilisatrice en Reply-To : la réponse lui reviendra.
 
 COMMENT TRAVAILLER
 - Tu as des outils pour lire ET écrire. Utilise-les plutôt que de demander à l'utilisateur de le faire lui-même.
@@ -1210,7 +1370,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     this._vocalMontrer('', mot);
     this._vocalPhase('parole', 'Je parle…');
     await this._lire(mot);
-    if (this._vocal) this._vocalEcouter();
+    if (this._vocal && !this._reco) this._vocalEcouter();
   },
 
   arreterVocal(silencieux = false) {
@@ -1218,7 +1378,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     this._vocal = false;
     clearTimeout(this._vocalTimer);
     this._taire();
-    if (this._reco) { try { this._reco.abort(); } catch { /* rien */ } this._reco = null; }
+    this._couperEcoute();
     this._vocalPhase('veille', 'En veille');
     document.getElementById('nanikaVocal').hidden = true;
     document.getElementById('chatbot').classList.remove('en-vocal');
@@ -1240,9 +1400,18 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     // en réflexion : on laisse finir
   },
 
+  /* Coupe l'écoute en cours en la « désinscrivant » d'abord : son onend, qui
+     arrive parfois de façon synchrone, ne doit plus rien relancer. */
+  _couperEcoute() {
+    const ancien = this._reco;
+    this._reco = null;
+    if (ancien) { try { ancien.abort(); } catch { /* rien */ } }
+  },
+
   _vocalEcouter(force = false) {
     if (!this._vocal) return;
-    if (this._reco) { try { this._reco.abort(); } catch { /* rien */ } this._reco = null; }
+    clearTimeout(this._vocalTimer);
+    this._couperEcoute();
     this._taire();
     if (force) this._vocalSilences = 0;
 
@@ -1273,7 +1442,10 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     };
     reco.onerror = ev => { erreur = ev.error; };
     reco.onend = () => {
-      if (this._reco === reco) this._reco = null;
+      // Une écoute remplacée par une autre (abort) ne doit pas relancer la
+      // boucle : sinon deux micros se disputent la phrase suivante.
+      if (this._reco !== reco) return;
+      this._reco = null;
       if (!this._vocal) return;
       const dit = texte.trim();
 
@@ -1345,6 +1517,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     this._vocalPhase('parole', 'Je parle…');
     await this._lire(aDire || "C'est fait.");
     if (!this._vocal) return;
+    // Interrompue par un tap sur l'orbe ? L'écoute a déjà été relancée là-bas.
+    if (this._reco) return;
     if (this._autoEcoute) this._vocalEcouter();
     else this._vocalPhase('veille', 'Touchez l\'orbe pour répondre');
   },
@@ -1449,7 +1623,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       annuler_derniere_action: `${ic('rafraichir')} Dernière action annulée`,
       ouvrir_page:      `${ic('oeil')} Page « ${esc(args.page || '')} » affichée`,
       chercher_notes:   `${ic('recherche')} Recherche dans les notes`,
-      bilan_du_jour:    `${ic('formation')} Point de la journée`
+      bilan_du_jour:    `${ic('formation')} Point de la journée`,
+      envoyer_mail:     `${ic('envoyer')} Mail proposé « ${esc(args.objet || '')} » → ${esc((args.a || []).join(', '))}`
     };
     return l[nom] || `${ic('reglages')} ${esc(nom)}`;
   },
