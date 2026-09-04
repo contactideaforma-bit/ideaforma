@@ -15,7 +15,7 @@
 ─────────────────────────────────────────────────────────────────────────────── */
 
 const MAX_BODY_CHARS   = 600000;  // un seul utilisateur : on laisse de la marge
-const MAX_TOKENS_LIMIT = 8192;
+const MAX_TOKENS_LIMIT = 16000;
 const RATE_LIMIT       = 600;     // requêtes par utilisateur… (garde-fou anti-boucle seulement)
 const RATE_WINDOW_MS   = 60000;   // …par minute
 
@@ -124,7 +124,7 @@ module.exports = async function handler(req, res) {
   /* ── Validation de la charge utile ── */
   const {
     messages, system, max_tokens = 1500,
-    tools, tool_choice, profil
+    tools, tool_choice, profil, thinking
   } = req.body || {};
 
   if (!Array.isArray(messages) || !messages.length) {
@@ -144,6 +144,13 @@ module.exports = async function handler(req, res) {
     system:     typeof system === 'string' ? system : '',
     messages
   };
+  /* Réflexion étendue (Nanika) : le modèle raisonne avant de répondre.
+     Budget plafonné, et max_tokens doit rester supérieur au budget. */
+  if (thinking && thinking.type === 'enabled') {
+    const budget = Math.min(Math.max(Number(thinking.budget_tokens) || 2048, 1024), 8000);
+    corps.thinking = { type: 'enabled', budget_tokens: budget };
+    if (corps.max_tokens <= budget) corps.max_tokens = Math.min(budget + 4000, MAX_TOKENS_LIMIT);
+  }
   if (Array.isArray(tools) && tools.length) {
     /* Les outils « serveur » d'Anthropic (web_search_20250305…) passent tels
        quels : c'est Anthropic qui les exécute, le navigateur n'a rien à faire.

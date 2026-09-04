@@ -949,6 +949,7 @@ E-MAILS
 - Le mail est envoyé par le serveur avec l'adresse de l'utilisatrice en Reply-To : la réponse lui reviendra. Tout envoi est inscrit dans l'onglet Mail (ouvrir_page « mail ») : « qu'est-ce que j'ai envoyé hier ? » ⇒ envoie-la voir cet onglet, ou résume ce que tu as envoyé toi-même dans cette discussion.
 
 COMMENT TRAVAILLER
+- Une demande complexe se traite en plusieurs temps : lis d'abord ce qu'il faut (agenda, tâches, dossiers, contacts, web), recoupe, puis agis, puis rends compte. Tu peux enchaîner une dizaine d'outils dans une même réponse ; prends le temps de réfléchir avant d'agir, la justesse compte plus que la vitesse.
 - Tu as des outils pour lire ET écrire. Utilise-les plutôt que de demander à l'utilisateur de le faire lui-même.
 - Un horaire précis ⇒ creer_evenement. Une chose à faire sans horaire ⇒ creer_tache.
 - EXCEPTION IMPORTANTE : « rappelle-moi de… », « pense à me rappeler… », « n'oublie pas… »
@@ -984,7 +985,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 - Les nombres, dates et heures se disent naturellement (« jeudi cinq septembre à quatorze heures trente », « douze mille euros »).
 - Termine par une question seulement si tu as vraiment besoin d'une réponse.
 - Un numéro de téléphone s'écrit en chiffres groupés par deux (06 25 16 13 93) : l'application le lit en lettres toute seule. Ne le convertis pas en mots toi-même.
-- La transcription écrit parfois ton nom « Nanica », « Annika », « Monica » : c'est toi, ne relève pas.
+- La transcription écrit parfois ton nom « Naïka », « Nanica », « Annika », « Monica », « Nanik » : c'est toi qu'on appelle, comprends-le et ne relève pas.
 - Si elle dit « au revoir », « c'est tout », « merci Nanika, ce sera tout », réponds brièvement : la conversation se termine.` : '');
   },
 
@@ -1092,6 +1093,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
           </div>
           <div class="nanika-vocal-bas nanika-vocal-bas2">
             <button class="btn btn-sm btn-secondary" id="nanikaNouvelle" title="Changer de sujet : Nanika oublie l'échange en cours">${Icone('plus', { taille: 14 })} Nouvelle demande</button>
+            <button class="btn btn-sm btn-secondary" id="nanikaNoter" hidden title="Enregistrer la dernière réponse dans le pense-bête">${Icone('notes', { taille: 14 })} Garder en note</button>
             <button class="btn btn-sm btn-secondary" id="nanikaClavier">${Icone('crayon', { taille: 14 })} Clavier</button>
           </div>
           <div class="nanika-reglages" id="nanikaPanneauReglages" hidden>
@@ -1572,6 +1574,15 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('nanikaStop')?.addEventListener('click', () => this._vocalStop());
     // Nouvelle demande : on change de sujet, la discussion repart de zéro
     document.getElementById('nanikaNouvelle')?.addEventListener('click', () => this._vocalNouvelle());
+    document.getElementById('nanikaNoter')?.addEventListener('click', () => {
+      // La dernière réponse de Nanika, réécrite pour le pense-bête
+      let idx = -1;
+      for (let i = this._messages.length - 1; i >= 0; i--) {
+        const m = this._messages[i];
+        if (m.role === 'assistant' && (m.content || []).some(b => b.type === 'text' && b.text.trim())) { idx = i; break; }
+      }
+      if (idx >= 0) this._garderEnNote(idx, document.getElementById('nanikaNoter'));
+    });
     document.getElementById('nanikaOrbe')?.addEventListener('click', () => this._vocalTap());
     document.getElementById('nanikaReglages')?.addEventListener('click', () => {
       const p = document.getElementById('nanikaPanneauReglages');
@@ -1703,6 +1714,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     this.conversationId = null;
     this._messages = [];
     this._vocalMontrer('', '');
+    const bNoter = document.getElementById('nanikaNoter'); if (bNoter) bNoter.hidden = true;
     this._vocalPhase('parole', 'Nouveau sujet');
     this._bip('ecoute');
     await this._lire('Nouveau sujet. Je vous écoute.');
@@ -1745,22 +1757,10 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('chatbotVocal')?.classList.add('on');
     this._vocalMontrer('', '');
 
-    // Un mot d'accueil, puis on écoute. La lecture ici « débloque » aussi la
-    // synthèse sur iPhone, qui exige d'être lancée dans la foulée d'un geste.
-    const h = new Date().getHours();
-    const P = this.PRENOM;
-    const accueils = h < 5 ? [`Il est tard, ${P}. Je vous écoute.`]
-      : h < 12 ? [`Bonjour ${P}. Je vous écoute.`, `Bonjour ${P}. Que puis-je faire pour vous ?`]
-      : h < 18 ? [`Oui, ${P} ?`, `Je vous écoute, ${P}.`, 'À votre service.']
-      : [`Bonsoir ${P}. Je vous écoute.`, `Bonsoir ${P}. Que puis-je faire pour vous ?`];
-    const mot = accueils[Math.floor(Math.random() * accueils.length)];
-    this._vocalMontrer('', mot);
-    this._vocalPhase('parole', 'Je parle…');
-    await this._lire(mot);
-    if (this._vocal && !this._reco) {
-      if (this._autoEcoute) this._vocalEcouter();
-      else this._vocalPhase('veille', 'Touchez Parler, puis Terminé quand vous avez fini');
-    }
+    // Pas de mot d'accueil : on ouvre le micro tout de suite, elle parle,
+    // puis Terminé. (L'audio a été amorcé au tap : la réponse pourra être lue.)
+    this._vocalMontrer('', '');
+    this._vocalEcouter(true);
   },
 
   arreterVocal(silencieux = false) {
@@ -1891,8 +1891,10 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
      l'affichage comme pour le modèle. */
   _corrigerNom(t) {
     return String(t || '')
-      .replace(/\b(nanika|nanica|nanikka|nani[ -]?ka|annika|anika|manika|monica|nanico|nanik|na nika|nanica)\b/gi, 'Nanika')
-      .replace(/\bNanika Nanika\b/g, 'Nanika');
+      // Toutes les façons dont la dictée écorche « Nanika » : Naïka, Naika,
+      // Nanica, Annika, Monica, Nanik, nani ka, Nanica, Nanikka, Nayka…
+      .replace(/\b(na[iïy]+ka|na[nm]i?[ck]+a|nan[iy][ck]+a|nanik+a?|nanica|nani ?ka|nanni ?ka|annika|anika|manika|monica|monika|nanico|naïka|naika|nayka|na nika|nanica|nanikka|nanyka|nanica)\b/gi, 'Nanika')
+      .replace(/\b(Nanika)(\s+Nanika)+\b/g, 'Nanika');
   },
 
   /* Quelques ordres se règlent sans le modèle : ils doivent marcher même
@@ -1938,6 +1940,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         : `Désolée ${this.PRENOM}, je n'ai pas pu répondre : ${erreur}. Voulez-vous que je réessaie ?`;
     }
     this._vocalMontrer(null, aDire || '');
+    const bNoter = document.getElementById('nanikaNoter');
+    if (bNoter) { bNoter.hidden = !!erreur || !texte; bNoter.disabled = false; bNoter.innerHTML = `${Icone('notes', { taille: 14 })} Garder en note`; }
     this._vocalPhase('parole', 'Je parle…');
     this._vocalStoppe = false;
     await this._lire(aDire || "C'est fait.");
@@ -2153,8 +2157,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       const systeme = await this.systeme();
       const outils  = this.outils();
 
-      // Jusqu'à 6 allers-retours : au-delà, c'est que le modèle boucle
-      for (let tour = 0; tour < 6; tour++) {
+      // Jusqu'à 12 allers-retours (recherches, lectures, actions enchaînées) : au-delà, c'est que le modèle boucle
+      for (let tour = 0; tour < 12; tour++) {
         const reponse = await this._appeler(systeme, outils);
 
         this._messages.push({ role: 'assistant', content: reponse.content });
@@ -2186,7 +2190,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         // Dernier tour : on redemande une réponse en désactivant les outils,
         // sinon l'échange se terminerait sur un résultat technique et
         // l'utilisateur ne verrait aucune conclusion.
-        if (tour === 5) {
+        if (tour === 11) {
           const fin = await this._appeler(systeme, outils, { type: 'none' });
           this._messages.push({ role: 'assistant', content: fin.content });
           await DataStore.addMessage(this.conversationId, 'assistant', fin.content);
@@ -2271,7 +2275,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     const outils  = this.outils();
     let   final   = '';
 
-    for (let tour = 0; tour < 6; tour++) {
+    for (let tour = 0; tour < 12; tour++) {
       const reponse = await this._appeler(systeme, outils, null, messages);
       messages.push({ role: 'assistant', content: reponse.content });
       await tracer('assistant', reponse.content);
@@ -2304,7 +2308,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 
       // Dernier tour : on force une conclusion en phrase, sinon l'échange
       // se terminerait sur un résultat technique et le bloc resterait muet.
-      if (tour === 5) {
+      if (tour === 11) {
         const fin = await this._appeler(systeme, outils, { type: 'none' }, messages);
         messages.push({ role: 'assistant', content: fin.content });
         await tracer('assistant', fin.content);
@@ -2359,7 +2363,11 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         system:     systeme,
         tools:      outils,
         ...(toolChoice ? { tool_choice: toolChoice } : {}),
-        max_tokens: 4000,
+        // Temps de réflexion : le modèle raisonne avant de répondre (demandes
+        // complexes, recoupements, plans en plusieurs étapes). Les blocs de
+        // réflexion sont conservés dans l'historique, l'API l'exige.
+        thinking: { type: 'enabled', budget_tokens: 4000 },
+        max_tokens: 12000,
         messages:   this._fenetre(40, source)
       })
     });
