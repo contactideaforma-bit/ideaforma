@@ -1617,9 +1617,18 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       ? voix.map(v => `<option value="${esc(v.voiceURI)}" ${choisie && v.voiceURI === choisie.voiceURI ? 'selected' : ''}>${esc(this._libelleVoix(v))} — ${esc(v.lang)}</option>`).join('')
       : '<option>Aucune voix française installée</option>';
     const info = document.getElementById('nanikaVoixInfo');
-    if (info) info.textContent = this._ttsIndisponible || !this._voixServeur
-      ? (choisie ? `Voix du téléphone utilisée : ${this._libelleVoix(choisie)}` : 'Aucune voix française trouvée')
-      : 'Voix naturelle (serveur) active si la clé est configurée, sinon celle-ci';
+    if (info) {
+      const base = this._ttsIndisponible || !this._voixServeur
+        ? (choisie ? `Voix du téléphone utilisée : ${this._libelleVoix(choisie)}` : 'Aucune voix française trouvée')
+        : 'Voix naturelle (serveur) active si la clé est configurée, sinon celle-ci';
+      // iPhone : Safari ne prête aux sites web que ses voix compactes de base ;
+      // les voix « améliorées/premium » téléchargées restent réservées aux
+      // apps Apple. Rien à faire côté web — d'où la voix serveur.
+      const iosLimite = this.estIOS() && !voix.some(v => this._estAmelioree(v));
+      info.textContent = base + (iosLimite
+        ? " — l'iPhone ne prête aux sites web que ses voix de base (Aurélie/Amélie améliorées restent réservées aux apps Apple) : la voix naturelle serveur est la seule vraie amélioration."
+        : '');
+    }
     document.getElementById('nanikaVitesse').value = this._vitesse;
     document.getElementById('nanikaVitesseVal').textContent = '×' + this._vitesse.toFixed(2);
     document.getElementById('nanikaAutoEcoute').checked = this._autoEcoute;
