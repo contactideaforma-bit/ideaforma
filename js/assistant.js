@@ -929,6 +929,11 @@ FILET DE SÉCURITÉ — COMPRENDRE AVANT D'AGIR, POUVOIR REVENIR EN ARRIÈRE
 - Une erreur d'outil : dis-le simplement, en une phrase, avec ce que tu proposes (réessayer, faire autrement, mettre en note). Ne prétends jamais avoir fait quelque chose qui a échoué.
 - Quand tu as agi, ta confirmation cite l'essentiel (quoi, quand, où) pour qu'elle puisse repérer une mauvaise compréhension tout de suite.
 
+GARDER UNE RÉPONSE — LE PENSE-BÊTE
+- Quand ta réponse a de la valeur à conserver (idées, recette, liste de suggestions, procédure, coordonnées, résultat de recherche, texte rédigé), termine par une proposition en une phrase : « Je vous l'enregistre dans le pense-bête ? ». Pas pour une simple confirmation d'action ni une réponse d'une ligne.
+- Si elle accepte (« oui », « enregistre », « note-le », « garde ça »), appelle creer_note avec un titre court et parlant, et un contenu RÉÉCRIT pour être exploitable plus tard : phrases complètes, regroupé par thème, une idée par ligne précédée d'un tiret, sans formule de politesse ni question finale, sans gras ni markdown. Épingle-la (epinglee: true) si elle le demande.
+- « Enregistre ta réponse / mets ça en note » à n'importe quel moment ⇒ même chose avec ta dernière réponse.
+
 RECHERCHE SUR INTERNET
 - Tu disposes de web_search. Utilise-le sans qu'on te le demande dès que la réponse dépend du monde extérieur ou peut avoir changé : actualité, réglementation et textes officiels (formation professionnelle, OPCO, Qualiopi, France Compétences, URSSAF), prix, horaires, adresses, coordonnées d'une entreprise, météo, définitions pointues, vérification d'un fait. Pour une question de culture générale stable ou une rédaction, réponds directement.
 - Cite tes sources : à l'écrit, l'interface affiche les liens sous ta réponse, tu n'as donc pas à coller d'URL — nomme juste le site ou l'organisme (« selon le site de France Compétences »). En vocal, jamais d'URL : « d'après Service-public.fr ».
@@ -978,6 +983,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 - Aucun formatage : pas de listes à puces, pas de gras, pas de tableaux, pas de titres, pas d'émoji, pas d'URL brute. Les énumérations se disent en phrase (« trois choses : …, … et … »).
 - Les nombres, dates et heures se disent naturellement (« jeudi cinq septembre à quatorze heures trente », « douze mille euros »).
 - Termine par une question seulement si tu as vraiment besoin d'une réponse.
+- Un numéro de téléphone s'écrit en chiffres groupés par deux (06 25 16 13 93) : l'application le lit en lettres toute seule. Ne le convertis pas en mots toi-même.
+- La transcription écrit parfois ton nom « Nanica », « Annika », « Monica » : c'est toi, ne relève pas.
 - Si elle dit « au revoir », « c'est tout », « merci Nanika, ce sera tout », réponds brièvement : la conversation se termine.` : '');
   },
 
@@ -1079,8 +1086,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
           <div class="nanika-transcrit" id="nanikaTranscrit"></div>
           <div class="nanika-reponse" id="nanikaReponse"></div>
           <div class="nanika-vocal-bas">
-            <button class="btn btn-secondary" id="nanikaMicro">${Icone('micro', { taille: 16 })} Parler</button>
             <button class="btn btn-secondary" id="nanikaClavier">${Icone('crayon', { taille: 16 })} Clavier</button>
+            <button class="btn btn-primary nanika-btn-principal" id="nanikaMicro">${Icone('micro', { taille: 16 })} Parler</button>
+            <button class="btn btn-primary nanika-btn-principal" id="nanikaTermine" hidden>${Icone('check', { taille: 16 })} Terminé</button>
           </div>
           <div class="nanika-reglages" id="nanikaPanneauReglages" hidden>
             <label>Voix du téléphone
@@ -1321,7 +1329,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       const memesNoms = voix.filter(x => x.name === choix);
       if (memesNoms.length) return memesNoms.find(x => this._estAmelioree(x)) || memesNoms[0];
     }
-    const PREFEREES = [/amélie|amelie/i, /audrey/i, /aurélie|aurelie/i, /marie/i,
+    const PREFEREES = [/aurélie|aurelie/i, /amélie|amelie/i, /audrey/i, /marie/i,
                        /google français/i, /denise/i, /vivienne/i, /eloise|éloïse/i,
                        /thomas/i, /nicolas/i];
     const score = v => {
@@ -1336,8 +1344,31 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     return [...voix].sort((a, b) => score(b) - score(a))[0];
   },
 
+  /* Un numéro de téléphone lu comme un grand nombre est inaudible : on le dit
+     par paires, en lettres (« zéro six, vingt-cinq, seize, treize,
+     quatre-vingt-treize »). Uniquement pour la voix : l'écran garde les chiffres. */
+  _nombreEnLettres(n) {
+    const U = ['zéro', 'un', 'deux', 'trois', 'quatre', 'cinq', 'six', 'sept', 'huit', 'neuf', 'dix', 'onze', 'douze', 'treize', 'quatorze', 'quinze', 'seize'];
+    const D = ['', 'dix', 'vingt', 'trente', 'quarante', 'cinquante', 'soixante', 'soixante', 'quatre-vingt', 'quatre-vingt'];
+    if (n < 17) return U[n];
+    if (n < 20) return 'dix-' + U[n - 10];
+    const d = Math.floor(n / 10), u = n % 10;
+    if (d === 7 || d === 9) { const r = n - (d === 7 ? 60 : 80); return D[d] + (r === 1 && d === 7 ? '-et-' : '-') + (r < 17 ? U[r] : 'dix-' + U[r - 10]); }
+    if (u === 0) return D[d] + (d === 8 ? 's' : '');
+    if (u === 1 && d < 8) return D[d] + '-et-un';
+    return D[d] + '-' + U[u];
+  },
+  _telephoneEnLettres(t) {
+    return String(t).replace(/(?:\+33\s?[1-9]|0[1-9])(?:[\s.-]?\d{2}){4}\b/g, m => {
+      let ch = m.replace(/\D/g, '');
+      if (ch.startsWith('33')) ch = '0' + ch.slice(2);
+      const paires = ch.match(/\d{2}/g) || [];
+      return paires.map(p => p[0] === '0' ? `zéro ${this._nombreEnLettres(+p[1])}` : this._nombreEnLettres(+p)).join(', ');
+    });
+  },
+
   _decouperPhrases(texte) {
-    const propre = String(texte || '')
+    const propre = this._telephoneEnLettres(String(texte || ''))
       .replace(/```[\s\S]*?```/g, ' ')
       .replace(/https?:\/\/\S+/g, 'un lien')
       .replace(/[*_`#>|]/g, '')
@@ -1532,6 +1563,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('nanikaQuitter')?.addEventListener('click', () => this.arreterVocal());
     document.getElementById('nanikaClavier')?.addEventListener('click', () => this.arreterVocal());
     document.getElementById('nanikaMicro')?.addEventListener('click', () => this._vocalEcouter(true));
+    // « Terminé » : elle a fini de parler, Nanika répond tout de suite
+    document.getElementById('nanikaTermine')?.addEventListener('click', () => this._vocalTerminer());
     document.getElementById('nanikaOrbe')?.addEventListener('click', () => this._vocalTap());
     document.getElementById('nanikaReglages')?.addEventListener('click', () => {
       const p = document.getElementById('nanikaPanneauReglages');
@@ -1622,13 +1655,32 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     const lab  = document.getElementById('nanikaEtat');
     if (orbe) orbe.dataset.etat = etat;
     if (lab && libelle != null) lab.textContent = libelle;
+    const bParler = document.getElementById('nanikaMicro');
+    const bFin    = document.getElementById('nanikaTermine');
+    if (bParler && bFin) {
+      bFin.hidden    = etat !== 'ecoute';
+      bParler.hidden = etat === 'ecoute' || etat === 'reflexion';
+      bParler.innerHTML = etat === 'parole'
+        ? `${Icone('micro', { taille: 16 })} Interrompre et parler`
+        : `${Icone('micro', { taille: 16 })} Parler`;
+    }
+  },
+
+  /* Le bouton Terminé (ou le mot « terminé ») : on clôt l'écoute en cours ;
+     son onend envoie ce qui a été dit. */
+  _vocalTerminer() {
+    if (!this._vocal) return;
+    if (this._vocalEtat === 'ecoute' && this._reco) {
+      this._vocalTermineDemande = true;
+      try { this._reco.stop(); } catch { /* rien */ }
+    }
   },
 
   _vocalMontrer(transcrit, reponse) {
     const t = document.getElementById('nanikaTranscrit');
     const r = document.getElementById('nanikaReponse');
     if (t && transcrit != null) t.textContent = transcrit;
-    if (r && reponse != null) r.textContent = reponse;
+    if (r && reponse != null) { r.innerHTML = this._markdown(String(reponse)); r.scrollTop = 0; }
   },
 
   async demarrerVocal() {
@@ -1715,7 +1767,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     // Sur ordinateur on laisse le micro ouvert tant qu'elle parle (pauses
     // comprises) ; un silence de 2,5 s ou le mot « terminé » clôt la demande.
     // Sur iPhone le mode continu est capricieux : on garde l'arrêt automatique.
-    reco.continuous = !this.estIOS(); reco.maxAlternatives = 1;
+    reco.continuous = true; reco.maxAlternatives = 1;   // on parle, on marque des pauses ; « Terminé » ou 3,5 s de silence clôt
 
     let texte = '', definitif = false, confiance = 1, erreur = null, silence = null;
     const FIN = /[\s,.!?]*(terminé|termine|c'est terminé|j'ai terminé|à toi nanika)[\s.!?]*$/i;
@@ -1731,6 +1783,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
           if (typeof c === 'number' && c > 0) confiance = Math.min(confiance, c);
         }
       }
+      texte = this._corrigerNom(texte);
       this._vocalMontrer(texte.trim(), null);
       // « … terminé. » : elle a fini, on ne fait pas attendre
       if (FIN.test(texte) && texte.trim().replace(FIN, '').trim().length > 0) {
@@ -1738,7 +1791,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         this._vocalMontrer(texte, null);
         clore(); return;
       }
-      if (reco.continuous) { clearTimeout(silence); silence = setTimeout(clore, 2500); }
+      clearTimeout(silence); silence = setTimeout(clore, 3500);
     };
     reco.onerror = ev => { erreur = ev.error; };
     reco.onend = () => {
@@ -1772,11 +1825,20 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     }
   },
 
+  /* La reconnaissance vocale n'a jamais entendu parler de Nanika : elle écrit
+     « Nanica », « Annika », « Monica », « nani ka »… On remet le bon nom, pour
+     l'affichage comme pour le modèle. */
+  _corrigerNom(t) {
+    return String(t || '')
+      .replace(/\b(nanika|nanica|nanikka|nani[ -]?ka|annika|anika|manika|monica|nanico|nanik|na nika|nanica)\b/gi, 'Nanika')
+      .replace(/\bNanika Nanika\b/g, 'Nanika');
+  },
+
   /* Quelques ordres se règlent sans le modèle : ils doivent marcher même
      hors ligne ou quand le serveur tousse. */
   _vocalOrdreLocal(dit) {
-    const d = dit.toLowerCase().replace(/[.!?,]/g, ' ').replace(/\s+/g, ' ').trim();
-    if (/^(stop|silence|tais[- ]toi|chut)( nanika)?$/.test(d)) return 'silence';
+    const d = this._corrigerNom(dit).toLowerCase().replace(/[.!?,]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/^(nanika )?(stop|silence|tais[- ]toi|chut)( nanika)?$/.test(d)) return 'silence';
     if (/^(au revoir|à plus|bonne nuit|merci c'est tout|ce sera tout|c'est tout|termine( la conversation)?|fin de (la )?conversation|quitte le mode vocal|arrête[- ]toi)( nanika)?$/.test(d)
         || /^(merci|au revoir) nanika( c'est tout| ce sera tout)?$/.test(d)) return 'fin';
     if (/^(clavier|passe au clavier|mode clavier)$/.test(d)) return 'clavier';
@@ -1874,7 +1936,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     if (!fil) return;
 
     let html = '';
-    this._messages.forEach(m => {
+    this._messages.forEach((m, idx) => {
       const blocs = Array.isArray(m.content)
         ? m.content
         : [{ type: 'text', text: m.content }];
@@ -1891,7 +1953,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 
       blocs.forEach(b => {
         if (b.type === 'text' && b.text.trim()) {
-          html += `<div class="chat-bulle chat-ia">${this._markdown(b.text)}${this._sources(b.citations)}</div>`;
+          const long = b.text.trim().length > 220;
+          html += `<div class="chat-bulle chat-ia">${this._markdown(b.text)}${this._sources(b.citations)}${
+            long ? `<button class="chat-noter" data-noter="${idx}" title="Enregistrer cette réponse dans le pense-bête">${Icone('notes', { taille: 13 })} Garder en note</button>` : ''}</div>`;
         }
         if (b.type === 'tool_use') {
           html += `<div class="chat-action">${this._libelleOutil(b.name, b.input)}</div>`;
@@ -1906,6 +1970,40 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 
     fil.innerHTML = html;
     fil.scrollTop = fil.scrollHeight;
+    if (!fil._noterBranche) {
+      fil._noterBranche = true;
+      fil.addEventListener('click', e => {
+        const b = e.target.closest('[data-noter]');
+        if (b) this._garderEnNote(Number(b.dataset.noter), b);
+      });
+    }
+  },
+
+  /* « Garder en note » sous une réponse : Nanika la réécrit proprement pour
+     le pense-bête (titre + contenu exploitable), puis la note est créée. */
+  async _garderEnNote(idx, bouton) {
+    const m = this._messages[idx];
+    const texte = (m?.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+    if (!texte) return;
+    if (bouton) { bouton.disabled = true; bouton.textContent = 'Mise en forme…'; }
+    try {
+      const r = await this._appeler(
+        'Tu prépares une note pour le pense-bête à partir de la réponse ci-dessous. Rends UNIQUEMENT un JSON {"titre": "...", "contenu": "..."} : titre court et parlant (max 60 caractères) ; contenu réécrit pour être exploitable plus tard — phrases complètes, regroupé par thème, une idée par ligne précédée d\'un tiret, sans salutation, sans question finale, sans gras ni markdown.',
+        [], { type: 'none' }, [{ role: 'user', content: [{ type: 'text', text: texte }] }]);
+      const brut = (r.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+      let titre = texte.split(/[.!?\n]/)[0].slice(0, 60), contenu = texte;
+      try {
+        const j = JSON.parse(brut.slice(brut.indexOf('{'), brut.lastIndexOf('}') + 1));
+        if (j.titre) titre = String(j.titre).slice(0, 80);
+        if (j.contenu) contenu = String(j.contenu);
+      } catch { /* on garde le texte tel quel */ }
+      await DataStore.addNote({ titre, contenu, epinglee: false, etiquetteId: null, dateJour: null });
+      Toast.show(`Note « ${esc(titre)} » enregistrée dans le pense-bête`, 'success');
+      if (bouton) bouton.innerHTML = `${Icone('check', { taille: 13 })} Enregistrée`;
+    } catch (err) {
+      Toast.show(`Impossible d'enregistrer la note : ${esc(err.message)}`, 'error');
+      if (bouton) { bouton.disabled = false; bouton.innerHTML = `${Icone('notes', { taille: 13 })} Garder en note`; }
+    }
   },
 
   _libelleOutil(nom, args = {}) {

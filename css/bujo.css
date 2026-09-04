@@ -619,10 +619,23 @@ html, body { overflow-x: hidden; }
 .nanika-transcrit:not(:empty)::before { content: '« '; }
 .nanika-transcrit:not(:empty)::after  { content: ' »'; }
 .nanika-reponse {
-  margin-top: 10px; font-size: 15.5px; line-height: 1.45; color: var(--encre);
-  max-width: 38ch; min-height: 24px;
+  margin-top: 10px; font-size: 15.5px; line-height: 1.5; color: var(--encre);
+  max-width: 44ch; width: 100%; min-height: 24px;
+  flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  text-align: left; padding: 0 4px;
 }
-.nanika-vocal-bas { display: flex; gap: 8px; margin-top: auto; padding-top: 16px; flex-shrink: 0; }
+.nanika-reponse ul { margin: 6px 0 6px 18px; padding: 0; }
+.nanika-reponse li { margin: 0 0 4px; }
+.nanika-reponse pre { white-space: pre-wrap; font-size: 13px; }
+/* Rien ne se chevauche : aucun bloc ne rétrécit, seule la réponse défile */
+.nanika-vocal > * { flex-shrink: 0; }
+.nanika-vocal > .nanika-reponse { flex-shrink: 1; min-height: 60px; }
+.nanika-transcrit { max-height: 4.5em; overflow: hidden; }
+.nanika-vocal-bas { display: flex; gap: 8px; padding-top: 12px; flex-shrink: 0; width: 100%; justify-content: center; }
+.nanika-btn-principal { min-width: 150px; justify-content: center; }
+.nanika-vocal-bas .btn[hidden] { display: none !important; }
+.nanika-reponse ul br, .chat-bulle ul br, .nanika-reponse ul + br { display: none; }
+@media (max-width: 760px) { .nanika-nuage { width: 190px; height: 190px; margin: 0 0 4px; } }
 .nanika-vocal-bas .btn .ic { vertical-align: -3px; margin-right: 4px; }
 
 .nanika-reglages {
@@ -638,9 +651,7 @@ html, body { overflow-x: hidden; }
 .nanika-reglages .nanika-case { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; }
 .nanika-voix-info { font-weight: 500; color: var(--encre-douce); font-size: 12px; }
 
-@media (max-width: 760px) {
-  .nanika-nuage { width: 240px; height: 240px; }
-}
+
 
 /* Le brouillon de mail à valider (modale ouverte par Nanika) */
 .mail-apercu { display: flex; flex-direction: column; gap: 10px; }
@@ -704,6 +715,15 @@ html, body { overflow-x: hidden; }
   .mail-recherche { max-width: 160px; }
 }
 
+/* « Garder en note » sous une réponse longue de Nanika */
+.chat-noter {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 8px;
+  font-size: 11.5px; font-weight: 600; color: var(--encre-rose);
+  border: 1px solid var(--regle); border-radius: 999px; padding: 3px 10px; background: rgba(255,255,255,.7);
+}
+.chat-noter:hover { border-color: var(--encre-rose); }
+.chat-noter:disabled { opacity: .6; }
+.chat-noter .ic { vertical-align: 0; }
 /* Sources d'une réponse cherchée sur le web, sous la bulle de Nanika */
 .chat-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .chat-sources a {
