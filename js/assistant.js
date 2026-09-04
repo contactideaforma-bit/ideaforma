@@ -1086,9 +1086,13 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
           <div class="nanika-transcrit" id="nanikaTranscrit"></div>
           <div class="nanika-reponse" id="nanikaReponse"></div>
           <div class="nanika-vocal-bas">
-            <button class="btn btn-secondary" id="nanikaClavier">${Icone('crayon', { taille: 16 })} Clavier</button>
             <button class="btn btn-primary nanika-btn-principal" id="nanikaMicro">${Icone('micro', { taille: 16 })} Parler</button>
             <button class="btn btn-primary nanika-btn-principal" id="nanikaTermine" hidden>${Icone('check', { taille: 16 })} Terminé</button>
+            <button class="btn btn-secondary nanika-btn-stop" id="nanikaStop" hidden>${Icone('interdit', { taille: 16 })} Stop</button>
+          </div>
+          <div class="nanika-vocal-bas nanika-vocal-bas2">
+            <button class="btn btn-sm btn-secondary" id="nanikaNouvelle" title="Changer de sujet : Nanika oublie l'échange en cours">${Icone('plus', { taille: 14 })} Nouvelle demande</button>
+            <button class="btn btn-sm btn-secondary" id="nanikaClavier">${Icone('crayon', { taille: 14 })} Clavier</button>
           </div>
           <div class="nanika-reglages" id="nanikaPanneauReglages" hidden>
             <label>Voix du téléphone
@@ -1396,7 +1400,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   _audioEl:         null,
   _ttsIndisponible: false,
   _voixServeur:     true,
-  _interruption:    true,
+  _interruption:    false,
 
   _amorcerAudio() {
     if (this._audioEl) return;
@@ -1547,16 +1551,15 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   _vocalEtat:      'veille',   // veille | ecoute | reflexion | parole
   _vocalSilences:  0,
   _vocalTimer:     null,
-  _autoEcoute:     true,
+  _autoEcoute:     false,
   _audio:          null,
 
   _monterVocal() {
     try {
       const v = localStorage.getItem('nanika_vitesse');
       if (v) this._vitesse = Math.min(1.3, Math.max(0.8, parseFloat(v)));
-      this._autoEcoute = localStorage.getItem('nanika_auto_ecoute') !== '0';
-      const inter = localStorage.getItem('nanika_interruption');
-      this._interruption = inter == null ? !this.estIOS() : inter === '1';
+      this._autoEcoute = localStorage.getItem('nanika_auto_ecoute') === '1';
+      this._interruption = localStorage.getItem('nanika_interruption') === '1';
       this._voixServeur = localStorage.getItem('nanika_voix_serveur') !== '0';
     } catch { /* rien */ }
 
@@ -1565,6 +1568,10 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('nanikaMicro')?.addEventListener('click', () => this._vocalEcouter(true));
     // « Terminé » : elle a fini de parler, Nanika répond tout de suite
     document.getElementById('nanikaTermine')?.addEventListener('click', () => this._vocalTerminer());
+    // Stop : Nanika se tait et attend qu'on appuie sur Parler
+    document.getElementById('nanikaStop')?.addEventListener('click', () => this._vocalStop());
+    // Nouvelle demande : on change de sujet, la discussion repart de zéro
+    document.getElementById('nanikaNouvelle')?.addEventListener('click', () => this._vocalNouvelle());
     document.getElementById('nanikaOrbe')?.addEventListener('click', () => this._vocalTap());
     document.getElementById('nanikaReglages')?.addEventListener('click', () => {
       const p = document.getElementById('nanikaPanneauReglages');
@@ -1595,7 +1602,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('nanikaTestVoix')?.addEventListener('click', async () => {
       this._vocalPhase('parole', 'Je parle…');
       await this._lire(`Bonjour ${this.PRENOM}. Voici ma voix. Elle vous convient ?`);
-      this._vocalPhase('veille', 'En veille — touchez le nuage pour parler');
+      this._vocalPhase('veille', 'En veille — touchez Parler');
     });
 
     // Les voix arrivent parfois après le chargement
@@ -1666,23 +1673,54 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     if (lab && libelle != null) lab.textContent = libelle;
     const bParler = document.getElementById('nanikaMicro');
     const bFin    = document.getElementById('nanikaTermine');
-    if (bParler && bFin) {
+    const bStop   = document.getElementById('nanikaStop');
+    if (bParler && bFin && bStop) {
       bFin.hidden    = etat !== 'ecoute';
-      bParler.hidden = etat === 'ecoute' || etat === 'reflexion';
-      bParler.innerHTML = etat === 'parole'
-        ? `${Icone('micro', { taille: 16 })} Interrompre et parler`
-        : `${Icone('micro', { taille: 16 })} Parler`;
+      bStop.hidden   = etat !== 'parole' && etat !== 'reflexion';
+      bParler.hidden = etat !== 'veille';
+      bParler.disabled = false;
     }
+  },
+
+  /* Stop : couper la parole (ou la réflexion) et attendre. Rien ne repart
+     tout seul : c'est elle qui appuie sur Parler quand elle veut. */
+  _vocalStop() {
+    if (!this._vocal) return;
+    this._vocalStoppe = true;          // _apresReponse ne relancera pas l'écoute
+    this._taire();
+    this._couperEcoute();
+    this._occupe = false;
+    const b = document.getElementById('chatEnvoyer'); if (b) b.disabled = false;
+    this._vocalPhase('veille', 'Touchez Parler quand vous voulez');
+  },
+
+  /* Nouvelle demande : on oublie l'échange en cours (nouvelle conversation)
+     mais on reste en vocal, prête à écouter. */
+  async _vocalNouvelle() {
+    if (!this._vocal) return;
+    this._taire(); this._couperEcoute();
+    this._occupe = false;
+    this.conversationId = null;
+    this._messages = [];
+    this._vocalMontrer('', '');
+    this._vocalPhase('parole', 'Nouveau sujet');
+    this._bip('ecoute');
+    await this._lire('Nouveau sujet. Je vous écoute.');
+    if (this._vocal) this._vocalEcouter(true);
   },
 
   /* Le bouton Terminé (ou le mot « terminé ») : on clôt l'écoute en cours ;
      son onend envoie ce qui a été dit. */
   _vocalTerminer() {
-    if (!this._vocal) return;
-    if (this._vocalEtat === 'ecoute' && this._reco) {
-      this._vocalTermineDemande = true;
-      try { this._reco.stop(); } catch { /* rien */ }
-    }
+    if (!this._vocal || this._vocalEtat !== 'ecoute') return;
+    // On n'attend pas que le navigateur veuille bien conclure (iPhone traîne,
+    // parfois ne conclut jamais) : on prend ce qui a été entendu jusqu'ici.
+    const dit = this._corrigerNom(this._vocalTexteEnCours || '').trim();
+    this._vocalTexteEnCours = '';
+    this._couperEcoute();
+    if (!dit) { this._vocalPhase('veille', "Je n'ai rien entendu — touchez Parler"); return; }
+    this._vocalSilences = 0;
+    this._vocalTraiter(dit, this._vocalConfianceEnCours ?? 0.9);
   },
 
   _vocalMontrer(transcrit, reponse) {
@@ -1719,7 +1757,10 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     this._vocalMontrer('', mot);
     this._vocalPhase('parole', 'Je parle…');
     await this._lire(mot);
-    if (this._vocal && !this._reco) this._vocalEcouter();
+    if (this._vocal && !this._reco) {
+      if (this._autoEcoute) this._vocalEcouter();
+      else this._vocalPhase('veille', 'Touchez Parler, puis Terminé quand vous avez fini');
+    }
   },
 
   arreterVocal(silencieux = false) {
@@ -1743,10 +1784,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
      dort, arrête l'écoute si elle écoute. */
   _vocalTap() {
     if (!this._vocal) return;
-    if (this._vocalEtat === 'parole')   { this._taire(); this._vocalEcouter(true); return; }
-    if (this._vocalEtat === 'ecoute')   { try { this._reco?.stop(); } catch { /* rien */ } return; }
+    if (this._vocalEtat === 'parole' || this._vocalEtat === 'reflexion') { this._vocalStop(); return; }
+    if (this._vocalEtat === 'ecoute')   { this._vocalTerminer(); return; }
     if (this._vocalEtat === 'veille')   { this._vocalEcouter(true); return; }
-    // en réflexion : on laisse finir
   },
 
   /* Coupe l'écoute en cours en la « désinscrivant » d'abord : son onend, qui
@@ -1762,11 +1802,19 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     clearTimeout(this._vocalTimer);
     this._couperEcoute();
     this._taire();
-    if (force) this._vocalSilences = 0;
+    this._vocalTexteEnCours = '';
+    this._vocalConfianceEnCours = 1;
+    if (force) {
+      // Appui sur Parler : on repart d'un état sain, quoi qu'il se soit passé
+      this._vocalSilences = 0;
+      this._vocalStoppe = false;
+      this._occupe = false;
+      const b = document.getElementById('chatEnvoyer'); if (b) b.disabled = false;
+    }
 
     // Trop de silences d'affilée : on économise le micro (et la batterie)
     if (!force && this._vocalSilences >= 3) {
-      this._vocalPhase('veille', 'En veille — touchez le nuage pour parler');
+      this._vocalPhase('veille', 'En veille — touchez Parler');
       return;
     }
 
@@ -1793,6 +1841,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         }
       }
       texte = this._corrigerNom(texte);
+      this._vocalTexteEnCours = texte;
+      this._vocalConfianceEnCours = confiance;
       this._vocalMontrer(texte.trim(), null);
       // « … terminé. » : elle a fini, on ne fait pas attendre
       if (FIN.test(texte) && texte.trim().replace(FIN, '').trim().length > 0) {
@@ -1800,7 +1850,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         this._vocalMontrer(texte, null);
         clore(); return;
       }
-      clearTimeout(silence); silence = setTimeout(clore, 3500);
+      // Sécurité si on oublie Terminé : 6 s sans nouveau mot
+      clearTimeout(silence); silence = setTimeout(clore, 6000);
     };
     reco.onerror = ev => { erreur = ev.error; };
     reco.onend = () => {
@@ -1825,12 +1876,13 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         return;
       }
       this._vocalSilences = 0;
+      this._vocalTexteEnCours = '';
       this._vocalTraiter(dit, definitif ? confiance : 0.5);
     };
     try { reco.start(); }
     catch {
       this._reco = null;
-      this._vocalPhase('veille', "Le micro n'a pas pu démarrer — touchez le nuage");
+      this._vocalPhase('veille', "Le micro n'a pas pu démarrer — touchez Parler");
     }
   },
 
@@ -1887,12 +1939,13 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     }
     this._vocalMontrer(null, aDire || '');
     this._vocalPhase('parole', 'Je parle…');
+    this._vocalStoppe = false;
     await this._lire(aDire || "C'est fait.");
     if (!this._vocal) return;
-    // Interrompue par un tap sur l'orbe ? L'écoute a déjà été relancée là-bas.
-    if (this._reco) return;
+    // Stop pressé, ou écoute déjà relancée par un tap : on ne fait rien de plus
+    if (this._vocalStoppe || this._reco) return;
     if (this._autoEcoute) this._vocalEcouter();
-    else this._vocalPhase('veille', 'Touchez le nuage pour répondre');
+    else this._vocalPhase('veille', 'Touchez Parler pour continuer');
   },
 
   async nouvelle() {
@@ -2150,8 +2203,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         const b0 = document.getElementById('chatEnvoyer');
         if (b0) b0.disabled = false;
         this._peindre();
-        await this._apresReponse(txt || "C'est fait.");
-        this._parle = false;
+        try { await this._apresReponse(txt || "C'est fait."); }
+        finally { this._occupe = false; this._parle = false; }
         return;
       }
       if (this._voix || this._parle) this._lire(txt);

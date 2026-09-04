@@ -632,7 +632,10 @@ html, body { overflow-x: hidden; }
 .nanika-vocal > .nanika-reponse { flex-shrink: 1; min-height: 60px; }
 .nanika-transcrit { max-height: 4.5em; overflow: hidden; }
 .nanika-vocal-bas { display: flex; gap: 8px; padding-top: 12px; flex-shrink: 0; width: 100%; justify-content: center; }
-.nanika-btn-principal { min-width: 150px; justify-content: center; }
+.nanika-btn-principal { min-width: 170px; justify-content: center; font-size: 16px; padding: 12px 20px; }
+.nanika-btn-stop { min-width: 110px; justify-content: center; border-color: var(--encre-rouge); color: var(--encre-rouge); }
+.nanika-vocal-bas2 { padding-top: 8px; gap: 12px; }
+.nanika-vocal-bas2 .btn { font-size: 12.5px; }
 .nanika-vocal-bas .btn[hidden] { display: none !important; }
 .nanika-reponse ul br, .chat-bulle ul br, .nanika-reponse ul + br { display: none; }
 @media (max-width: 760px) { .nanika-nuage { width: 190px; height: 190px; margin: 0 0 4px; } }

@@ -10,7 +10,7 @@
      restent servis depuis le cache.
 ───────────────────────────────────────────────────────────────────────────── */
 
-const CACHE_VERSION = 'ideaforma-v42';
+const CACHE_VERSION = 'ideaforma-v43';
 const COQUILLE = [
   '/app.html',
   '/index.html',
