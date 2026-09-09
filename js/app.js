@@ -741,6 +741,7 @@ const Router = {
     notes:     () => Notes.render(),
     coffre:    () => Coffre.render(),
     mail:      () => MailPage.render(),
+    sms:       () => SmsPage.render(),
     journee:   () => JourneePage.render(),
     parcours:  () => ParcoursPage.render(),
     activite:  () => Dashboard.render(),

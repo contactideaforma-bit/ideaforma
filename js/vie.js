@@ -841,6 +841,43 @@ Object.assign(DataStore, {
   },
 
   /* ══════════════════════════════════════════════
+     SMS — journal des textos envoyés (setup_update19.sql)
+  ══════════════════════════════════════════════ */
+  async getSms({ recherche = '', limite = 300 } = {}) {
+    const { data, error } = await supa.from('sms').select('*')
+      .order('envoye_le', { ascending: false }).limit(limite);
+    if (error) this._handleError(error, 'getSms');
+    const r = String(recherche || '').trim().toLowerCase();
+    if (!r) return data || [];
+    return (data || []).filter(m =>
+      (m.contenu || '').toLowerCase().includes(r) ||
+      (m.destinataires || []).some(d => d.includes(r.replace(/\s/g, ''))) ||
+      (m.noms || []).some(n => (n || '').toLowerCase().includes(r)));
+  },
+
+  async addSms(d) {
+    const uid = await this._uid();
+    const { data, error } = await supa.from('sms').insert({
+      user_id:        uid,
+      destinataires:  d.destinataires || [],
+      noms:           d.noms || [],
+      contenu:        d.contenu,
+      statut:         d.statut || 'envoye',
+      erreur:         d.erreur || null,
+      source:         d.source || 'manuel',
+      fournisseur_id: d.fournisseurId || null
+    }).select().single();
+    if (error) this._handleError(error, 'addSms');
+    return data;
+  },
+
+  async deleteSms(id) {
+    const uid = await this._uid();
+    const { error } = await supa.from('sms').delete().eq('id', id).eq('user_id', uid);
+    if (error) this._handleError(error, 'deleteSms');
+  },
+
+  /* ══════════════════════════════════════════════
      PIÈCES JOINTES DES TÂCHES (setup_update18.sql) — bucket « documents »
   ══════════════════════════════════════════════ */
   async getPiecesTache(tacheId) {
@@ -1045,7 +1082,7 @@ const MIGRATION_PAR_TABLE = {
   push_subscriptions: 'setup_update8.sql', ia_conversations: 'setup_update8.sql',
   ia_messages: 'setup_update8.sql', v_agenda: 'setup_update8.sql',
   coffre_categories: 'setup_update9.sql', preferences: 'setup_update10.sql',
-  mails: 'setup_update16.sql', contacts: 'setup_update17.sql', taches_pieces: 'setup_update18.sql'
+  mails: 'setup_update16.sql', contacts: 'setup_update17.sql', taches_pieces: 'setup_update18.sql', sms: 'setup_update19.sql'
 };
 
 function peindreErreur(err) {

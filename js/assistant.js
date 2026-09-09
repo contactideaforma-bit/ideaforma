@@ -256,8 +256,8 @@ const Assistant = {
         input_schema: {
           type: 'object',
           properties: {
-            page: { type: 'string', enum: ['dashboard', 'agenda', 'taches', 'notes', 'coffre', 'mail', 'journee', 'parcours', 'activite', 'settings'],
-                    description: 'dashboard = accueil, mail = écrire un mail et voir l\'historique des envois, journee = Ma journée, parcours = dossiers OPCO, activite = statistiques' }
+            page: { type: 'string', enum: ['dashboard', 'agenda', 'taches', 'notes', 'coffre', 'mail', 'sms', 'journee', 'parcours', 'activite', 'settings'],
+                    description: 'dashboard = accueil, mail = écrire un mail et voir l\'historique des envois, sms = envoyer un texto et voir l\'historique, journee = Ma journée, parcours = dossiers OPCO, activite = statistiques' }
           },
           required: ['page']
         }
@@ -284,6 +284,18 @@ const Assistant = {
             corps: { type: 'string', description: 'Texte brut du mail, complet, prêt à envoyer' }
           },
           required: ['a', 'objet', 'corps']
+        }
+      },
+      {
+        name: 'envoyer_sms',
+        description: "Envoie un SMS (texto) à un contact du carnet (prénom) ou à un numéro de portable. Rédige court (idéalement moins de 160 caractères, jamais plus de 300), clair, poli, signé « IDEAFORMA » ou du prénom de l'utilisatrice selon le destinataire, sans formule de mail. L'application AFFICHE le texto et attend la validation de l'utilisatrice avant d'envoyer (sauf à elle-même) : appelle l'outil avec un message prêt à partir, sans demander la permission toi-même.",
+        input_schema: {
+          type: 'object',
+          properties: {
+            a:       { type: 'array', items: { type: 'string' }, description: "Prénoms du carnet (CONTACTS CONNUS, avec téléphone), numéros (06 12 34 56 78 / +33…), ou [\"moi\"]" },
+            contenu: { type: 'string', description: 'Texte du SMS, prêt à envoyer' }
+          },
+          required: ['a', 'contenu']
         }
       },
       {
@@ -619,6 +631,9 @@ const Assistant = {
       case 'envoyer_mail':
         return this._envoyerMail(args);
 
+      case 'envoyer_sms':
+        return this._envoyerSms(args);
+
       case 'creer_contact': {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(args.email || ''))) {
           return { ok: false, erreur: `Adresse invalide : ${args.email}` };
@@ -773,6 +788,83 @@ const Assistant = {
     const r = await Mails.envoyer({ a, objet, corps, confirme, source: 'nanika' });
     if (!r.ok) return { ok: false, erreur: r.erreur || 'Envoi impossible' };
     return { ok: true, message: `Mail « ${objet} » envoyé à ${a.join(', ')}.`, a, externe };
+  },
+
+  /* ══ SMS — même règle que les mails : à moi ça part, à un tiers je valide ══ */
+  async _envoyerSms(args) {
+    if (typeof Sms === 'undefined') return { ok: false, erreur: 'Module SMS absent' };
+    const cfg = await Sms.config();
+    if (!cfg.pret) return { ok: false, erreur: "L'envoi de SMS n'est pas configuré côté serveur (BREVO_API_KEY manquante dans Vercel)." };
+
+    const { a, noms, moi, ambigus, inconnus, sansTel } = await Sms.destinataires(Array.isArray(args.a) ? args.a : [args.a]);
+    if (ambigus.length) {
+      return { ok: false, erreur: `Plusieurs contacts correspondent à « ${ambigus[0].saisie} » : ` +
+        ambigus[0].candidats.map(c => `${c.prenom} ${c.nom || ''}`.trim()).join(', ') + ' — demande lequel.' };
+    }
+    if (sansTel.length) return { ok: false, erreur: `${sansTel[0]} n'a pas de numéro de téléphone dans le carnet : demande-le, puis modifier_contact pour l'enregistrer.` };
+    if (inconnus.length) return { ok: false, erreur: `« ${inconnus[0]} » n'est ni un numéro ni un contact connu : demande le numéro, puis propose de l'ajouter aux contacts.` };
+    if (!a.length) return { ok: false, erreur: 'Destinataire manquant' };
+
+    let contenu = String(args.contenu || '').trim();
+    if (!contenu) return { ok: false, erreur: 'Message vide' };
+    if (contenu.length > 600) return { ok: false, erreur: 'SMS trop long (600 caractères max) : raccourcis.' };
+
+    const externe = a.some(x => x !== moi);
+    let confirme = false;
+    if (externe) {
+      const decision = await this._validerSms({ a, noms, contenu });
+      if (decision.action === 'annuler') return { ok: false, annule: true, message: "Envoi annulé par l'utilisatrice — ne pas réessayer sans nouvelle demande." };
+      if (decision.action === 'modifier') return { ok: false, a_modifier: true, message: `L'utilisatrice demande une modification avant envoi : « ${decision.consigne} ». Réécris le SMS et rappelle envoyer_sms.` };
+      contenu = decision.contenu; confirme = true;
+    }
+    const r = await Sms.envoyer({ a, noms, contenu, confirme, source: 'nanika' });
+    if (!r.ok) return { ok: false, erreur: r.erreur || 'Envoi impossible' };
+    return { ok: true, message: `SMS envoyé à ${a.map((n, i) => noms[i] || Sms.joli(n)).join(', ')}.`, a, externe };
+  },
+
+  _validerSms({ a, noms, contenu }) {
+    return new Promise(resolve => {
+      let tranche = false;
+      const decider = d => {
+        if (tranche) return;
+        tranche = true;
+        this._taire(); this._couperEcoute();
+        Modal.close();
+        resolve(d);
+      };
+      const libelle = a.map((n, i) => noms[i] ? `${noms[i]} (${Sms.joli(n)})` : Sms.joli(n)).join(', ');
+      const seg = Sms.segments(contenu);
+      Modal.open('Nanika — valider le SMS avant envoi', `
+        <div class="mail-apercu">
+          <div class="mail-ligne"><span>À</span><strong>${esc(libelle)}</strong></div>
+          <label class="mail-champ">Message
+            <textarea id="smsCorpsValid" rows="6" maxlength="600">${esc(contenu)}</textarea>
+          </label>
+          <div class="mail-note">${Icone('bouclier', { taille: 14 })} ${seg.n} caractères · ${seg.segments} SMS — rien ne part sans votre accord.</div>
+        </div>`, [
+        { label: 'Annuler', cls: 'btn btn-secondary', action: () => decider({ action: 'annuler' }) },
+        { label: `${Icone('envoyer', { taille: 15 })} Envoyer`, cls: 'btn btn-primary', action: () => decider({
+            action: 'envoyer', contenu: document.getElementById('smsCorpsValid').value.trim() || contenu }) }
+      ]);
+
+      if (!this._vocal) return;
+      (async () => {
+        this._vocalPhase('parole', 'Je vous lis le SMS…');
+        this._vocalMontrer(null, `SMS pour ${libelle} : ${contenu}`);
+        await this._lire(`Voici le SMS pour ${a.map((n, i) => noms[i] || 'ce numéro').join(' et ')}. ${contenu}. Je l'envoie ?`);
+        if (tranche || !this._vocal) return;
+        for (let essai = 0; essai < 2 && !tranche; essai++) {
+          const dit = await this._ecouterUneFois();
+          if (tranche) return;
+          const d = String(dit || '').toLowerCase().trim();
+          if (!d) continue;
+          if (/^(oui|ok|d'accord|envoie|envoi|envoie[- ]le|vas[- ]y|go|c'est bon|parfait|confirm)/.test(d)) return decider({ action: 'envoyer', contenu });
+          if (/^(non|annule|stop|laisse tomber|pas maintenant|n'envoie pas)/.test(d)) return decider({ action: 'annuler' });
+          return decider({ action: 'modifier', consigne: dit });
+        }
+        if (!tranche) { await this._lire("Je n'ai pas entendu de réponse : le SMS reste en attente à l'écran."); this._vocalPhase('veille', 'Validez le SMS à l\'écran'); }
+      })();
+    });
   },
 
   /** Montre le brouillon et attend la décision : { action: 'envoyer', objet,
@@ -939,6 +1031,11 @@ RECHERCHE SUR INTERNET
 - Cite tes sources : à l'écrit, l'interface affiche les liens sous ta réponse, tu n'as donc pas à coller d'URL — nomme juste le site ou l'organisme (« selon le site de France Compétences »). En vocal, jamais d'URL : « d'après Service-public.fr ».
 - Recoupe quand c'est important (montants, délais légaux) et dis la date de l'information si elle peut bouger.
 - Si la recherche ne donne rien de fiable, dis-le plutôt que d'inventer.
+
+SMS (TEXTOS)
+- « Envoie un SMS / un texto à Roger » ⇒ envoyer_sms avec un message court et prêt : une ou deux phrases, tutoiement ou vouvoiement selon le contact (sa fonction dans CONTACTS CONNUS), signé « Myriam – IDEAFORMA » pour un client ou un partenaire, « Myriam » pour un proche. Pas d'objet, pas de « Bonjour Monsieur, … Cordialement » à rallonge : c'est un texto.
+- L'application montre le SMS et attend la validation (« oui » / « non » / une consigne) ; un SMS « à moi » part directement. Un contact sans numéro ⇒ demande-le et enregistre-le (modifier_contact). Un numéro dicté ⇒ utilise-le tel quel.
+- Tout envoi est inscrit dans l'onglet SMS (ouvrir_page « sms »).
 
 E-MAILS
 - « Envoie-moi un mail avec… » ⇒ tu rassembles d'abord les données (bilan_du_jour, lister_taches, lister_agenda, chercher_dossiers…), puis envoyer_mail à ["moi"] : ça part tout de suite, sans validation. Objet précis (« Vos tâches du jeudi 5 septembre »), corps détaillé et bien rangé : une ligne vide entre les paragraphes, une liste « - » par groupe (en retard / aujourd'hui / à venir), avec l'heure, la liste et la priorité quand elles existent. Ne dis pas « voici » sans contenu : le mail doit se suffire à lui-même.
@@ -2095,6 +2192,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       creer_contact:    `${ic('carte')} Contact ajouté : ${esc(args.prenom || '')}`,
       modifier_contact: `${ic('carte')} Contact modifié`,
       supprimer_contact:`${ic('carte')} Contact supprimé`,
+      envoyer_sms:      `${ic('mobile')} SMS proposé → ${esc((args.a || []).join(', '))}`,
       envoyer_mail:     `${ic('envoyer')} Mail proposé « ${esc(args.objet || '')} » → ${esc((args.a || []).join(', '))}`
     };
     return l[nom] || `${ic('reglages')} ${esc(nom)}`;

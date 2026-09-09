@@ -103,6 +103,9 @@
     },
     "api/rappels.js": {
       "maxDuration": 30
+    },
+    "api/sms.js": {
+      "maxDuration": 20
     }
   }
 }

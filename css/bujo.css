@@ -801,6 +801,22 @@ html, body { overflow-x: hidden; }
 .taches-liste-carte:hover .tlc-regler { opacity: 1; }
 @media (min-width: 761px) { .liste-vue { max-width: 980px; } .liste-vue-feuille .entree { padding: 11px 6px; } }
 
+/* Onglet SMS : hérite de la mise en page Mail, plus la bulle de texto */
+.sms-bulle {
+  margin-top: 6px; padding: 9px 12px; border-radius: 14px 14px 14px 4px;
+  background: linear-gradient(135deg, rgba(226, 103, 154, .14), rgba(176, 58, 99, .10));
+  font-size: 14px; line-height: 1.45; white-space: normal;
+}
+.mail-item.echec .sms-bulle { background: rgba(194, 35, 58, .08); }
+.sms-compteur { font-size: 11.5px; color: var(--encre-douce); font-weight: 500; margin-top: 2px; }
+.sms-compteur-long { color: var(--encre-rouge); }
+.sms-alerte {
+  display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px;
+  padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.4;
+  background: rgba(255, 244, 214, .8); border: 1px solid rgba(176, 126, 34, .35); color: var(--encre);
+}
+.sms-alerte .ic { flex-shrink: 0; color: var(--encre-or, #B07E22); vertical-align: 0; margin-top: 2px; }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    8. L'entrée — la ligne, partout dans l'application
 ═══════════════════════════════════════════════════════════════════════════ */
