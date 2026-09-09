@@ -513,7 +513,10 @@ const Taches = {
      sinon on choisit la liste dans le formulaire. */
   /** t : tâche à modifier, ou objet SANS id ({ liste_id }) pour préremplir
       une création. `apres` : rappel après enregistrement (autre page). */
-  ouvrirForm(t = null, apres = null) {
+  /** @param options.titre  titre de la fenêtre (ex. « Tâche urgente »)
+      @param options.aide   phrase d'explication sous le formulaire
+      @param options.toast  message de confirmation à la création */
+  ouvrirForm(t = null, apres = null, options = {}) {
     const edition     = !!(t && t.id);
     const listePreset = !edition && !!t && t.liste_id !== undefined;
     const listeFixe   = listePreset ? this._listes.find(l => l.id === t.liste_id) : null;
@@ -586,9 +589,10 @@ const Taches = {
           </div>
           <div class="tform-pieces-liste" id="fPiecesListe"></div>
         </div>
+        ${options.aide ? `<p class="tform-aide tform-aide-urgent">${options.aide}</p>` : ''}
       </div>`;
 
-    Modal.open(edition ? 'Modifier la tâche' : 'Nouvelle tâche', corps, [
+    Modal.open(options.titre || (edition ? 'Modifier la tâche' : 'Nouvelle tâche'), corps, [
       { label: 'Annuler', cls: 'btn btn-secondary', action: () => Modal.close() },
       { label: edition ? 'Enregistrer' : 'Créer', cls: 'btn btn-primary', action: async () => {
           const val = id => document.getElementById(id)?.value ?? '';
@@ -630,7 +634,7 @@ const Taches = {
             if (apres) await apres(); else await this._charger();
             updateJourneeBadge();
             if (echecs.length) Toast.show(`Tâche enregistrée, mais ${echecs.length} pièce(s) n'ont pas pu être jointes : ${esc(echecs.join(', '))}`, 'warning', 7000);
-            else Toast.show(edition ? 'Tâche modifiée' : 'Tâche créée', 'success');
+            else Toast.show(edition ? 'Tâche modifiée' : (options.toast || 'Tâche créée'), 'success', options.toast ? 5000 : undefined);
           } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
         } }
     ], 'modal-sm');

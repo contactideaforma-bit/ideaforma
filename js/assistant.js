@@ -1317,7 +1317,12 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     if (this._reco) this._reco.stop();
   },
 
-  basculer() { this._ouvert ? this.fermer() : this.ouvrir(); },
+  /* Le pictogramme Nanika ouvre directement la conversation de vive voix
+     (quand le navigateur le permet) ; « Clavier » ramène au mode écrit. */
+  basculer() {
+    if (this._ouvert) { this.fermer(); return; }
+    if (this.peutDicter() && this.peutLire()) this.ouvrirVocal(); else this.ouvrir();
+  },
 
   /* Compatibilité : l'ancienne route « assistant » ouvre le panneau */
   render() { this.ouvrir(); },
@@ -1630,6 +1635,17 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         this._lectureEnCours = () => terminer(false);
         a.onended = () => terminer(true);
         a.onerror = () => terminer(false);
+        // Si onended ne vient jamais (iPhone en arrière-plan) : durée + marge
+        let gardeAudio = setTimeout(() => terminer(true), 90000);
+        a.onloadedmetadata = () => {
+          clearTimeout(gardeAudio);
+          const d = isFinite(a.duration) && a.duration > 0 ? a.duration : 60;
+          gardeAudio = setTimeout(() => terminer(true), d * 1000 + 4000);
+        };
+        const terminer0 = terminer;
+        this._lectureEnCours = () => { clearTimeout(gardeAudio); terminer0(false); };
+        a.onended = () => { clearTimeout(gardeAudio); terminer0(true); };
+        a.onerror = () => { clearTimeout(gardeAudio); terminer0(false); };
         a.src = url;
         a.play().catch(() => {
           // Lecture refusée (pas de geste) : on retombe sur la voix native
@@ -1820,6 +1836,16 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 
   _vocalPhase(etat, libelle) {
     this._vocalEtat = etat;
+    clearTimeout(this._gardeReflexion);
+    if (etat === 'reflexion') {
+      // Jamais figée : au bout de 100 s sans réponse, on rend la main
+      this._gardeReflexion = setTimeout(() => {
+        if (!this._vocal || this._vocalEtat !== 'reflexion') return;
+        this._abandonnerDemande(); this._bip('erreur');
+        this._vocalMontrer(null, "Je n'ai pas réussi à répondre à temps. Reposez-moi la question.");
+        this._vocalPhase('veille', "Pas de réponse — touchez Parler");
+      }, 100000);
+    }
     const orbe = document.getElementById('nanikaOrbe');
     const lab  = document.getElementById('nanikaEtat');
     if (orbe) orbe.dataset.etat = etat;
@@ -1842,8 +1868,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     this._vocalStoppe = true;          // _apresReponse ne relancera pas l'écoute
     this._taire();
     this._couperEcoute();
-    this._occupe = false;
-    const b = document.getElementById('chatEnvoyer'); if (b) b.disabled = false;
+    this._abandonnerDemande();
     this._vocalPhase('veille', 'Touchez Parler quand vous voulez');
   },
 
@@ -1852,7 +1877,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   async _vocalNouvelle() {
     if (!this._vocal) return;
     this._taire(); this._couperEcoute();
-    this._occupe = false;
+    this._abandonnerDemande();
     this.conversationId = null;
     this._messages = [];
     this._vocalMontrer('', '');
@@ -1866,7 +1891,10 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   /* Le bouton Terminé (ou le mot « terminé ») : on clôt l'écoute en cours ;
      son onend envoie ce qui a été dit. */
   _vocalTerminer() {
-    if (!this._vocal || this._vocalEtat !== 'ecoute') return;
+    if (!this._vocal) return;
+    // Quel que soit l'état affiché (iPhone oublie parfois onstart), si on a
+    // entendu quelque chose, on l'envoie.
+    if (this._vocalEtat !== 'ecoute' && !(this._vocalTexteEnCours || '').trim()) return;
     // On n'attend pas que le navigateur veuille bien conclure (iPhone traîne,
     // parfois ne conclut jamais) : on prend ce qui a été entendu jusqu'ici.
     const dit = this._corrigerNom(this._vocalTexteEnCours || '').trim();
@@ -1952,8 +1980,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       this._debloquerAudio();
       this._vocalSilences = 0;
       this._vocalStoppe = false;
-      this._occupe = false;
-      const b = document.getElementById('chatEnvoyer'); if (b) b.disabled = false;
+      this._abandonnerDemande();
     }
 
     // Trop de silences d'affilée : on économise le micro (et la batterie)
@@ -1970,10 +1997,27 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     // Sur iPhone le mode continu est capricieux : on garde l'arrêt automatique.
     reco.continuous = true; reco.maxAlternatives = 1;   // on parle, on marque des pauses ; « Terminé » ou 3,5 s de silence clôt
 
-    let texte = '', definitif = false, confiance = 1, erreur = null, silence = null;
+    let texte = '', definitif = false, confiance = 1, erreur = null, silence = null, clos = false;
     const FIN = /[\s,.!?]*(terminé|termine|c'est terminé|j'ai terminé|à toi nanika)[\s.!?]*$/i;
-    const clore = () => { definitif = true; clearTimeout(silence); try { reco.stop(); } catch { /* rien */ } };
-    reco.onstart = () => { this._vocalPhase('ecoute', 'Je vous écoute…'); this._bip('ecoute'); };
+    // Clôture = exactement ce que fait le bouton Terminé : on prend ce qui a
+    // été entendu et on répond, sans attendre que l'iPhone conclue l'écoute
+    // (reco.stop() n'y aboutit pas toujours).
+    const clore = () => {
+      if (clos || this._reco !== reco) return;
+      clos = true; clearTimeout(silence); clearTimeout(muet);
+      const dit = texte.trim();
+      this._couperEcoute();
+      if (!dit) { this._vocalPhase('veille', "Je n'ai rien entendu — touchez Parler"); return; }
+      this._vocalSilences = 0;
+      this._vocalTexteEnCours = '';
+      this._vocalTraiter(dit, definitif ? confiance : 0.5);
+    };
+    // Micro ouvert mais muet (iPhone) : on le relance discrètement
+    const muet = setTimeout(() => {
+      if (this._reco === reco && !texte) { this._couperEcoute(); this._sansBip = true; this._vocalEcouter(true); }
+    }, 20000);
+    reco.onstart = () => { this._vocalPhase('ecoute', 'Je vous écoute…'); if (!this._sansBip) this._bip('ecoute'); this._sansBip = false; };
+    this._vocalPhase('ecoute', 'Je vous écoute…');   // sans attendre onstart (iPhone l'oublie parfois)
     reco.onresult = e => {
       texte = '';
       for (let i = 0; i < e.results.length; i++) {
@@ -1994,16 +2038,17 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         this._vocalMontrer(texte, null);
         clore(); return;
       }
-      // Sécurité si on oublie Terminé : 6 s sans nouveau mot
-      clearTimeout(silence); silence = setTimeout(clore, 6000);
+      // Sécurité si on oublie Terminé : 4 s sans nouveau mot
+      clearTimeout(muet);
+      clearTimeout(silence); silence = setTimeout(clore, 4000);
     };
     reco.onerror = ev => { erreur = ev.error; };
     reco.onend = () => {
       // Une écoute remplacée par une autre (abort) ne doit pas relancer la
       // boucle : sinon deux micros se disputent la phrase suivante.
-      if (this._reco !== reco) return;
+      if (this._reco !== reco || clos) return;
       this._reco = null;
-      clearTimeout(silence);
+      clearTimeout(silence); clearTimeout(muet);
       if (!this._vocal) return;
       const dit = texte.trim();
 
@@ -2038,6 +2083,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       // Toutes les façons dont la dictée écorche « Nanika » : Naïka, Naika,
       // Nayka, Nanica, Nanik, Nanikka, nani ka, Annika, Monica, Manika…
       .replace(/\bn[aâ]+[nm]?[iïyî]+[ck]+[a]?h?\b/gi, 'Nanika')
+      // « Nanny K », « nani ka », « nanny qu'» : la dictée coupe le nom en deux
+      .replace(/\bnann?[iy]\s?k(?:ay|a|é|e)?\b/gi, 'Nanika')
+      .replace(/\bnanny\b/gi, 'Nanika')
       .replace(/\b(annika|anika|anikah|manika|monica|monika|nanico|nanni ?ka|nani ?ka|na nika|nanica|nanyka)\b/gi, 'Nanika')
       .replace(/\b(Nanika)(\s+Nanika)+\b/g, 'Nanika')
       // Vocabulaire du métier que la dictée massacre
@@ -2071,6 +2119,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       return;
     }
 
+    if (this._occupe) this._abandonnerDemande();   // une demande figée ne bloque jamais la suivante
+    this._taire();
     this._vocalPhase('reflexion', 'Je réfléchis…');
     this._vocalMontrer(dit, '');
     const champ = document.getElementById('chatInput');
@@ -2285,6 +2335,18 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       @param options.confiance  confiance de la reconnaissance vocale (0-1) :
              en dessous de 0,65 le message est marqué [dictée incertaine] et
              Nanika reformule avant d'agir — c'est le filet de sécurité. */
+  _gen: 0,          // numéro de la demande en cours : une demande plus récente rend les précédentes muettes
+  _appelCtrl: null, // AbortController de l'appel /api/ai en cours
+
+  /* Abandonne la demande en cours (appel serveur compris) : Stop, Nouvelle
+     demande, ou une nouvelle question posée par-dessus. */
+  _abandonnerDemande() {
+    this._gen++;
+    if (this._appelCtrl) { try { this._appelCtrl.abort(); } catch { /* rien */ } this._appelCtrl = null; }
+    this._occupe = false;
+    const b = document.getElementById('chatEnvoyer'); if (b) b.disabled = false;
+  },
+
   async envoyer(texteForce = null, options = {}) {
     if (this._occupe) return;
     const input = document.getElementById('chatInput');
@@ -2294,6 +2356,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     input.value = '';
     input.style.height = 'auto';
     this._occupe = true;
+    const gen = ++this._gen;
+    const perime = () => gen !== this._gen;   // une autre demande a pris la main
     document.getElementById('chatEnvoyer').disabled = true;
 
     const incertain = typeof options.confiance === 'number' && options.confiance < 0.65
@@ -2316,6 +2380,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       // Jusqu'à 12 allers-retours (recherches, lectures, actions enchaînées) : au-delà, c'est que le modèle boucle
       for (let tour = 0; tour < 12; tour++) {
         const reponse = await this._appeler(systeme, outils);
+        if (perime()) return;
 
         this._messages.push({ role: 'assistant', content: reponse.content });
         await DataStore.addMessage(this.conversationId, 'assistant', reponse.content);
@@ -2332,6 +2397,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
           let r;
           try { r = await this.executer(bloc.name, bloc.input || {}); }
           catch (err) { r = { ok: false, erreur: err.message }; }
+          if (perime()) return;
           resultats.push({
             type: 'tool_result',
             tool_use_id: bloc.id,
@@ -2358,19 +2424,21 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       // Lecture à voix haute : si la question a été dictée, ou si on l'a demandé
       const dernier = [...this._messages].reverse().find(m => m.role === 'assistant');
       const txt = (dernier?.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ');
+      if (perime()) return;
       if (this._vocal) {
         this._occupe = false;
         const b0 = document.getElementById('chatEnvoyer');
         if (b0) b0.disabled = false;
         this._peindre();
         try { await this._apresReponse(txt || "C'est fait."); }
-        finally { this._occupe = false; this._parle = false; }
+        finally { if (!perime()) { this._occupe = false; this._parle = false; } }
         return;
       }
       if (this._voix || this._parle) this._lire(txt);
       this._parle = false;
 
     } catch (err) {
+      if (perime()) return;   // demande abandonnée : on se tait
       this._parle = false;
       // On repeint d'abord, PUIS on ajoute l'erreur : l'ancien code faisait
       // l'inverse dans « finally », ce qui effaçait le message d'erreur et
@@ -2525,8 +2593,15 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     const { data: { session } } = await supa.auth.getSession();
     if (!session?.access_token) throw new Error('Session expirée — reconnectez-vous');
 
-    const res = await fetch('/api/ai', {
-      method: 'POST',
+    // Annulable (Stop, nouvelle demande) et borné : un serveur qui ne répond
+    // plus ne doit jamais figer Nanika en « Je réfléchis… »
+    const ctrl = new AbortController();
+    this._appelCtrl = ctrl;
+    const garde = setTimeout(() => ctrl.abort(), 75000);
+    let res;
+    try {
+      res = await fetch('/api/ai', {
+      method: 'POST', signal: ctrl.signal,
       headers: {
         'Content-Type': 'application/json',
         Authorization:  `Bearer ${session.access_token}`
@@ -2543,7 +2618,11 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
                                             : { max_tokens: 6000 }),
         messages:   this._fenetre(40, source)
       })
-    });
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') throw new Error(this._appelCtrl === ctrl ? 'le serveur met trop de temps à répondre' : 'demande interrompue');
+      throw err;
+    } finally { clearTimeout(garde); if (this._appelCtrl === ctrl) this._appelCtrl = null; }
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `Le serveur a répondu ${res.status}`);

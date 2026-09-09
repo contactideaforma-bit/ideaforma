@@ -490,44 +490,29 @@ const Hub = {
   /* ══════════════════════════════════════════════
      BOUTON D'URGENCE — une tâche prioritaire en un geste
   ══════════════════════════════════════════════ */
-  _urgence() {
-    Modal.open('Tâche urgente', `
-      <div class="field">
-        <label>Qu'y a-t-il d'urgent ? *</label>
-        <input id="uTitre" placeholder="Ex. Rappeler l'OPCO avant midi" maxlength="200" />
-      </div>
-      <p style="font-size:13px;color:var(--text-muted);margin-top:10px;">
-        La tâche est créée en <strong>priorité haute</strong> avec pour échéance
-        <strong>aujourd'hui</strong> : elle remonte en tête partout.
-      </p>`, [
-      { label: 'Annuler', cls: 'btn btn-secondary', action: () => Modal.close() },
-      { label: 'Créer l\'urgence', cls: 'btn btn-danger', action: async () => {
-          const titre = document.getElementById('uTitre').value.trim();
-          if (!titre) { Toast.show('Dites au moins de quoi il s\'agit', 'error'); return; }
-          try {
-            const lu = await DataStore.getListeUrgente(true);
-            await DataStore.addTacheComplete({
-              description: titre, priorite: 'haute',
-              echeance: Dates.aujourdhui(), listeId: lu?.id || null
-            });
-            Modal.close();
-            Toast.show('Tâche urgente créée — relances à 10 h et 15 h tant qu\'elle n\'est pas cochée', 'success', 5000);
-            updateJourneeBadge();
-            this._listes = await DataStore.getListes();
-            if (this.listeOuverte) await this._peindreListe();
-            else                   await this.render();
-          } catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); }
-        } }
-    ], 'modal-sm');
-
-    const champ = document.getElementById('uTitre');
-    champ.focus();
-    champ.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        document.querySelector('#modalFooter .btn-danger')?.click();
-      }
-    });
+  async _urgence() {
+    // Le même formulaire complet que les autres tâches (date & heure,
+    // alertes, pièces jointes), pré-réglé : Urgent allumé, échéance
+    // aujourd'hui, rangé dans la liste « Urgent ». Formulaire neuf à chaque
+    // ouverture : rien ne reste de l'urgence précédente.
+    let lu = null;
+    try { lu = await DataStore.getListeUrgente(true); }
+    catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); return; }
+    if (!this._listes?.length) this._listes = await DataStore.getListes();
+    TachesPage._listes = this._listes;
+    TachesPage.ouvrirForm(
+      { description: '', priorite: 'haute', echeance: Dates.aujourdhui(), liste_id: lu?.id || null },
+      async () => {
+        updateJourneeBadge();
+        this._listes = await DataStore.getListes();
+        if (this.listeOuverte) await this._peindreListe();
+        else                   await this.render();
+      },
+      {
+        titre: 'Tâche urgente',
+        aide:  'Priorité haute, échéance aujourd\'hui : elle remonte en tête partout, et Nanika la relance à 10 h et 15 h tant qu\'elle n\'est pas cochée.',
+        toast: 'Tâche urgente créée — relances à 10 h et 15 h tant qu\'elle n\'est pas cochée'
+      });
   },
 
   /** Une tâche : case à cocher, texte, repères. Réutilisée par la page Tâches. */
