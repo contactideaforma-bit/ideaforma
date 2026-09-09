@@ -1779,3 +1779,10 @@ html, body { overflow-x: hidden; }
 .chat-lien { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
 .nanika-lien { margin: 12px 0 0; text-align: center; }
 .nanika-lien .chat-lien { font-size: 15px; padding: 12px 20px; }
+
+/* ── Mot d'éveil : le bouton Nanika respire quand le micro de veille est ouvert ── */
+.chatbot-bouton.en-veille::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%;
+  border: 2px solid rgba(236, 72, 153, .55); animation: nanika-veille 2.4s ease-in-out infinite; pointer-events: none;
+}
+@keyframes nanika-veille { 0%, 100% { transform: scale(.94); opacity: .35; } 50% { transform: scale(1.08); opacity: .9; } }

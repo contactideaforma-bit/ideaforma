@@ -1277,6 +1277,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
             <label class="nanika-case">
               <input type="checkbox" id="nanikaVoixServeur"> Voix naturelle (serveur) quand elle est disponible
             </label>
+            <label class="nanika-case">
+              <input type="checkbox" id="nanikaEveil"> Répondre à « Nanika » dès que l'application est ouverte (micro en veille)
+            </label>
             <button class="btn btn-secondary btn-sm" id="nanikaTestVoix">Tester la voix</button>
           </div>
         </div>
@@ -1323,12 +1326,14 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     });
 
     this._monterVocal();
+    this._monterEveil();
   },
 
   async ouvrir() {
     this.monter();
     if (this._ouvert) return;
     this._ouvert = true;
+    this._eveilCouper();
     const p = document.getElementById('chatbot');
     p.hidden = false;
     document.getElementById('chatbotVoile').hidden = false;
@@ -1358,6 +1363,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('chatbotVoile').hidden = true;
     setTimeout(() => { if (!this._ouvert) p.hidden = true; }, 220);
     if (this._reco) this._reco.stop();
+    // Panneau fermé : le micro de veille reprend (après que l'autre l'a rendu)
+    setTimeout(() => this._eveilDemarrer(), 600);
   },
 
   /* Le pictogramme Nanika ouvre directement la conversation de vive voix
@@ -1757,6 +1764,105 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   _autoEcoute:     false,
   _audio:          null,
 
+  /* ══════════════════════════════════════════════
+     LE MOT D'ÉVEIL — « Nanika » dit à voix haute, application ouverte
+     Un micro discret écoute en continu tant que l'app est au premier plan et
+     que le panneau est fermé. Au nom, Nanika s'ouvre : « Oui Myriam ? » puis
+     elle écoute — ou, si la demande suit dans la foulée (« Nanika, envoie un
+     SMS à Roger »), elle la traite directement. Impossible hors de l'app :
+     iOS coupe tout micro web dès que Safari passe en arrière-plan.
+  ══════════════════════════════════════════════ */
+  _eveil:      true,    // réglage (localStorage nanika_eveil, actif par défaut)
+  _eveilArme:  false,   // un premier geste a eu lieu (iPhone l'exige pour le micro)
+  _eveilReco:  null,
+  _eveilTimer: null,
+  _eveilTexte: '',
+  _eveilEchecs: 0,
+
+  _monterEveil() {
+    try { this._eveil = localStorage.getItem('nanika_eveil') !== '0'; } catch { /* rien */ }
+    if (!this.peutDicter()) return;
+    // Le micro ne peut démarrer qu'après un geste : le premier tap dans l'app
+    const armer = () => {
+      this._eveilArme = true;
+      this._debloquerAudio();   // et la voix pourra répondre sans autre geste
+      this._eveilDemarrer();
+    };
+    document.addEventListener('pointerdown', armer, { once: true, capture: true });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this._eveilCouper();
+      else setTimeout(() => this._eveilDemarrer(), 500);
+    });
+  },
+
+  _eveilDemarrer() {
+    if (!this._eveil || !this._eveilArme || this._ouvert || this._eveilReco || this._reco || document.hidden) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const reco = new SR();
+    reco.lang = 'fr-FR'; reco.continuous = true; reco.interimResults = true; reco.maxAlternatives = 1;
+    this._eveilReco = reco;
+    this._eveilTexte = '';
+    let texte = '', declenche = false;
+    // Le tampon d'une écoute continue grossit sans fin : on repart à neuf toutes les 50 s
+    const cycle = setTimeout(() => { if (this._eveilReco === reco && !declenche) { this._eveilCouper(); this._eveilDemarrer(); } }, 50000);
+    reco.onresult = e => {
+      texte = '';
+      for (let i = 0; i < e.results.length; i++) texte += e.results[i][0].transcript + ' ';
+      texte = this._corrigerNom(texte);
+      const m = /\bNanika\b/i.exec(texte);
+      if (!m) return;
+      // Ce qui suit le nom : une demande complète, ou rien
+      this._eveilTexte = texte.slice(m.index + 6).replace(/^[\s,;:?!.]+/, '').trim();
+      if (!declenche) {
+        declenche = true;
+        clearTimeout(cycle);
+        // Une seconde pour laisser finir la phrase (« Nanika, envoie un SMS à Roger »)
+        this._eveilTimer = setTimeout(() => this._eveilDeclencher(), 1100);
+      }
+    };
+    reco.onerror = ev => {
+      if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+        this._eveil = false;
+        try { localStorage.setItem('nanika_eveil', '0'); } catch { /* rien */ }
+        this._eveilCouper();
+        return;
+      }
+      if (ev.error !== 'no-speech' && ev.error !== 'aborted') this._eveilEchecs++;
+    };
+    reco.onend = () => {
+      clearTimeout(cycle);
+      if (this._eveilReco !== reco) return;
+      this._eveilReco = null;
+      if (declenche) return;
+      // iPhone clôt l'écoute de lui-même après un silence : on la rouvre,
+      // en s'espaçant si le micro tousse en boucle
+      const delai = this._eveilEchecs > 3 ? 8000 : 400;
+      if (this._eveilEchecs > 10) return;   // on n'insiste plus jusqu'au prochain geste
+      setTimeout(() => this._eveilDemarrer(), delai);
+    };
+    try { reco.start(); document.getElementById('chatbotBouton')?.classList.add('en-veille'); }
+    catch { this._eveilReco = null; }
+  },
+
+  _eveilCouper() {
+    clearTimeout(this._eveilTimer); this._eveilTimer = null;
+    const r = this._eveilReco; this._eveilReco = null;
+    if (r) { try { r.abort(); } catch { /* rien */ } }
+    document.getElementById('chatbotBouton')?.classList.remove('en-veille');
+  },
+
+  _eveilDeclencher() {
+    this._eveilTimer = null;
+    const demande = this._eveilTexte; this._eveilTexte = '';
+    this._eveilEchecs = 0;
+    this._eveilCouper();
+    if (this._ouvert || document.hidden) return;
+    this._bip('ecoute');
+    const mots = demande.split(/\s+/).filter(Boolean);
+    this.ouvrirVocal(mots.length >= 2 ? { demande } : { siri: true });
+  },
+
   _monterVocal() {
     try {
       const v = localStorage.getItem('nanika_vitesse');
@@ -1806,6 +1912,12 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       this._interruption = e.target.checked;
       try { localStorage.setItem('nanika_interruption', this._interruption ? '1' : '0'); } catch { /* rien */ }
     });
+    document.getElementById('nanikaEveil')?.addEventListener('change', e => {
+      this._eveil = e.target.checked;
+      try { localStorage.setItem('nanika_eveil', this._eveil ? '1' : '0'); } catch { /* rien */ }
+      if (this._eveil) { this._eveilArme = true; Toast.show('Dites « Nanika » : je répondrai « Oui Myriam ? »', 'info'); }
+      else this._eveilCouper();
+    });
     document.getElementById('nanikaVoixServeur')?.addEventListener('change', e => {
       this._voixServeur = e.target.checked;
       this._ttsIndisponible = false;
@@ -1853,6 +1965,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('nanikaAutoEcoute').checked = this._autoEcoute;
     document.getElementById('nanikaInterruption').checked = this._interruption;
     document.getElementById('nanikaVoixServeur').checked = this._voixServeur;
+    const cEveil = document.getElementById('nanikaEveil'); if (cEveil) cEveil.checked = this._eveil;
   },
 
   /* Un petit son de prise de parole, façon JARVIS : deux notes brèves. Les
