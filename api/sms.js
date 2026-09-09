@@ -78,7 +78,7 @@ function configure() {
 async function envoyerBrevo(a, contenu) {
   const r = await fetch('https://api.brevo.com/v3/transactionalSMS/send', {
     method: 'POST',
-    headers: { 'api-key': process.env.BREVO_API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' },
+    headers: { 'api-key': process.env.BREVO_API_KEY.trim(), 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
       sender:    (process.env.SMS_EXPEDITEUR || 'IDEAFORMA').slice(0, 11),
       recipient: a.replace('+', ''),      // Brevo veut 33612345678
@@ -88,7 +88,13 @@ async function envoyerBrevo(a, contenu) {
     })
   });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.message || data.code || `Brevo a répondu ${r.status}`);
+  if (!r.ok) {
+    let msg = data.message || data.code || `Brevo a répondu ${r.status}`;
+    if (r.status === 401) msg += " — clé API refusée : utilisez une clé API v3 (« xkeysib-… », Brevo → SMTP & API → Clés API), pas la clé SMTP";
+    if (/credit|not enough/i.test(msg)) msg += ' — achetez des crédits SMS dans Brevo (Transactionnel → SMS)';
+    if (/sender/i.test(msg)) msg += ' — l\'expéditeur doit faire 3 à 11 lettres/chiffres (SMS_EXPEDITEUR)';
+    throw new Error(msg);
+  }
   return data.messageId || data.reference || null;
 }
 
@@ -133,6 +139,7 @@ module.exports = async function handler(req, res) {
   if (req.method === 'GET') {
     return res.status(200).json({
       pret: configure(), fournisseur: fournisseur(),
+      cleForme: fournisseur() === 'brevo' ? (process.env.BREVO_API_KEY ? /^xkeysib-/.test(process.env.BREVO_API_KEY.trim()) : null) : null,
       expediteur: fournisseur() === 'twilio' ? (process.env.TWILIO_FROM || null) : (process.env.SMS_EXPEDITEUR || 'IDEAFORMA'),
       monTelephone: moi
     });

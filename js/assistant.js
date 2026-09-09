@@ -287,6 +287,19 @@ const Assistant = {
         }
       },
       {
+        name: 'derniers_envois',
+        description: "Liste les derniers mails ou SMS envoyés (destinataires, objet, texte) — pour en renvoyer un à quelqu'un d'autre (« renvoie le mail de ce matin à Sophie »), le réutiliser ou vérifier ce qui est parti.",
+        input_schema: {
+          type: 'object',
+          properties: {
+            type:   { type: 'string', enum: ['mail', 'sms'] },
+            nombre: { type: 'integer', description: '5 par défaut, 20 max' },
+            recherche: { type: 'string', description: 'Mot de l\'objet, du texte ou du destinataire' }
+          },
+          required: ['type']
+        }
+      },
+      {
         name: 'envoyer_sms',
         description: "Envoie un SMS (texto) à un contact du carnet (prénom) ou à un numéro de portable. Rédige court (idéalement moins de 160 caractères, jamais plus de 300), clair, poli, signé « IDEAFORMA » ou du prénom de l'utilisatrice selon le destinataire, sans formule de mail. L'application AFFICHE le texto et attend la validation de l'utilisatrice avant d'envoyer (sauf à elle-même) : appelle l'outil avec un message prêt à partir, sans demander la permission toi-même.",
         input_schema: {
@@ -633,6 +646,16 @@ const Assistant = {
 
       case 'envoyer_sms':
         return this._envoyerSms(args);
+
+      case 'derniers_envois': {
+        const n = Math.min(Math.max(Number(args.nombre) || 5, 1), 20);
+        if (args.type === 'sms') {
+          const l = await DataStore.getSms({ recherche: args.recherche || '', limite: 100 });
+          return { nombre: l.length, sms: l.slice(0, n).map(m => ({ id: m.id, quand: m.envoye_le, destinataires: m.destinataires, noms: m.noms, contenu: m.contenu, statut: m.statut })) };
+        }
+        const l = await DataStore.getMails({ recherche: args.recherche || '', limite: 100 });
+        return { nombre: l.length, mails: l.slice(0, n).map(m => ({ id: m.id, quand: m.envoye_le, destinataires: m.destinataires, objet: m.objet, corps: m.corps, statut: m.statut })) };
+      }
 
       case 'creer_contact': {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(args.email || ''))) {
@@ -1043,6 +1066,7 @@ E-MAILS
 - Un prénom ou un nom en destinataire ⇒ passe-le tel quel dans « a » : l'outil le résout avec CONTACTS CONNUS. Deux contacts homonymes ⇒ demande lequel. Prénom inconnu ⇒ demande l'adresse, envoie, puis propose de l'ajouter aux contacts. Une adresse donnée avec un nom dans la conversation ⇒ propose creer_contact (ou fais-le si elle le demande).
 - Adapte le ton au contact : sa fonction et sa société (dans CONTACTS CONNUS) te disent si c'est un client, un OPCO, un formateur, un proche.
 - Pour un mail à un tiers, tu ne connais pas forcément tout le contexte (heure exacte, lieu) : cherche-le d'abord dans l'agenda ou les dossiers ; s'il manque vraiment, pose UNE question avant de rédiger.
+- « Renvoie ce mail / le mail de tout à l'heure à X » ⇒ derniers_envois (type mail) pour retrouver objet et corps, puis envoyer_mail au nouveau destinataire (même texte, salutation adaptée au prénom). Idem pour un SMS avec derniers_envois (type sms) puis envoyer_sms.
 - Le mail est envoyé par le serveur avec l'adresse de l'utilisatrice en Reply-To : la réponse lui reviendra. Tout envoi est inscrit dans l'onglet Mail (ouvrir_page « mail ») : « qu'est-ce que j'ai envoyé hier ? » ⇒ envoie-la voir cet onglet, ou résume ce que tu as envoyé toi-même dans cette discussion.
 
 COMMENT TRAVAILLER
@@ -1501,14 +1525,35 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   _voixServeur:     true,
   _interruption:    false,
 
+  SILENCE_WAV: 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=',
+
   _amorcerAudio() {
-    if (this._audioEl) return;
+    if (this._audioEl) { this._debloquerAudio(); return; }
     const a = new Audio();
     a.preload = 'auto'; a.playsInline = true; a.setAttribute('playsinline', '');
     // 0,05 s de silence WAV : suffit à « débloquer » l'élément sur iOS
-    a.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+    a.src = this.SILENCE_WAV;
     a.play().catch(() => {});
     this._audioEl = a;
+    this._debloquerAudio();
+  },
+
+  /* À rappeler DANS chaque geste (Parler, Terminé) : iPhone ne laisse jouer un
+     son que dans la foulée d'un tap, et il oublie l'autorisation après un
+     passage par le micro. On rejoue un silence sur l'élément audio et on
+     « réveille » la synthèse vocale native avec une phrase vide. */
+  _debloquerAudio() {
+    try {
+      const a = this._audioEl;
+      if (a && a.paused) { if (!a.src || a.src.startsWith('blob:')) a.src = this.SILENCE_WAV; a.play().catch(() => {}); }
+    } catch { /* rien */ }
+    try {
+      if (this.peutLire() && !window.speechSynthesis.speaking) {
+        const u = new SpeechSynthesisUtterance(' ');
+        u.volume = 0; u.rate = 2;
+        window.speechSynthesis.speak(u);
+      }
+    } catch { /* rien */ }
   },
 
   async _lireServeur(texte) {
@@ -1827,6 +1872,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     const dit = this._corrigerNom(this._vocalTexteEnCours || '').trim();
     this._vocalTexteEnCours = '';
     this._couperEcoute();
+    this._debloquerAudio();   // le tap sur Terminé autorise la lecture de la réponse
     if (!dit) { this._vocalPhase('veille', "Je n'ai rien entendu — touchez Parler"); return; }
     this._vocalSilences = 0;
     this._vocalTraiter(dit, this._vocalConfianceEnCours ?? 0.9);
@@ -1903,6 +1949,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     this._vocalConfianceEnCours = 1;
     if (force) {
       // Appui sur Parler : on repart d'un état sain, quoi qu'il se soit passé
+      this._debloquerAudio();
       this._vocalSilences = 0;
       this._vocalStoppe = false;
       this._occupe = false;
@@ -1989,9 +2036,16 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   _corrigerNom(t) {
     return String(t || '')
       // Toutes les façons dont la dictée écorche « Nanika » : Naïka, Naika,
-      // Nanica, Annika, Monica, Nanik, nani ka, Nanica, Nanikka, Nayka…
-      .replace(/\b(na[iïy]+ka|na[nm]i?[ck]+a|nan[iy][ck]+a|nanik+a?|nanica|nani ?ka|nanni ?ka|annika|anika|manika|monica|monika|nanico|naïka|naika|nayka|na nika|nanica|nanikka|nanyka|nanica)\b/gi, 'Nanika')
-      .replace(/\b(Nanika)(\s+Nanika)+\b/g, 'Nanika');
+      // Nayka, Nanica, Nanik, Nanikka, nani ka, Annika, Monica, Manika…
+      .replace(/\bn[aâ]+[nm]?[iïyî]+[ck]+[a]?h?\b/gi, 'Nanika')
+      .replace(/\b(annika|anika|anikah|manika|monica|monika|nanico|nanni ?ka|nani ?ka|na nika|nanica|nanyka)\b/gi, 'Nanika')
+      .replace(/\b(Nanika)(\s+Nanika)+\b/g, 'Nanika')
+      // Vocabulaire du métier que la dictée massacre
+      .replace(/\b(op[ée]? ?co|opé co|opeco)\b/gi, 'OPCO')
+      .replace(/\b(quali ?o ?pi|qualiaupi|kaliopi)\b/gi, 'Qualiopi')
+      .replace(/\b(acto|akto)\b/gi, 'AKTO')
+      .replace(/\b(constructis|construct ?ys)\b/gi, 'Constructys')
+      .replace(/\b(id[ée]e? ?forma|idea ?forma)\b/gi, 'IDEAFORMA');
   },
 
   /* Quelques ordres se règlent sans le modèle : ils doivent marcher même
@@ -2041,6 +2095,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     if (bNoter) { bNoter.hidden = !!erreur || !texte; bNoter.disabled = false; bNoter.innerHTML = `${Icone('notes', { taille: 14 })} Garder en note`; }
     this._vocalPhase('parole', 'Je parle…');
     this._vocalStoppe = false;
+    // iPhone : laisser le micro rendre la main avant de parler, sinon la
+    // synthèse reste muette ou à peine audible
+    await new Promise(r => setTimeout(r, 300));
     await this._lire(aDire || "C'est fait.");
     if (!this._vocal) return;
     // Stop pressé, ou écoute déjà relancée par un tap : on ne fait rien de plus
@@ -2192,6 +2249,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       creer_contact:    `${ic('carte')} Contact ajouté : ${esc(args.prenom || '')}`,
       modifier_contact: `${ic('carte')} Contact modifié`,
       supprimer_contact:`${ic('carte')} Contact supprimé`,
+      derniers_envois:  `${ic('horloge')} Lecture des derniers ${esc(args.type || 'envois')}`,
       envoyer_sms:      `${ic('mobile')} SMS proposé → ${esc((args.a || []).join(', '))}`,
       envoyer_mail:     `${ic('envoyer')} Mail proposé « ${esc(args.objet || '')} » → ${esc((args.a || []).join(', '))}`
     };
@@ -2230,7 +2288,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   async envoyer(texteForce = null, options = {}) {
     if (this._occupe) return;
     const input = document.getElementById('chatInput');
-    const texte = String(texteForce ?? input.value).trim();
+    const texte = this._corrigerNom(String(texteForce ?? input.value)).trim();
     if (!texte) return;
 
     input.value = '';
@@ -2446,6 +2504,23 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     return liste.slice(debut);
   },
 
+  /* Réfléchir longuement coûte des secondes : en vocal, on ne le fait que
+     pour une demande visiblement complexe (longue, ou qui demande d'analyser,
+     comparer, planifier, rédiger, chercher). À l'écrit, toujours. */
+  _reflexionEtendue(source = null) {
+    if (!this._vocal) return true;
+    const liste = source || this._messages;
+    let dernier = '';
+    for (let i = liste.length - 1; i >= 0; i--) {
+      const m = liste[i];
+      if (m.role !== 'user') continue;
+      const t = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ');
+      if (t.trim()) { dernier = t; break; }
+    }
+    return dernier.length > 140 ||
+      /analys|compar|planifi|organis|rédig|redig|cherche|recherch|résum|resum|explique|calcul|propos|prépar|prepar|bilan|point de/i.test(dernier);
+  },
+
   async _appeler(systeme, outils, toolChoice = null, source = null) {
     const { data: { session } } = await supa.auth.getSession();
     if (!session?.access_token) throw new Error('Session expirée — reconnectez-vous');
@@ -2464,8 +2539,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         // Temps de réflexion : le modèle raisonne avant de répondre (demandes
         // complexes, recoupements, plans en plusieurs étapes). Les blocs de
         // réflexion sont conservés dans l'historique, l'API l'exige.
-        thinking: { type: 'enabled', budget_tokens: 4000 },
-        max_tokens: 12000,
+        ...(this._reflexionEtendue(source) ? { thinking: { type: 'enabled', budget_tokens: 2500 }, max_tokens: 10000 }
+                                            : { max_tokens: 6000 }),
         messages:   this._fenetre(40, source)
       })
     });

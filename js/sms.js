@@ -144,7 +144,15 @@ const SmsPage = {
           ${cfg.pret ? '' : `
           <div class="sms-alerte">${Icone('alerte', { taille: 15 })}
             L'envoi n'est pas encore configuré côté serveur : ajoutez <strong>BREVO_API_KEY</strong>
-            (ou les variables Twilio) dans Vercel. Le formulaire fonctionne, l'envoi échouera et restera dans l'historique.</div>`}
+            (ou les variables Twilio) dans Vercel <em>puis redéployez</em> — une variable ajoutée n'est prise en compte qu'au déploiement suivant.</div>`}
+          <div class="sms-diag">
+            ${Icone('info', { taille: 13 })}
+            Fournisseur : <strong>${esc(cfg.fournisseur || '?')}</strong> ·
+            clé : <strong>${cfg.pret ? 'présente' : 'absente'}</strong>${cfg.cleForme === false ? ' <span class="sms-diag-ko">(ne ressemble pas à une clé API v3 « xkeysib-… »)</span>' : ''} ·
+            expéditeur : <strong>${esc(cfg.expediteur || '—')}</strong> ·
+            mon numéro : <strong>${cfg.monTelephone ? esc(Sms.joli(cfg.monTelephone)) : 'non renseigné (MON_TELEPHONE)'}</strong>
+            ${cfg.pret && cfg.monTelephone ? `<button class="btn btn-sm btn-secondary" id="smsTest">Envoyer un SMS de test à mon numéro</button>` : ''}
+          </div>
           <div class="mail-form">
             <label class="form-group">
               <span>À</span>
@@ -216,6 +224,12 @@ const SmsPage = {
       corps.focus();
     });
     document.getElementById('btnSmsNanika').addEventListener('click', () => this._redigerAvecNanika());
+    document.getElementById('smsTest')?.addEventListener('click', async e => {
+      e.target.disabled = true;
+      const r = await Sms.envoyer({ a: [cfg.monTelephone], noms: ['moi'], contenu: 'Test IDEAFORMA : les SMS fonctionnent.', confirme: false, source: 'manuel' });
+      Toast.show(r.ok ? 'SMS de test envoyé — vérifiez votre téléphone' : `Échec : ${r.erreur}`, r.ok ? 'success' : 'error', 8000);
+      e.target.disabled = false;
+    });
     document.getElementById('btnSmsContact').addEventListener('click', () => MailPage.formContact());
     document.querySelectorAll('[data-sms-a]').forEach(b => b.addEventListener('click', () => {
       const deja = champ.value.trim();
@@ -363,6 +377,7 @@ const SmsPage = {
             ${ouvert ? `
               ${m.erreur ? `<div class="mail-item-erreur">${esc(m.erreur)}</div>` : ''}
               <div class="mail-item-actions">
+                <button class="btn btn-sm btn-primary" data-renvoyer="${m.id}" title="Même texto, autre destinataire">${Icone('envoyer', { taille: 14 })} Renvoyer à…</button>
                 <button class="btn btn-sm btn-secondary" data-reutiliser="${m.id}">${Icone('rafraichir', { taille: 14 })} Réutiliser</button>
                 <button class="btn btn-sm btn-icon danger" data-supprimer="${m.id}" title="Retirer de l'historique">${Icone('poubelle', { taille: 14 })}</button>
               </div>` : ''}
@@ -371,6 +386,12 @@ const SmsPage = {
       </div>`).join('');
 
     zone.onclick = async e => {
+      const rv = e.target.closest('[data-renvoyer]');
+      if (rv) {
+        const m = this._sms.find(x => x.id === rv.dataset.renvoyer);
+        if (m) { this.remplir({ a: [], contenu: m.contenu }); document.getElementById('smsA').focus(); Toast.show('Indiquez le nouveau destinataire, puis Envoyer', 'info'); }
+        return;
+      }
       const re = e.target.closest('[data-reutiliser]');
       if (re) {
         const m = this._sms.find(x => x.id === re.dataset.reutiliser);

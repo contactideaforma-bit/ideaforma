@@ -445,6 +445,7 @@ const MailPage = {
               <div class="mail-item-corps">${esc(m.corps).replace(/\n/g, '<br>')}</div>
               ${m.erreur ? `<div class="mail-item-erreur">${esc(m.erreur)}</div>` : ''}
               <div class="mail-item-actions">
+                <button class="btn btn-sm btn-primary" data-renvoyer="${m.id}" title="Même mail, autre destinataire">${Icone('envoyer', { taille: 14 })} Renvoyer à…</button>
                 <button class="btn btn-sm btn-secondary" data-reutiliser="${m.id}">${Icone('rafraichir', { taille: 14 })} Réutiliser</button>
                 <button class="btn btn-sm btn-secondary" data-copier="${m.id}">${Icone('document', { taille: 14 })} Copier le texte</button>
                 <button class="btn btn-sm btn-icon danger" data-supprimer="${m.id}" title="Retirer de l'historique">${Icone('poubelle', { taille: 14 })}</button>
@@ -455,6 +456,18 @@ const MailPage = {
       </div>`).join('');
 
     zone.onclick = async e => {
+      const rv = e.target.closest('[data-renvoyer]');
+      if (rv) {
+        const m = this._mails.find(x => x.id === rv.dataset.renvoyer);
+        if (m) {
+          // Même objet, même texte, destinataire à saisir
+          this.remplir({ a: [], objet: m.objet, corps: m.corps });
+          const champ = document.getElementById('mailA');
+          champ.focus();
+          Toast.show('Indiquez le nouveau destinataire, puis Envoyer', 'info');
+        }
+        return;
+      }
       const re = e.target.closest('[data-reutiliser]');
       if (re) {
         const m = this._mails.find(x => x.id === re.dataset.reutiliser);
