@@ -18,6 +18,14 @@
    MON_TELEPHONE exige `confirme: true`, posé par le navigateur seulement
    après validation explicite du texte (modale ou « oui » de vive voix) ;
    3 destinataires max par envoi, 60 SMS par heure ; 600 caractères max.
+
+   GET            → état de la configuration ; `?diag=1` ajoute les crédits SMS
+                    Brevo et le bilan 7 jours (remis / bloqués / rejetés)
+   GET ?evenements=+336…&id=<messageId> → suivi de remise d'un SMS (Brevo)
+   POST           → envoi ; la réponse porte `credits` (solde restant) et un
+                    `avertissement` si le solde est à 0 (Brevo accepte alors le
+                    SMS sans jamais l'émettre — c'est le cas « envoyé mais rien
+                    reçu »).
 ─────────────────────────────────────────────────────────────────────────────── */
 
 const MAX_DEST   = 3;
@@ -95,7 +103,67 @@ async function envoyerBrevo(a, contenu) {
     if (/sender/i.test(msg)) msg += ' — l\'expéditeur doit faire 3 à 11 lettres/chiffres (SMS_EXPEDITEUR)';
     throw new Error(msg);
   }
-  return data.messageId || data.reference || null;
+  return {
+    id: data.messageId != null ? String(data.messageId) : (data.reference || null),
+    credits: typeof data.remainingCredits === 'number' ? data.remainingCredits : null,
+    segments: data.smsCount || null
+  };
+}
+
+async function brevoGet(chemin) {
+  const r = await fetch(`https://api.brevo.com/v3${chemin}`, {
+    headers: { 'api-key': process.env.BREVO_API_KEY.trim(), Accept: 'application/json' }
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.message || data.code || `Brevo a répondu ${r.status}`);
+  return data;
+}
+
+/* Diagnostic Brevo : crédits SMS restants + bilan des 7 derniers jours
+   (remis / bloqués / rejetés). Brevo accepte volontiers un envoi (201) puis
+   le bloque silencieusement : compte non validé, crédits épuisés, expéditeur
+   refusé par l'opérateur… seul ce bilan le révèle. */
+async function diagnosticBrevo() {
+  const out = { credits: null, bilan: null, erreurDiag: null };
+  try {
+    const compte = await brevoGet('/account');
+    const sms = (compte.plan || []).find(p => /sms/i.test(p.type || ''));
+    if (sms && typeof sms.credits === 'number') out.credits = sms.credits;
+  } catch (err) { out.erreurDiag = err.message; }
+  try {
+    const b = await brevoGet('/transactionalSMS/statistics/aggregatedReport?days=7');
+    out.bilan = {
+      demandes: b.requests || 0, remis: b.delivered || 0, acceptes: b.accepted || 0,
+      bloques: b.blocked || 0, rejetes: b.rejected || 0,
+      nonRemis: (b.hardBounces || 0) + (b.softBounces || 0)
+    };
+  } catch (err) { out.erreurDiag = out.erreurDiag || err.message; }
+  return out;
+}
+
+const LIBELLES_EVENEMENT = {
+  delivered: 'Remis sur le téléphone',
+  sent: "Transmis à l'opérateur — pas encore de confirmation de remise",
+  accepted: 'Accepté par Brevo — en attente de transmission',
+  softBounces: 'Non remis (téléphone éteint ou hors réseau) — nouvel essai par l\'opérateur',
+  hardBounces: 'Non remis : numéro invalide ou injoignable',
+  blocked: 'Bloqué par Brevo',
+  rejected: "Rejeté par l'opérateur",
+  unsubscription: 'Le destinataire a demandé l\'arrêt des SMS',
+  replies: 'Réponse reçue'
+};
+
+/* Événements Brevo pour un numéro (30 jours) ; si `id` est fourni, on ne
+   garde que ceux du message concerné. */
+async function evenementsBrevo(numero, id) {
+  const tel = String(numero || '').replace('+', '');
+  const d = await brevoGet(`/transactionalSMS/statistics/events?phoneNumber=${encodeURIComponent(tel)}&days=30&limit=100&sort=desc`);
+  let ev = Array.isArray(d.events) ? d.events : [];
+  if (id) ev = ev.filter(e => String(e.messageId) === String(id));
+  return ev.map(e => ({
+    date: e.date, evenement: e.event, raison: e.reason || null,
+    libelle: LIBELLES_EVENEMENT[e.event] || e.event
+  }));
 }
 
 async function envoyerTwilio(a, contenu) {
@@ -109,7 +177,7 @@ async function envoyerTwilio(a, contenu) {
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.message || `Twilio a répondu ${r.status}`);
-  return data.sid || null;
+  return { id: data.sid || null, credits: null, segments: data.num_segments ? Number(data.num_segments) : null };
 }
 
 module.exports = async function handler(req, res) {
@@ -137,12 +205,27 @@ module.exports = async function handler(req, res) {
 
   /* GET : l'application demande l'état de la configuration */
   if (req.method === 'GET') {
-    return res.status(200).json({
+    const q = req.query || {};
+    const brevo = fournisseur() === 'brevo' && configure();
+
+    /* ?evenements=+336…&id=<messageId> : suivi de remise d'un SMS */
+    if (q.evenements) {
+      if (!brevo) return res.status(501).json({ error: 'Le suivi de remise n\'est disponible qu\'avec Brevo' });
+      const num = e164(q.evenements);
+      if (!num) return res.status(400).json({ error: 'Numéro invalide' });
+      try { return res.status(200).json({ evenements: await evenementsBrevo(num, q.id) }); }
+      catch (err) { return res.status(502).json({ error: err.message }); }
+    }
+
+    const base = {
       pret: configure(), fournisseur: fournisseur(),
       cleForme: fournisseur() === 'brevo' ? (process.env.BREVO_API_KEY ? /^xkeysib-/.test(process.env.BREVO_API_KEY.trim()) : null) : null,
       expediteur: fournisseur() === 'twilio' ? (process.env.TWILIO_FROM || null) : (process.env.SMS_EXPEDITEUR || 'IDEAFORMA'),
       monTelephone: moi
-    });
+    };
+    /* ?diag=1 : crédits et bilan Brevo (deux appels de plus, seulement pour l'onglet SMS) */
+    if (q.diag && brevo) Object.assign(base, await diagnosticBrevo());
+    return res.status(200).json(base);
   }
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -174,13 +257,21 @@ module.exports = async function handler(req, res) {
 
   const envoyer = fournisseur() === 'twilio' ? envoyerTwilio : envoyerBrevo;
   const resultats = [];
+  let credits = null;
   for (const d of destinataires) {
-    try { resultats.push({ a: d, ok: true, id: await envoyer(d, texte) }); }
+    try {
+      const r = await envoyer(d, texte);
+      if (typeof r.credits === 'number') credits = r.credits;
+      resultats.push({ a: d, ok: true, id: r.id, segments: r.segments });
+    }
     catch (err) { console.error('[sms.js]', d, err.message); resultats.push({ a: d, ok: false, erreur: err.message }); }
   }
   const ok = resultats.every(r => r.ok);
   return res.status(ok ? 200 : 502).json({
-    ok, resultats, externe,
+    ok, resultats, externe, credits,
+    avertissement: ok && credits === 0
+      ? 'Brevo a accepté le SMS mais votre solde de crédits SMS est à 0 : il ne partira pas tant que vous n\'aurez pas acheté des crédits (Brevo → Transactionnel → SMS).'
+      : undefined,
     error: ok ? undefined : resultats.filter(r => !r.ok).map(r => `${r.a} : ${r.erreur}`).join(' ; ')
   });
 };

@@ -29,14 +29,26 @@ const Sms = {
   estNumero(t) { return /^[+\d][\d\s.\-()]{7,}$/.test(String(t || '').trim()); },
 
   _config: null,
-  async config(force = false) {
+  async config(force = false, diag = false) {
     if (this._config && !force) return this._config;
     try {
       const { data: { session } } = await supa.auth.getSession();
-      const r = await fetch('/api/sms', { headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+      const r = await fetch(`/api/sms${diag ? '?diag=1' : ''}`, { headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
       this._config = r.ok ? await r.json() : { pret: false };
     } catch { this._config = { pret: false }; }
     return this._config;
+  },
+
+  /** Suivi de remise Brevo d'un SMS : liste d'événements { date, evenement,
+      raison, libelle }, du plus récent au plus ancien. */
+  async suivi(numero, idFournisseur) {
+    const { data: { session } } = await supa.auth.getSession();
+    const id = String(idFournisseur || '').split(',')[0];
+    const r = await fetch(`/api/sms?evenements=${encodeURIComponent(numero)}${id ? `&id=${encodeURIComponent(id)}` : ''}`,
+      { headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `Le serveur a répondu ${r.status}`);
+    return data.evenements || [];
   },
 
   /** Destinataires : « moi », numéros, prénoms du carnet (qui ont un
@@ -88,6 +100,8 @@ const Sms = {
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) { statut = 'echec'; erreur = data.error || `Le serveur a répondu ${res.status}`; }
       idFournisseur = (data.resultats || []).map(r => r.id).filter(Boolean).join(',') || null;
+      if (typeof data.credits === 'number' && this._config) this._config.credits = data.credits;
+      if (data.avertissement) { erreur = data.avertissement; if (source !== 'manuel') Toast.show(data.avertissement, 'warning', 12000); }
     } catch (err) {
       statut = 'echec'; erreur = err.message || 'Réseau indisponible';
     }
@@ -122,6 +136,7 @@ const SmsPage = {
   _sms:      [],
   recherche: '',
   _ouvert:   null,
+  _suivis:   {},        // id du journal → résultat de « Vérifier la remise »
 
   async render() {
     document.getElementById('pageTitle').textContent    = 'SMS';
@@ -131,7 +146,7 @@ const SmsPage = {
         ${Icone('nanika', { taille: 16 })} Rédiger avec Nanika</button>`;
     Loading.show();
 
-    const cfg = await Sms.config(true);
+    const cfg = await Sms.config(true, true);
     const contacts = (await Mails.contacts(true).catch(() => [])).filter(c => Sms.e164(c.telephone));
 
     document.getElementById('pageContent').innerHTML = `
@@ -142,17 +157,30 @@ const SmsPage = {
             ${cfg.monTelephone ? `<button class="btn btn-sm btn-secondary" id="smsAMoi" title="Mon portable (${esc(Sms.joli(cfg.monTelephone))})">À moi</button>` : ''}
           </div>
           ${cfg.pret ? '' : `
-          <div class="sms-alerte">${Icone('alerte', { taille: 15 })}
+          <div class="sms-alerte">${Icone('alerte', { taille: 15 })}<span>
             L'envoi n'est pas encore configuré côté serveur : ajoutez <strong>BREVO_API_KEY</strong>
-            (ou les variables Twilio) dans Vercel <em>puis redéployez</em> — une variable ajoutée n'est prise en compte qu'au déploiement suivant.</div>`}
+            (ou les variables Twilio) dans Vercel <em>puis redéployez</em> — une variable ajoutée n'est prise en compte qu'au déploiement suivant.</span></div>`}
           <div class="sms-diag">
             ${Icone('info', { taille: 13 })}
             Fournisseur : <strong>${esc(cfg.fournisseur || '?')}</strong> ·
             clé : <strong>${cfg.pret ? 'présente' : 'absente'}</strong>${cfg.cleForme === false ? ' <span class="sms-diag-ko">(ne ressemble pas à une clé API v3 « xkeysib-… »)</span>' : ''} ·
             expéditeur : <strong>${esc(cfg.expediteur || '—')}</strong> ·
             mon numéro : <strong>${cfg.monTelephone ? esc(Sms.joli(cfg.monTelephone)) : 'non renseigné (MON_TELEPHONE)'}</strong>
+            ${typeof cfg.credits === 'number' ? ` · crédits SMS Brevo : <strong class="${cfg.credits === 0 ? 'sms-diag-ko' : ''}">${cfg.credits}</strong>` : ''}
+            ${cfg.bilan ? ` · 7 derniers jours : <strong>${cfg.bilan.demandes}</strong> demandé${cfg.bilan.demandes > 1 ? 's' : ''}, <strong>${cfg.bilan.remis}</strong> remis${(cfg.bilan.bloques + cfg.bilan.rejetes + cfg.bilan.nonRemis) ? `, <span class="sms-diag-ko">${cfg.bilan.bloques + cfg.bilan.rejetes + cfg.bilan.nonRemis} bloqué(s) / non remis</span>` : ''}` : ''}
+            ${cfg.erreurDiag ? ` · <span class="sms-diag-ko">diagnostic Brevo indisponible : ${esc(cfg.erreurDiag)}</span>` : ''}
             ${cfg.pret && cfg.monTelephone ? `<button class="btn btn-sm btn-secondary" id="smsTest">Envoyer un SMS de test à mon numéro</button>` : ''}
           </div>
+          ${cfg.credits === 0 ? `
+          <div class="sms-alerte">${Icone('alerte', { taille: 15 })}<span>
+            <strong>Solde de crédits SMS à 0.</strong> Brevo accepte les envois (l'application affiche « envoyé ») mais
+            n'émet rien tant que le compte n'a pas de crédits : achetez un pack SMS dans Brevo → Transactionnel → SMS.</span></div>` : ''}
+          ${cfg.bilan && cfg.bilan.demandes > 0 && cfg.bilan.remis === 0 && cfg.credits !== 0 ? `
+          <div class="sms-alerte">${Icone('alerte', { taille: 15 })}<span>
+            Brevo a reçu vos SMS mais n'en a remis aucun. Le plus souvent : le compte Brevo n'est pas encore
+            <strong>validé pour les SMS</strong> (Brevo → Transactionnel → SMS : un bandeau demande de valider le compte, parfois avec
+            un justificatif), ou l'expéditeur « ${esc(cfg.expediteur || 'IDEAFORMA')} » est refusé par l'opérateur.
+            Ouvrez un SMS de l'historique puis « Vérifier la remise » pour lire la raison exacte donnée par Brevo.</span></div>` : ''}
           <div class="mail-form">
             <label class="form-group">
               <span>À</span>
@@ -227,7 +255,8 @@ const SmsPage = {
     document.getElementById('smsTest')?.addEventListener('click', async e => {
       e.target.disabled = true;
       const r = await Sms.envoyer({ a: [cfg.monTelephone], noms: ['moi'], contenu: 'Test IDEAFORMA : les SMS fonctionnent.', confirme: false, source: 'manuel' });
-      Toast.show(r.ok ? 'SMS de test envoyé — vérifiez votre téléphone' : `Échec : ${r.erreur}`, r.ok ? 'success' : 'error', 8000);
+      if (r.ok && r.erreur) Toast.show(`Accepté par Brevo, mais : ${r.erreur}`, 'warning', 12000);
+      else Toast.show(r.ok ? 'SMS de test envoyé — vérifiez votre téléphone (puis « Vérifier la remise » dans l\'historique)' : `Échec : ${r.erreur}`, r.ok ? 'success' : 'error', 8000);
       e.target.disabled = false;
     });
     document.getElementById('btnSmsContact').addEventListener('click', () => MailPage.formContact());
@@ -316,7 +345,8 @@ const SmsPage = {
     bouton.innerHTML = `${Icone('sablier', { taille: 16 })} Envoi…`;
     try {
       const r = await Sms.envoyer({ a, noms, contenu, confirme: a.some(x => x !== moi), source: 'manuel' });
-      if (r.ok) { Toast.show(`SMS envoyé à ${a.map((n, i) => noms[i] || Sms.joli(n)).join(', ')}`, 'success'); this._vider(); }
+      if (r.ok && r.erreur) { Toast.show(`Accepté par Brevo, mais : ${r.erreur}`, 'warning', 12000); this._vider(); }
+      else if (r.ok) { Toast.show(`SMS envoyé à ${a.map((n, i) => noms[i] || Sms.joli(n)).join(', ')}`, 'success'); this._vider(); }
       else Toast.show(`Échec de l'envoi : ${r.erreur}`, 'error', 7000);
     } finally {
       bouton.disabled = false;
@@ -376,7 +406,9 @@ const SmsPage = {
             <div class="sms-bulle">${esc(m.contenu).replace(/\n/g, '<br>')}</div>
             ${ouvert ? `
               ${m.erreur ? `<div class="mail-item-erreur">${esc(m.erreur)}</div>` : ''}
+              ${this._suivis[m.id] ? `<div class="sms-suivi ${this._suivis[m.id].ko ? 'sms-suivi-ko' : ''}">${this._suivis[m.id].html}</div>` : ''}
               <div class="mail-item-actions">
+                ${m.statut === 'envoye' && (m.destinataires || []).length ? `<button class="btn btn-sm btn-secondary" data-suivi="${m.id}" title="Demander à Brevo ce qu'est devenu ce SMS">${Icone('info', { taille: 14 })} Vérifier la remise</button>` : ''}
                 <button class="btn btn-sm btn-primary" data-renvoyer="${m.id}" title="Même texto, autre destinataire">${Icone('envoyer', { taille: 14 })} Renvoyer à…</button>
                 <button class="btn btn-sm btn-secondary" data-reutiliser="${m.id}">${Icone('rafraichir', { taille: 14 })} Réutiliser</button>
                 <button class="btn btn-sm btn-icon danger" data-supprimer="${m.id}" title="Retirer de l'historique">${Icone('poubelle', { taille: 14 })}</button>
@@ -386,6 +418,33 @@ const SmsPage = {
       </div>`).join('');
 
     zone.onclick = async e => {
+      const sv = e.target.closest('[data-suivi]');
+      if (sv) {
+        const m = this._sms.find(x => x.id === sv.dataset.suivi);
+        if (!m) return;
+        sv.disabled = true; sv.textContent = 'Interrogation de Brevo…';
+        try {
+          const lignes = [];
+          let ko = false;
+          for (const num of m.destinataires || []) {
+            const ev = await Sms.suivi(num, m.fournisseur_id);
+            if (!ev.length) {
+              ko = true;
+              lignes.push(`<strong>${esc(Sms.joli(num))}</strong> : Brevo n'a aucune trace de ce SMS${m.fournisseur_id ? '' : ' (aucun identifiant Brevo enregistré)'} — il n'a jamais été émis. Causes habituelles : compte Brevo pas encore validé pour les SMS, ou crédits SMS à 0.`);
+              continue;
+            }
+            const dernier = ev[0];
+            if (!/delivered|replies/.test(dernier.evenement)) ko = true;
+            lignes.push(`<strong>${esc(Sms.joli(num))}</strong> : ${esc(dernier.libelle)}${dernier.raison ? ` — <em>${esc(dernier.raison)}</em>` : ''}` +
+              (ev.length > 1 ? `<br><small>${ev.slice(1, 4).map(x => `${Dates.heure(new Date(x.date))} ${esc(x.libelle)}`).join(' · ')}</small>` : ''));
+          }
+          this._suivis[m.id] = { ko, html: lignes.join('<br>') };
+        } catch (err) {
+          this._suivis[m.id] = { ko: true, html: `Suivi indisponible : ${esc(err.message)}` };
+        }
+        this._peindreHistorique();
+        return;
+      }
       const rv = e.target.closest('[data-renvoyer]');
       if (rv) {
         const m = this._sms.find(x => x.id === rv.dataset.renvoyer);

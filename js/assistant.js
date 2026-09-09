@@ -842,7 +842,7 @@ const Assistant = {
     }
     const r = await Sms.envoyer({ a, noms, contenu, confirme, source: 'nanika' });
     if (!r.ok) return { ok: false, erreur: r.erreur || 'Envoi impossible' };
-    return { ok: true, message: `SMS envoyé à ${a.map((n, i) => noms[i] || Sms.joli(n)).join(', ')}.`, a, externe };
+    return { ok: true, message: `SMS envoyé à ${a.map((n, i) => noms[i] || Sms.joli(n)).join(', ')}.${r.erreur ? ' Attention : ' + r.erreur : ''}`, a, externe };
   },
 
   _validerSms({ a, noms, contenu }) {
