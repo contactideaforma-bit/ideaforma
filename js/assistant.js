@@ -1280,6 +1280,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
             <label class="nanika-case">
               <input type="checkbox" id="nanikaEveil"> Répondre à « Nanika » dès que l'application est ouverte (micro en veille)
             </label>
+            <label class="nanika-case">
+              <input type="checkbox" id="nanikaOreille"> Oreille précise (serveur) : comprend bien mieux le français et les noms propres
+            </label>
             <button class="btn btn-secondary btn-sm" id="nanikaTestVoix">Tester la voix</button>
           </div>
         </div>
@@ -1423,6 +1426,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   _dicter() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const bouton = document.getElementById('chatMicro');
+    if (this._enr) { this._enr.clore(); return; }            // second tap : on a fini
+    if (this._utiliseOreilleServeur()) { this._dicterServeur(); return; }
     if (!SR) { Toast.show("La dictée n'est pas disponible sur ce navigateur", 'warning'); return; }
     if (this._reco) { this._reco.stop(); return; }
 
@@ -1764,6 +1769,211 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   _autoEcoute:     false,
   _audio:          null,
 
+  /* Dictée écrite avec l'oreille serveur : un tap pour parler, le silence (ou
+     un second tap) clôt, le texte est envoyé. */
+  async _dicterServeur() {
+    const bouton = document.getElementById('chatMicro');
+    const champ  = document.getElementById('chatInput');
+    window.speechSynthesis?.cancel();
+    let enr;
+    try { enr = await this._enregistrer({ silenceMs: 1800, attenteMs: 8000 }); }
+    catch (err) {
+      if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) { Toast.show('Accès au micro refusé — autorisez-le dans les réglages du navigateur', 'warning'); return; }
+      this._sttIndisponible = true; this._dicter(); return;
+    }
+    this._enr = enr;
+    bouton.classList.add('ecoute'); bouton.setAttribute('aria-label', 'Arrêter la dictée');
+    const r = await enr.promesse;
+    if (this._enr === enr) this._enr = null;
+    bouton.classList.remove('ecoute'); bouton.setAttribute('aria-label', 'Dicter la question');
+    if (!r) return;
+    if (!r.parle || r.blob.size < 1500) { champ.focus(); return; }
+    bouton.classList.add('transcrit');
+    try {
+      const texte = await this._transcrire(r.blob, r.mime);
+      if (texte === null) { Toast.show('Oreille serveur indisponible : dictée du téléphone', 'info'); this._dicter(); return; }
+      const depart = champ.value.trim();
+      champ.value = (depart ? depart + ' ' : '') + this._corrigerNom(texte);
+      if (champ.value.trim()) { this._parle = true; this.envoyer(null, { confiance: 0.95 }); }
+    } catch (err) { Toast.show(`Transcription impossible : ${err.message}`, 'warning'); champ.focus(); }
+    finally { bouton.classList.remove('transcrit'); }
+  },
+
+  /* ══════════════════════════════════════════════
+     L'OREILLE PRÉCISE — enregistrement + transcription serveur (api/stt.js)
+     La dictée intégrée à l'iPhone écorche les noms (Nanika, IDEAFORMA, OPCO)
+     et les phrases un peu longues. Ici on enregistre la voix, on détecte la
+     fin de phrase au silence (ou au bouton Terminé), et le serveur transcrit
+     avec le vocabulaire soufflé. Repli automatique sur la dictée du
+     navigateur si le serveur n'est pas configuré (501) ou tombe.
+  ══════════════════════════════════════════════ */
+  _sttServeur:      true,
+  _sttIndisponible: false,
+  _enr:             null,   // enregistrement en cours { clore, abandonner }
+
+  _peutEnregistrer() {
+    return !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+  },
+  _utiliseOreilleServeur() {
+    return this._sttServeur && !this._sttIndisponible && this._peutEnregistrer();
+  },
+
+  /* Prénoms du carnet et noms de listes : soufflés au modèle pour qu'il les
+     orthographie bien (« Roger Durand », « Sophie Martin »…). */
+  async _indicesVocabulaire() {
+    const mots = [];
+    try {
+      const contacts = typeof Mails !== 'undefined' ? await Mails.contacts() : [];
+      (contacts || []).slice(0, 60).forEach(c => mots.push(`${c.prenom || ''} ${c.nom || ''}`.trim()));
+    } catch { /* sans carnet */ }
+    try { (await DataStore.getListes()).slice(0, 30).forEach(l => mots.push(l.nom)); } catch { /* rien */ }
+    return mots.filter(Boolean).join(', ');
+  },
+
+  /** Ouvre le micro et enregistre jusqu'au silence, à clore(), ou au maximum.
+      Rend { promesse → { blob, mime, parle }, clore(), abandonner() } */
+  async _enregistrer({ silenceMs = 1600, attenteMs = 9000, maxMs = 75000, surNiveau = null } = {}) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/ogg']
+      .find(m => { try { return MediaRecorder.isTypeSupported(m); } catch { return false; } }) || '';
+    const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    const morceaux = [];
+    let parle = false, abandonne = false, fini = false, sansAnalyse = false, resoudre;
+    const promesse = new Promise(r => { resoudre = r; });
+
+    // Détection de la parole et du silence sur le niveau sonore
+    let ctx = null, tic = null;
+    const debut = Date.now();
+    let dernierSon = 0, plancher = 0.004;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+      try { await ctx.resume(); } catch { /* rien */ }
+      // Contexte audio suspendu (pas de geste récent) : l'analyse lirait des
+      // zéros et ne détecterait jamais la parole → on s'en remet à Terminé
+      if (ctx.state !== 'running') throw new Error('audio suspendu');
+      const src = ctx.createMediaStreamSource(stream);
+      const ana = ctx.createAnalyser(); ana.fftSize = 1024;
+      src.connect(ana);
+      const buf = new Float32Array(ana.fftSize);
+      let chauds = 0;
+      tic = setInterval(() => {
+        if (fini) return;
+        ana.getFloatTimeDomainData(buf);
+        let somme = 0; for (let i = 0; i < buf.length; i++) somme += buf[i] * buf[i];
+        const rms = Math.sqrt(somme / buf.length);
+        // Bruit de fond : suit vite vers le bas, très lentement vers le haut
+        plancher = Math.min(0.03, rms < plancher ? plancher * 0.8 + rms * 0.2 : plancher * 0.995 + rms * 0.005);
+        const seuil = Math.max(0.012, plancher * 3.5);
+        if (surNiveau) surNiveau.rms = rms;
+        const now = Date.now();
+        if (rms > seuil) { chauds++; if (chauds >= 2) { parle = true; dernierSon = now; } }
+        else chauds = 0;
+        if (surNiveau) surNiveau(Math.min(1, rms / 0.25), parle);
+        if (parle && now - dernierSon > silenceMs) clore();
+        else if (!parle && now - debut > attenteMs) clore();
+        else if (now - debut > maxMs) clore();
+      }, 80);
+    } catch { /* sans analyse : Terminé ou le maximum clôt */ setTimeout(() => { if (!fini) clore(); }, maxMs); parle = true; sansAnalyse = true; }
+
+    const liberer = () => {
+      clearInterval(tic);
+      try { stream.getTracks().forEach(t => t.stop()); } catch { /* rien */ }
+      try { ctx?.close(); } catch { /* rien */ }
+    };
+    rec.ondataavailable = e => { if (e.data && e.data.size) morceaux.push(e.data); };
+    rec.onstop = () => {
+      liberer();
+      if (abandonne) { resoudre(null); return; }
+      resoudre({ blob: new Blob(morceaux, { type: rec.mimeType || mime || 'audio/webm' }), mime: rec.mimeType || mime || 'audio/webm', parle, sansAnalyse });
+    };
+    const clore = () => { if (fini) return; fini = true; try { rec.state !== 'inactive' ? rec.stop() : rec.onstop(); } catch { liberer(); resoudre(null); } };
+    const abandonner = () => { if (fini) return; abandonne = true; clore(); };
+    try { rec.start(250); } catch (err) { liberer(); throw err; }
+    return { promesse, clore, abandonner, get parle() { return parle; } };
+  },
+
+  /** Envoie l'enregistrement au serveur ; rend le texte, ou null si le
+      serveur n'est pas disponible (l'appelant retombe sur le navigateur). */
+  async _transcrire(blob, mime) {
+    const { data: { session } } = await supa.auth.getSession();
+    if (!session?.access_token) throw new Error('Session expirée — reconnectez-vous');
+    const base64 = await new Promise((ok, ko) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(String(fr.result).split(',')[1] || '');
+      fr.onerror = () => ko(new Error('Audio illisible'));
+      fr.readAsDataURL(blob);
+    });
+    const ctrl = new AbortController();
+    const garde = setTimeout(() => ctrl.abort(), 30000);
+    try {
+      const res = await fetch('/api/stt', {
+        method: 'POST', signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ audio: base64, mime, indices: await this._indicesVocabulaire() })
+      });
+      if (res.status === 501) { this._sttIndisponible = true; return null; }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Le serveur a répondu ${res.status}`);
+      return String(data.texte || '').trim();
+    } finally { clearTimeout(garde); }
+  },
+
+  /* Le tour d'écoute en mode vocal, version oreille serveur */
+  async _vocalEnregistrer() {
+    let enr;
+    try {
+      enr = await this._enregistrer({ surNiveau: (n, parle) => {
+        const orbe = document.getElementById('nanikaOrbe');
+        if (orbe) orbe.style.setProperty('--niveau', n.toFixed(2));
+      } });
+    } catch (err) {
+      if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+        this._vocalPhase('veille', 'Micro refusé — autorisez-le dans les réglages');
+        Toast.show('Accès au micro refusé — autorisez-le dans les réglages du navigateur', 'warning');
+        return;
+      }
+      // Le micro n'a pas voulu s'ouvrir ainsi : dictée du navigateur pour ce tour
+      this._sttIndisponible = true;
+      this._vocalEcouter(true);
+      return;
+    }
+    if (!this._vocal) { enr.abandonner(); return; }
+    this._enr = enr;
+    this._vocalPhase('ecoute', 'Je vous écoute…');
+    this._bip('ecoute');
+
+    const r = await enr.promesse;
+    if (this._enr === enr) this._enr = null;
+    document.getElementById('nanikaOrbe')?.style.removeProperty('--niveau');
+    if (!r || !this._vocal) return;                  // abandonné (Stop, Parler, fermeture)
+    if (!r.parle || r.blob.size < 1500) {
+      this._vocalSilences++;
+      this._vocalPhase('veille', "Je n'ai rien entendu — touchez Parler");
+      return;
+    }
+    this._vocalPhase('reflexion', 'Je vous ai entendue…');
+    let texte = null;
+    try { texte = await this._transcrire(r.blob, r.mime); }
+    catch (err) {
+      this._bip('erreur');
+      this._vocalPhase('veille', `Transcription impossible (${err.message}) — touchez Parler`);
+      return;
+    }
+    if (!this._vocal) return;
+    if (texte === null) {   // serveur non configuré : on repasse au navigateur
+      this._vocalPhase('veille', 'Oreille serveur indisponible — touchez Parler (dictée du téléphone)');
+      return;
+    }
+    texte = this._corrigerNom(texte)
+      .replace(/[\s,.!?]*(terminé|termine|c'est terminé|j'ai terminé|à toi nanika)[\s.!?]*$/i, '')
+      .trim();
+    if (!texte) { this._vocalPhase('veille', "Je n'ai rien compris — touchez Parler"); return; }
+    this._vocalSilences = 0;
+    this._vocalMontrer(texte, null);
+    this._vocalTraiter(texte, 0.95);
+  },
+
   /* ══════════════════════════════════════════════
      LE MOT D'ÉVEIL — « Nanika » dit à voix haute, application ouverte
      Un micro discret écoute en continu tant que l'app est au premier plan et
@@ -1796,7 +2006,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   },
 
   _eveilDemarrer() {
-    if (!this._eveil || !this._eveilArme || this._ouvert || this._eveilReco || this._reco || document.hidden) return;
+    if (!this._eveil || !this._eveilArme || this._ouvert || this._eveilReco || this._reco || this._enr || document.hidden) return;
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     const reco = new SR();
@@ -1870,6 +2080,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       this._autoEcoute = localStorage.getItem('nanika_auto_ecoute') === '1';
       this._interruption = localStorage.getItem('nanika_interruption') === '1';
       this._voixServeur = localStorage.getItem('nanika_voix_serveur') !== '0';
+      this._sttServeur  = localStorage.getItem('nanika_stt_serveur') !== '0';
     } catch { /* rien */ }
 
     document.getElementById('nanikaQuitter')?.addEventListener('click', () => this.arreterVocal());
@@ -1911,6 +2122,10 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('nanikaInterruption')?.addEventListener('change', e => {
       this._interruption = e.target.checked;
       try { localStorage.setItem('nanika_interruption', this._interruption ? '1' : '0'); } catch { /* rien */ }
+    });
+    document.getElementById('nanikaOreille')?.addEventListener('change', e => {
+      this._sttServeur = e.target.checked; this._sttIndisponible = false;
+      try { localStorage.setItem('nanika_stt_serveur', this._sttServeur ? '1' : '0'); } catch { /* rien */ }
     });
     document.getElementById('nanikaEveil')?.addEventListener('change', e => {
       this._eveil = e.target.checked;
@@ -1966,6 +2181,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     document.getElementById('nanikaInterruption').checked = this._interruption;
     document.getElementById('nanikaVoixServeur').checked = this._voixServeur;
     const cEveil = document.getElementById('nanikaEveil'); if (cEveil) cEveil.checked = this._eveil;
+    const cOreille = document.getElementById('nanikaOreille');
+    if (cOreille) { cOreille.checked = this._sttServeur; cOreille.disabled = !this._peutEnregistrer(); }
   },
 
   /* Un petit son de prise de parole, façon JARVIS : deux notes brèves. Les
@@ -2048,6 +2265,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
      son onend envoie ce qui a été dit. */
   _vocalTerminer() {
     if (!this._vocal) return;
+    if (this._enr) { this._debloquerAudio(); this._enr.clore(); return; }   // oreille serveur : on transcrit ce qui est enregistré
     // Quel que soit l'état affiché (iPhone oublie parfois onstart), si on a
     // entendu quelque chose, on l'envoie.
     if (this._vocalEtat !== 'ecoute' && !(this._vocalTexteEnCours || '').trim()) return;
@@ -2136,6 +2354,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     const ancien = this._reco;
     this._reco = null;
     if (ancien) { try { ancien.abort(); } catch { /* rien */ } }
+    const enr = this._enr;
+    this._enr = null;
+    if (enr) { try { enr.abandonner(); } catch { /* rien */ } }
   },
 
   _vocalEcouter(force = false) {
@@ -2158,6 +2379,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       this._vocalPhase('veille', 'En veille — touchez Parler');
       return;
     }
+
+    // Oreille précise : enregistrement + transcription serveur
+    if (this._utiliseOreilleServeur()) { this._vocalEnregistrer(); return; }
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     const reco = this._reco = new SR();
@@ -2326,7 +2550,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     await this._lire(aDire || "C'est fait.");
     if (!this._vocal) return;
     // Stop pressé, ou écoute déjà relancée par un tap : on ne fait rien de plus
-    if (this._vocalStoppe || this._reco) return;
+    if (this._vocalStoppe || this._reco || this._enr) return;
     if (this._autoEcoute) this._vocalEcouter();
     else this._vocalPhase('veille', 'Touchez Parler pour continuer');
   },
