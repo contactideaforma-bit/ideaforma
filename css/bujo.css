@@ -1773,3 +1773,9 @@ html, body { overflow-x: hidden; }
   .liste-vue-outils { margin-left: 0; width: 100%; }
   .liste-vue-outils .btn { flex: 1 1 0; justify-content: center; min-height: 40px; }
 }
+
+/* ── Lien d'action proposé par Nanika (WhatsApp prêt à envoyer) ── */
+.chat-action-lien { background: none; padding: 4px 0 8px; }
+.chat-lien { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; }
+.nanika-lien { margin: 12px 0 0; text-align: center; }
+.nanika-lien .chat-lien { font-size: 15px; padding: 12px 20px; }

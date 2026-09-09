@@ -752,9 +752,12 @@ const Router = {
     // Nanika n'est pas une page : c'est le panneau flottant.
     // « vocal » / « nanika » l'ouvrent directement en conversation de vive voix.
     if (page === 'assistant') { Assistant.ouvrir(); return; }
-    if (page === 'vocal' || page === 'nanika') {
+    if (/^(vocal|nanika)(\?|$)/.test(page)) {
+      // #vocal?q=…&via=siri : ouverture par Siri / un Raccourci, avec ou
+      // sans demande déjà dictée
+      const q = new URLSearchParams(page.split('?')[1] || '');
       history.replaceState(null, '', '#' + (this.currentPage || 'dashboard'));
-      Assistant.ouvrirVocal();
+      Assistant.ouvrirVocal({ demande: q.get('q') || '', siri: q.get('via') === 'siri' || q.has('q') });
       return;
     }
     this.currentPage = page;
@@ -878,7 +881,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('hashchange', () => {
     const page = location.hash.slice(1);
     const connue = Router.PAGES[page] || DataStore.OPCOS.includes(page);
-    if (page === 'vocal' || page === 'nanika') { Router.navigate(page); return; }
+    if (/^(vocal|nanika)(\?|$)/.test(page)) { Router.navigate(page); return; }
     if (page && connue && page !== Router.currentPage) Router.navigate(page, true);
   });
 
@@ -905,5 +908,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   Router.navigate(depart && (Router.PAGES[depart] || DataStore.OPCOS.includes(depart))
     ? depart : 'dashboard', true);
   // Raccourci « Parler à Nanika » : le tableau de bord d'abord, puis la voix
-  if (depart === 'vocal' || depart === 'nanika') Router.navigate(depart);
+  if (/^(vocal|nanika)(\?|$)/.test(depart)) Router.navigate(depart);
 });

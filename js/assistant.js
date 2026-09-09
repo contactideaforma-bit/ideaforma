@@ -312,6 +312,18 @@ const Assistant = {
         }
       },
       {
+        name: 'envoyer_whatsapp',
+        description: "Prépare un message WhatsApp pour un contact du carnet (prénom) ou un numéro de portable : l'application ouvre WhatsApp directement sur la conversation avec le texte déjà écrit, l'utilisatrice n'a plus qu'à appuyer sur Envoyer (aucune validation préalable n'est donc nécessaire). Rédige court et naturel, comme un texto. Un seul destinataire.",
+        input_schema: {
+          type: 'object',
+          properties: {
+            a:       { type: 'string', description: "Prénom du carnet (CONTACTS CONNUS, avec téléphone) ou numéro de portable" },
+            contenu: { type: 'string', description: 'Texte du message, prêt à envoyer' }
+          },
+          required: ['a', 'contenu']
+        }
+      },
+      {
         name: 'creer_contact',
         description: "Ajoute une personne au carnet de contacts (prénom + e-mail au minimum). Dès que l'utilisatrice donne une adresse associée à un nom : « note le mail de Roger : roger@… », « ajoute Sophie Martin de chez Total dans mes contacts ».",
         input_schema: {
@@ -647,6 +659,9 @@ const Assistant = {
       case 'envoyer_sms':
         return this._envoyerSms(args);
 
+      case 'envoyer_whatsapp':
+        return this._envoyerWhatsapp(args);
+
       case 'derniers_envois': {
         const n = Math.min(Math.max(Number(args.nombre) || 5, 1), 20);
         if (args.type === 'sms') {
@@ -814,6 +829,30 @@ const Assistant = {
   },
 
   /* ══ SMS — même règle que les mails : à moi ça part, à un tiers je valide ══ */
+  /* WhatsApp « niveau 1 » : pas d'API, pas de compte Meta. On ouvre la
+     conversation WhatsApp du contact avec le texte pré-rempli (lien officiel
+     wa.me) ; c'est elle qui appuie sur Envoyer, dans WhatsApp. */
+  async _envoyerWhatsapp(args) {
+    if (typeof Sms === 'undefined') return { ok: false, erreur: 'Module SMS absent' };
+    const { a, noms, ambigus, inconnus, sansTel } = await Sms.destinataires([String(args.a || '')]);
+    if (ambigus.length) return { ok: false, erreur: `Plusieurs contacts pour « ${ambigus[0].saisie} » : ${ambigus[0].candidats.map(c => `${c.prenom} ${c.nom || ''}`.trim()).join(', ')} — lequel ?` };
+    if (sansTel.length)  return { ok: false, erreur: `${sansTel[0]} n'a pas de numéro de portable dans le carnet : demande-le, enregistre-le (modifier_contact) puis réessaie.` };
+    if (inconnus.length) return { ok: false, erreur: `« ${inconnus[0]} » n'est ni un contact connu ni un numéro : demande le numéro.` };
+    if (!a.length) return { ok: false, erreur: 'Destinataire manquant' };
+    const contenu = String(args.contenu || '').trim();
+    if (!contenu) return { ok: false, erreur: 'Message vide' };
+    const qui = noms[0] || Sms.joli(a[0]);
+    const lien = `https://wa.me/${a[0].replace('+', '')}?text=${encodeURIComponent(contenu)}`;
+    this._lienEnAttente = { url: lien, libelle: `Ouvrir WhatsApp → ${qui}` };
+    return { ok: true, lien_whatsapp: lien, destinataire: qui, contenu,
+             message: `WhatsApp est prêt pour ${qui} : un bouton « Ouvrir WhatsApp » est affiché, elle n'a plus qu'à appuyer sur Envoyer dans WhatsApp. Dis-le-lui en une phrase (sans réciter le lien).` };
+  },
+
+  /* Le bouton WhatsApp, dans le fil écrit comme sous la réponse vocale */
+  _boutonLien(l) {
+    return l ? `<a class="btn btn-primary chat-lien" href="${esc(l.url)}" target="_blank" rel="noopener">${Icone('envoyer', { taille: 15 })} ${esc(l.libelle)}</a>` : '';
+  },
+
   async _envoyerSms(args) {
     if (typeof Sms === 'undefined') return { ok: false, erreur: 'Module SMS absent' };
     const cfg = await Sms.config();
@@ -1059,6 +1098,10 @@ SMS (TEXTOS)
 - « Envoie un SMS / un texto à Roger » ⇒ envoyer_sms avec un message court et prêt : une ou deux phrases, tutoiement ou vouvoiement selon le contact (sa fonction dans CONTACTS CONNUS), signé « Myriam – IDEAFORMA » pour un client ou un partenaire, « Myriam » pour un proche. Pas d'objet, pas de « Bonjour Monsieur, … Cordialement » à rallonge : c'est un texto.
 - L'application montre le SMS et attend la validation (« oui » / « non » / une consigne) ; un SMS « à moi » part directement. Un contact sans numéro ⇒ demande-le et enregistre-le (modifier_contact). Un numéro dicté ⇒ utilise-le tel quel.
 - Tout envoi est inscrit dans l'onglet SMS (ouvrir_page « sms »).
+
+WHATSAPP
+- « Envoie un WhatsApp à Roger… » ⇒ envoyer_whatsapp avec le message prêt (court, naturel, ton adapté au contact). Aucune validation à demander : l'application ouvre WhatsApp avec le texte déjà écrit et c'est elle qui appuie sur Envoyer. Après l'outil, dis simplement que WhatsApp est prêt pour Roger et qu'il suffit d'appuyer sur le bouton — jamais le lien en clair.
+- Le message n'est pas archivé dans l'application (il vit dans WhatsApp).
 
 E-MAILS
 - « Envoie-moi un mail avec… » ⇒ tu rassembles d'abord les données (bilan_du_jour, lister_taches, lister_agenda, chercher_dossiers…), puis envoyer_mail à ["moi"] : ça part tout de suite, sans validation. Objet précis (« Vos tâches du jeudi 5 septembre »), corps détaillé et bien rangé : une ligne vide entre les paragraphes, une liste « - » par groupe (en retard / aujourd'hui / à venir), avec l'heure, la liste et la priorité quand elles existent. Ne dis pas « voici » sans contenu : le mail doit se suffire à lui-même.
@@ -1330,9 +1373,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   /* Route « vocal » et raccourci d'écran d'accueil : on arrive directement
      en conversation. Le geste d'ouverture (tap sur le raccourci) suffit à
      débloquer la synthèse vocale sur iPhone. */
-  async ouvrirVocal() {
+  async ouvrirVocal(options = {}) {
     await this.ouvrir();
-    this.demarrerVocal();
+    this.demarrerVocal(options);
   },
 
   _accueil() {
@@ -1913,7 +1956,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     if (r && reponse != null) { r.innerHTML = this._markdown(String(reponse)); r.scrollTop = 0; }
   },
 
-  async demarrerVocal() {
+  /** @param options.demande  demande déjà dictée (Siri / Raccourci) : traitée tout de suite
+      @param options.siri     ouverture par Siri : Nanika répond « Oui Myriam ? » avant d'écouter */
+  async demarrerVocal(options = {}) {
     if (!this.peutDicter() || !this.peutLire()) {
       Toast.show("La conversation vocale demande un navigateur avec micro et synthèse vocale (Safari, Chrome)", 'warning');
       return;
@@ -1931,6 +1976,18 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     // Pas de mot d'accueil : on ouvre le micro tout de suite, elle parle,
     // puis Terminé. (L'audio a été amorcé au tap : la réponse pourra être lue.)
     this._vocalMontrer('', '');
+    const demande = this._corrigerNom(String(options.demande || '')).trim();
+    if (demande) {
+      // Arrivée par Siri avec la demande déjà dictée : on répond directement
+      this._vocalTraiter(demande, 0.9);
+      return;
+    }
+    if (options.siri) {
+      // « Dis Siri, Nanika » → « Oui Myriam ? » puis le micro
+      this._vocalPhase('parole', 'Je parle…');
+      await this._lire(`Oui ${this.PRENOM} ?`);
+      if (!this._vocal) return;
+    }
     this._vocalEcouter(true);
   },
 
@@ -2141,6 +2198,11 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         : `Désolée ${this.PRENOM}, je n'ai pas pu répondre : ${erreur}. Voulez-vous que je réessaie ?`;
     }
     this._vocalMontrer(null, aDire || '');
+    if (this._lienEnAttente) {
+      const r = document.getElementById('nanikaReponse');
+      if (r) r.insertAdjacentHTML('beforeend', `<p class="nanika-lien">${this._boutonLien(this._lienEnAttente)}</p>`);
+      this._lienEnAttente = null;
+    }
     const bNoter = document.getElementById('nanikaNoter');
     if (bNoter) { bNoter.hidden = !!erreur || !texte; bNoter.disabled = false; bNoter.innerHTML = `${Icone('notes', { taille: 14 })} Garder en note`; }
     this._vocalPhase('parole', 'Je parle…');
@@ -2214,7 +2276,14 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       if (m.role === 'user') {
         const txt = blocs.filter(b => b.type === 'text').map(b => b.text).join('\n')
                          .replace(/^\[dictée incertaine\]\s*/, '');
-        // Les tool_result sont techniques : on ne les montre pas
+        // Les tool_result sont techniques : on ne les montre pas — sauf un
+        // lien WhatsApp préparé, qui devient un bouton
+        blocs.filter(b => b.type === 'tool_result').forEach(b => {
+          try {
+            const r = JSON.parse(b.content || '{}');
+            if (r.lien_whatsapp) html += `<div class="chat-action chat-action-lien">${this._boutonLien({ url: r.lien_whatsapp, libelle: `Ouvrir WhatsApp → ${r.destinataire || ''}` })}</div>`;
+          } catch { /* pas du JSON */ }
+        });
         if (txt.trim()) {
           html += `<div class="chat-bulle chat-user">${this._markdown(txt)}</div>`;
         }
@@ -2300,8 +2369,9 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       modifier_contact: `${ic('carte')} Contact modifié`,
       supprimer_contact:`${ic('carte')} Contact supprimé`,
       derniers_envois:  `${ic('horloge')} Lecture des derniers ${esc(args.type || 'envois')}`,
-      envoyer_sms:      `${ic('mobile')} SMS proposé → ${esc((args.a || []).join(', '))}`,
-      envoyer_mail:     `${ic('envoyer')} Mail proposé « ${esc(args.objet || '')} » → ${esc((args.a || []).join(', '))}`
+      envoyer_sms:      `${ic('mobile')} SMS proposé → ${esc([].concat(args.a || []).join(', '))}`,
+      envoyer_whatsapp: `${ic('mobile')} WhatsApp préparé → ${esc(args.a || '')}`,
+      envoyer_mail:     `${ic('envoyer')} Mail proposé « ${esc(args.objet || '')} » → ${esc([].concat(args.a || []).join(', '))}`
     };
     return l[nom] || `${ic('reglages')} ${esc(nom)}`;
   },
