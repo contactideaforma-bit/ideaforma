@@ -1278,7 +1278,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
               <input type="checkbox" id="nanikaVoixServeur"> Voix naturelle (serveur) quand elle est disponible
             </label>
             <label class="nanika-case">
-              <input type="checkbox" id="nanikaEveil"> Répondre à « Nanika » dès que l'application est ouverte (micro en veille)
+              <input type="checkbox" id="nanikaEveil"> Micro en veille : répondre à « Nanika » sans appuyer sur son bouton (désactivé par défaut)
             </label>
             <label class="nanika-case">
               <input type="checkbox" id="nanikaOreille"> Oreille précise (serveur) : comprend bien mieux le français et les noms propres
@@ -1982,7 +1982,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
      SMS à Roger »), elle la traite directement. Impossible hors de l'app :
      iOS coupe tout micro web dès que Safari passe en arrière-plan.
   ══════════════════════════════════════════════ */
-  _eveil:      true,    // réglage (localStorage nanika_eveil, actif par défaut)
+  _eveil:      false,   // réglage (localStorage nanika_eveil) — DÉSACTIVÉ par défaut à sa demande (10/09) : Nanika ne s'active que quand on l'ouvre
   _eveilArme:  false,   // un premier geste a eu lieu (iPhone l'exige pour le micro)
   _eveilReco:  null,
   _eveilTimer: null,
@@ -1990,7 +1990,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   _eveilEchecs: 0,
 
   _monterEveil() {
-    try { this._eveil = localStorage.getItem('nanika_eveil') !== '0'; } catch { /* rien */ }
+    try { this._eveil = localStorage.getItem('nanika_eveil') === '1'; } catch { /* rien */ }
     if (!this.peutDicter()) return;
     // Le micro ne peut démarrer qu'après un geste : le premier tap dans l'app
     const armer = () => {
