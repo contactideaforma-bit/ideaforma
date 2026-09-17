@@ -1635,6 +1635,9 @@ tbody tr:hover td { background: var(--primary-lighter); }
   gap: 10px;
   margin-top: 8px;
 }
+@media (max-width: 900px) {
+  .doc-gen-grid { grid-template-columns: repeat(3, 1fr); }
+}
 @media (max-width: 600px) {
   .doc-gen-grid { grid-template-columns: repeat(2, 1fr); }
 }

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Aperçu des documents — IDEAFORMA (dev)</title>
+<meta name="robots" content="noindex">
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; margin: 0; background: #eef1f5; color: #1e293b; }
+  header { background: #1F3A5F; color: #fff; padding: 12px 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header b { font-size: 15px; margin-right: 8px; }
+  header button { background: #4E86B8; color: #fff; border: 0; padding: 7px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  header button.on { background: #2E9BD6; }
+  header select { padding: 6px; border-radius: 6px; border: 0; }
+  main { padding: 16px; }
+  iframe { width: 100%; height: calc(100vh - 90px); border: 1px solid #B9C4D0; background: #fff; }
+  #log { font: 12px/1.4 monospace; color: #b91c1c; white-space: pre-wrap; padding: 0 20px 8px; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+<header>
+  <b>Aperçu documents (dev)</b>
+  <select id="scenario">
+    <option value="presentiel">Présentiel — 2 jours, 1 stagiaire</option>
+    <option value="distanciel">Distanciel — 3 jours, 4 stagiaires, textes longs</option>
+    <option value="vide">Dossier presque vide (champs manquants)</option>
+  </select>
+  <button data-doc="devis">Devis</button>
+  <button data-doc="programme">Programme</button>
+  <button data-doc="convention">Convention</button>
+  <button data-doc="facture">Facture</button>
+  <button data-doc="emargement">Émargement</button>
+  <button data-doc="releve">Relevé de connexion</button>
+  <button data-doc="certificat">Certificat</button>
+</header>
+<div id="log"></div>
+<main><iframe id="frame" title="Aperçu PDF"></iframe></main>
+
+<script>
+/* ── Stubs de l'application (aucune connexion Supabase) ── */
+let _n = 0;
+let LOGO = null;
+const DataStore = {
+  async nextNumero(type) { _n += 1; return `${type.slice(0,3).toUpperCase()}-2026-${String(_n).padStart(4,'0')}`; },
+  async getProfile() {
+    return {
+      organisme: 'IDEAFORMA', nom: 'Myriam AYOUAZ', email: 'contact.ideaforma@gmail.com',
+      siret: '993 125 335 000 14', adresse: '144 avenue Charles de Gaulle — 92200 Neuilly-sur-Seine',
+      telephone: '06 25 16 13 93', numero_da: '11922999392', numero_qualiopi: '26-027-04', date_fin_qualiopi: '2029-04-02',
+      code_naf: '8559A', numero_uai: '0923466T', referent_handicap: 'Myriam AYOUAZ', referent_handicap_contact: 'contact.ideaforma@gmail.com',
+      iban: 'FR76 XXXX XXXX XXXX XXXX XXXX XXX', tva_applicable: false, logo_base64: LOGO
+    };
+  }
+};
+const OpcoPage = { CONFIG: { opco_mobilite: { label: 'OPCO Mobilités' }, akto: { label: 'AKTO' } } };
+const Toast = { show: (m, t) => log(`[${t}] ${m}`) };
+const Modal = {
+  open(title, body) {
+    const m = body.match(/src="(blob:[^"#]+)/);
+    if (m) document.getElementById('frame').src = m[1] + '#view=FitH';
+  },
+  close() {}
+};
+function log(m) { document.getElementById('log').textContent += m + '\n'; }
+
+/* ── Jeux de données ── */
+const SCENARIOS = {
+  presentiel: {
+    trainingSubject: 'Initiation informatique & utilisation d\'un nouvel outil (KARROSSERIE.PRO)',
+    companyName: 'L\'ATELIER SAINTE MARTHE', siret: '100 821 016 000 19', codeNaf: '4520A',
+    address: '25 Boulevard Massenet, 13014 Marseille', phone: '06 09 40 30 54', email: 'contact.ateliersaintemarthe@gmail.com',
+    nomGerant: 'M. Aissa CHAIB', idcc: '1090', opco: 'opco_mobilite',
+    price: 980, dureeHeures: 14, lieu: '', modalite: 'presentiel',
+    trainingDates: [{ start: '2026-10-05', end: '2026-10-06' }],
+    trainees: [{ firstName: 'Hakim', lastName: 'DADOU' }],
+    objectifs: 'Prendre en main un MacBook : naviguer dans macOS, gérer fichiers, utiliser Internet et la messagerie.\nMaîtriser les bases du smartphone Samsung : configurer l\'appareil, gérer les applications et paramètres essentiels.\nUtiliser le logiciel KARROSSERIE.PRO : créer et gérer les fiches clients / véhicules, établir des devis et ordres de réparation.',
+    contenu: 'Jour 1 — Initiation à l\'informatique (MacBook) — 7 heures\nDécouverte du MacBook : allumer/éteindre, verrouiller, le bureau macOS, le Dock\nLe trackpad et le clavier : clic, défilement, raccourcis essentiels, saisie de texte\nGestion des fenêtres et du Finder : dossiers, fichiers, copier/coller\nSafari, messagerie email, paramètres macOS\nJour 2 — Smartphone Samsung & introduction à KARROSSERIE.PRO — 7 heures\nDécouverte du Samsung, paramètres essentiels, Play Store\nPrésentation générale de KARROSSERIE.PRO, connexion, tableau de bord\nModule Clients et module Véhicules : créer, rechercher, modifier, archiver',
+    prerequis: 'Aucun prérequis — formation ouverte à tout niveau', evaluation: 'Exercices pratiques guidés à l\'issue de chaque module, évaluation orale en fin de jour 1, questionnaire de satisfaction.',
+    publicVise: 'Salarié de l\'entreprise — 1 apprenant', moyens: ''
+  },
+  distanciel: {
+    trainingSubject: 'Gestion administrative des sinistres en carrosserie et relations avec les experts et assureurs — perfectionnement',
+    companyName: 'CARROSSERIE BY SAM', siret: '123 456 789 00012', codeNaf: '4520A',
+    address: '12 chemin de la Madrague-Ville, 13015 Marseille', phone: '04 91 00 00 00', email: 'contact@carrosseriebysam.fr',
+    nomGerant: 'M. Sam BENALI', idcc: '1090', opco: 'opco_mobilite',
+    price: 2940, dureeHeures: 21, lieu: '', modalite: 'distanciel',
+    trainingDates: [{ start: '2026-11-03', end: '2026-11-04' }, { start: '2026-11-10', end: '' }],
+    trainees: [{ firstName: 'Nadia', lastName: 'BOUKHALFA' }, { firstName: 'Karim', lastName: 'OUALI' }, { firstName: 'Jean-Baptiste', lastName: 'DE LA TOUR-MONTAGNE' }, { firstName: 'Léa', lastName: 'MARTIN' }],
+    objectifs: 'Décrire le parcours complet d\'un sinistre, de la déclaration au règlement, et identifier les responsabilités de chaque acteur (assuré, assureur, expert, réparateur).\nConstituer un dossier de sinistre complet et conforme, avec les pièces justificatives attendues par les assureurs et les experts.\nMettre en œuvre la cession de créance et suivre les paiements, relancer efficacement les impayés.\nUtiliser un outil numérique de suivi des dossiers pour piloter l\'activité de l\'atelier au quotidien.',
+    contenu: 'Module 1 : Le parcours d\'un sinistre\n• Déclaration, expertise, accord, réparation, règlement\n• Rôles et responsabilités : assuré, assureur, expert, réparateur\n• Délais légaux et conventionnels\nModule 2 : Le dossier de sinistre\n• Pièces justificatives et organisation du dossier\n• Rédaction du devis et de l\'ordre de réparation\n• Photos, PV, rapports d\'expertise\nModule 3 : Cession de créance et relations assureurs\n• Mécanisme de la cession de créance (art. 1321 et s. du Code civil)\n• Notification, suivi et relance des paiements\n• Gestion des litiges et des impayés\nModule 4 : Outils numériques de suivi\n• Tableau de bord des dossiers en cours\n• Indicateurs d\'activité et alertes\n• Cas pratique de bout en bout sur un dossier réel de l\'atelier',
+    prerequis: 'Exercer une fonction administrative ou de réception en atelier de carrosserie ; disposer d\'un ordinateur avec caméra et micro.',
+    evaluation: 'Quiz à la fin de chaque module, étude de cas finale évaluée par le formateur, questionnaire de satisfaction à chaud et évaluation à froid à 3 mois.',
+    publicVise: 'Réceptionnaires, assistant(e)s administratif(ve)s et gérants d\'ateliers de carrosserie', moyens: 'Classe virtuelle synchrone avec partage d\'écran, documents partagés, cas pratiques issus des dossiers de l\'atelier, support numérique remis à chaque stagiaire.'
+  },
+  vide: {
+    trainingSubject: 'Excel avancé', companyName: 'GARAGE DUPONT', opco: 'akto', price: 690, modalite: 'mixte',
+    trainingDates: [{ start: '2026-12-01', end: '' }], trainees: [{ firstName: 'Paul', lastName: 'DUPONT' }],
+    objectifs: '', contenu: '', prerequis: '', evaluation: '', publicVise: '', moyens: '', lieu: '', dureeHeures: ''
+  }
+};
+
+async function loadLogo() {
+  try {
+    const r = await fetch('/logo-ideaforma.png'); const b = await r.blob();
+    LOGO = await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(b); });
+  } catch (e) { log('logo introuvable : ' + e.message); }
+}
+
+document.querySelectorAll('header button').forEach(btn => btn.addEventListener('click', async () => {
+  document.querySelectorAll('header button').forEach(b => b.classList.remove('on')); btn.classList.add('on');
+  document.getElementById('log').textContent = '';
+  const d = { ...SCENARIOS[document.getElementById('scenario').value] };
+  try {
+    switch (btn.dataset.doc) {
+      case 'devis':      await Documents.genererDevis(d); break;
+      case 'programme':  await Documents.genererProgramme(d); break;
+      case 'convention': await Documents.genererConvention(d); break;
+      case 'facture':    await Documents.genererFacture(d); break;
+      case 'emargement': await Documents.genererEmargement(d); break;
+      case 'releve':     await Documents.genererReleveConnexion(d); break;
+      case 'certificat': await Documents.genererCertificat(d); break;
+    }
+  } catch (e) { log('ERREUR : ' + (e.stack || e.message)); }
+}));
+loadLogo();
+</script>
+<script src="../js/documents.js"></script>
+</body>
+</html>

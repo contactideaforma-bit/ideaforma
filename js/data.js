@@ -35,6 +35,10 @@ function _mapDossierRow(row) {
     modalite:        row.modalite         || 'presentiel',
     evaluation:      row.evaluation       || '',
     prerequis:       row.prerequis        || '',
+    dureeHeures:     row.duree_heures != null ? parseFloat(row.duree_heures) : null,
+    lieu:            row.lieu             || '',
+    publicVise:      row.public_vise      || '',
+    moyens:          row.moyens           || '',
     createdAt:       row.cree_le,
     updatedAt:       row.modifie_le
   };
@@ -69,7 +73,8 @@ const DataStore = {
         nb_salaries, nom_gerant, idcc, salaries, cree_le,
         dossiers(id, client_id, sujet_formation, prix, dates_formation,
                  salaries, statut, notes, objectifs, contenu, modalite,
-                 evaluation, prerequis, cree_le, modifie_le)
+                 evaluation, prerequis, duree_heures, lieu, public_vise, moyens,
+                 cree_le, modifie_le)
       `)
       .eq('user_id', uid)
       .eq('opco', opco)
@@ -99,7 +104,8 @@ const DataStore = {
         nb_salaries, nom_gerant, idcc, salaries, cree_le,
         dossiers(id, client_id, sujet_formation, prix, dates_formation,
                  salaries, statut, notes, objectifs, contenu, modalite,
-                 evaluation, prerequis, cree_le, modifie_le)
+                 evaluation, prerequis, duree_heures, lieu, public_vise, moyens,
+                 cree_le, modifie_le)
       `)
       .eq('user_id', uid)
       .order('nom_entreprise', { ascending: true });
@@ -190,7 +196,11 @@ const DataStore = {
         contenu:         d.contenu        || null,
         modalite:        d.modalite       || 'presentiel',
         evaluation:      d.evaluation     || null,
-        prerequis:       d.prerequis      || null
+        prerequis:       d.prerequis      || null,
+        duree_heures:    d.dureeHeures !== undefined && d.dureeHeures !== '' && d.dureeHeures !== null ? parseFloat(d.dureeHeures) : null,
+        lieu:            d.lieu           || null,
+        public_vise:     d.publicVise     || null,
+        moyens:          d.moyens         || null
       })
       .select()
       .single();
@@ -215,7 +225,11 @@ const DataStore = {
         contenu:         d.contenu        || null,
         modalite:        d.modalite       || 'presentiel',
         evaluation:      d.evaluation     || null,
-        prerequis:       d.prerequis      || null
+        prerequis:       d.prerequis      || null,
+        duree_heures:    d.dureeHeures !== undefined && d.dureeHeures !== '' && d.dureeHeures !== null ? parseFloat(d.dureeHeures) : null,
+        lieu:            d.lieu           || null,
+        public_vise:     d.publicVise     || null,
+        moyens:          d.moyens         || null
       })
       .eq('id', id)
       .eq('user_id', uid)
@@ -375,6 +389,12 @@ const DataStore = {
       telephone:          updates.telephone         || null,
       numero_da:          updates.numero_da         || null,
       numero_qualiopi:    updates.numero_qualiopi   || null,
+      email:              updates.email             || null,
+      code_naf:           updates.code_naf          || null,
+      numero_uai:         updates.numero_uai        || null,
+      referent_handicap:  updates.referent_handicap || null,
+      referent_handicap_contact: updates.referent_handicap_contact || null,
+      iban:               updates.iban              || null,
       couleur_primaire:   updates.couleur_primaire  || '#1E2D4B',
       couleur_secondaire: updates.couleur_secondaire|| '#3B82F6'
     };

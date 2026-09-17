@@ -471,6 +471,36 @@ const SettingsPage = {
                   <input type="text" name="numero_qualiopi" value="${esc(profile.numero_qualiopi)}"
                     placeholder="Ex. 2023/2026-XXX" />
                 </div>
+                <div class="field">
+                  <label>Email de l'organisme (sur les documents)</label>
+                  <input type="email" name="email" value="${esc(profile.email)}"
+                    placeholder="contact@…" />
+                </div>
+                <div class="field">
+                  <label>Code NAF</label>
+                  <input type="text" name="code_naf" value="${esc(profile.code_naf)}"
+                    placeholder="Ex. 8559A" maxlength="6" />
+                </div>
+                <div class="field">
+                  <label>N° UAI</label>
+                  <input type="text" name="numero_uai" value="${esc(profile.numero_uai)}"
+                    placeholder="Ex. 0923466T" maxlength="8" />
+                </div>
+                <div class="field">
+                  <label>Référent handicap (nom)</label>
+                  <input type="text" name="referent_handicap" value="${esc(profile.referent_handicap)}"
+                    placeholder="Ex. Myriam AYOUAZ" />
+                </div>
+                <div class="field">
+                  <label>Référent handicap (contact)</label>
+                  <input type="text" name="referent_handicap_contact" value="${esc(profile.referent_handicap_contact)}"
+                    placeholder="Email ou téléphone" />
+                </div>
+                <div class="field form-col-full">
+                  <label>IBAN (affiché sur les factures)</label>
+                  <input type="text" name="iban" value="${esc(profile.iban)}"
+                    placeholder="FR76 …" />
+                </div>
               </div>
 
               <!-- ── Logo et couleur ── -->
@@ -664,6 +694,12 @@ const SettingsPage = {
         adresse:          form.querySelector('[name="adresse"]').value.trim(),
         numero_da:        form.querySelector('[name="numero_da"]').value.trim(),
         numero_qualiopi:  form.querySelector('[name="numero_qualiopi"]').value.trim(),
+        email:            form.querySelector('[name="email"]').value.trim(),
+        code_naf:         form.querySelector('[name="code_naf"]').value.trim().toUpperCase(),
+        numero_uai:       form.querySelector('[name="numero_uai"]').value.trim().toUpperCase(),
+        referent_handicap: form.querySelector('[name="referent_handicap"]').value.trim(),
+        referent_handicap_contact: form.querySelector('[name="referent_handicap_contact"]').value.trim(),
+        iban:             form.querySelector('[name="iban"]').value.trim().replace(/\s+/g, ' '),
         couleur_primaire:   form.querySelector('[name="couleur_primaire"]').value,
         couleur_secondaire: form.querySelector('[name="couleur_secondaire"]').value,
         logo_base64:        this._logoBase64

@@ -678,6 +678,12 @@ const OpcoPage = {
             <div class="field form-col-full"><label>Prérequis</label>
               <input type="text" name="prerequis" id="fieldPrerequis" value="${esc(d?.prerequis)}"
                 placeholder="Ex. Aucun prérequis / Maîtrise de base du français…" /></div>
+            <div class="field form-col-full"><label>Public visé</label>
+              <input type="text" name="publicVise" value="${esc(d?.publicVise)}"
+                placeholder="Ex. Salariés de l'atelier — réceptionnaires et carrossiers" /></div>
+            <div class="field form-col-full"><label>Méthodes et moyens pédagogiques</label>
+              <input type="text" name="moyens" value="${esc(d?.moyens)}"
+                placeholder="Ex. Démonstrations, exercices pratiques sur les outils de l'entreprise, support remis…" /></div>
           </div>
         </div>
 
@@ -687,6 +693,12 @@ const OpcoPage = {
             <div class="field"><label>Prix HT (€) *</label>
               <input type="number" name="price" value="${d?.price||''}"
                 placeholder="Ex. 1500" min="0" step="0.01" required /></div>
+            <div class="field"><label>Durée totale (heures)</label>
+              <input type="number" name="dureeHeures" value="${d?.dureeHeures ?? ''}"
+                placeholder="Ex. 14 (7 h par jour si vide)" min="0" step="0.5" /></div>
+            <div class="field form-col-full"><label>Lieu de la formation</label>
+              <input type="text" name="lieu" value="${esc(d?.lieu)}"
+                placeholder="Ex. Dans les locaux de l'entreprise — 25 bd Massenet, 13014 Marseille / À distance" /></div>
           </div>
           <div style="margin-top:10px;">
             <div style="font-size:12.5px;font-weight:500;color:var(--text-muted);margin-bottom:8px;">Dates de formation</div>
@@ -866,6 +878,10 @@ const OpcoPage = {
       modalite:   form.querySelector('[name="modalite"]').value,
       evaluation: form.querySelector('[name="evaluation"]').value.trim(),
       prerequis:  form.querySelector('[name="prerequis"]').value.trim(),
+      publicVise: form.querySelector('[name="publicVise"]').value.trim(),
+      moyens:     form.querySelector('[name="moyens"]').value.trim(),
+      dureeHeures: form.querySelector('[name="dureeHeures"]').value,
+      lieu:       form.querySelector('[name="lieu"]').value.trim(),
       status:     form.querySelector('[name="status"]').value,
       notes:      form.querySelector('[name="notes"]').value.trim()
     };
@@ -918,7 +934,7 @@ const OpcoPage = {
     if (!c || !d) return;
 
     const docData = { ...d, companyName: c.companyName, siret: c.siret,
-      address: c.address, phone: c.phone, email: c.email,
+      address: c.address, phone: c.phone, email: c.email, codeNaf: c.codeNaf,
       nomGerant: c.nomGerant, idcc: c.idcc, opco };
 
     Modal.open(`📄 Documents — ${esc(d.trainingSubject)}`, `
@@ -946,9 +962,27 @@ const OpcoPage = {
           <span class="doc-gen-label">Facture</span>
           <span class="doc-gen-sub">Facture à l'OPCO</span>
         </button>
-      </div>`,
+        <button class="doc-gen-btn" data-doc="emargement">
+          <span class="doc-gen-icon">✍️</span>
+          <span class="doc-gen-label">Émargement</span>
+          <span class="doc-gen-sub">Feuille d'émargement (présentiel)</span>
+        </button>
+        <button class="doc-gen-btn" data-doc="releve">
+          <span class="doc-gen-icon">💻</span>
+          <span class="doc-gen-label">Relevé de connexion</span>
+          <span class="doc-gen-sub">Attestation d'assiduité (distanciel)</span>
+        </button>
+        <button class="doc-gen-btn" data-doc="certificat">
+          <span class="doc-gen-icon">🎓</span>
+          <span class="doc-gen-label">Certificat</span>
+          <span class="doc-gen-sub">Certificat de réalisation</span>
+        </button>
+      </div>
+      <p style="font-size:11.5px;color:var(--text-muted);margin-top:12px;">
+        Ordre du dossier : devis → convention + programme → émargement ou relevé de connexion → certificat → facture.
+      </p>`,
       [{ label:'Fermer', cls:'btn btn-secondary', action: () => Modal.close() }],
-      'modal-sm'
+      'modal-lg'
     );
 
     setTimeout(() => {
@@ -961,6 +995,9 @@ const OpcoPage = {
               case 'programme':  await Documents.genererProgramme(docData);  break;
               case 'convention': await Documents.genererConvention(docData); break;
               case 'facture':    await Documents.genererFacture(docData);    break;
+              case 'emargement': await Documents.genererEmargement(docData); break;
+              case 'releve':     await Documents.genererReleveConnexion(docData); break;
+              case 'certificat': await Documents.genererCertificat(docData); break;
             }
           } catch (err) { Toast.show('Erreur : ' + err.message, 'error'); }
           btn.disabled = false; btn.style.opacity = '1';
