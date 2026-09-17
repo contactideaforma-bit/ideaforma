@@ -42,7 +42,20 @@ const Notifs = {
   async initServiceWorker() {
     if (!('serviceWorker' in navigator)) return null;
     try {
-      this._sw = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      // v53 : les fichiers JS/CSS sont servis depuis le cache de la version.
+      // Quand une nouvelle version prend la main (nouveau sw.js après une mise
+      // en ligne), on recharge UNE fois la page pour charger les nouveaux
+      // fichiers — sans ça, on tournerait sur l'ancienne version jusqu'au
+      // prochain rechargement manuel.
+      if (navigator.serviceWorker.controller && !this._rechargementPose) {
+        this._rechargementPose = true;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (this._recharge) return;
+          this._recharge = true;
+          window.location.reload();
+        });
+      }
+      this._sw = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
       await navigator.serviceWorker.ready;
 
       // Le service worker demande un réabonnement (clé expirée côté navigateur)

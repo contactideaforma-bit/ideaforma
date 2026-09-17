@@ -138,10 +138,25 @@ module.exports = async function handler(req, res) {
     return res.status(413).json({ error: 'Conversation trop longue — ouvrez une nouvelle discussion' });
   }
 
+  /* v53 — le système peut être une chaîne (appels historiques) ou un tableau
+     de blocs { type:'text', text, cache_control? } : Nanika envoie sa partie
+     fixe avec cache_control pour que le modèle la relise depuis le cache
+     (outils compris) au lieu de la retraiter à chaque tour. */
+  let systeme = '';
+  if (typeof system === 'string') systeme = system;
+  else if (Array.isArray(system)) {
+    systeme = system
+      .filter(b => b && b.type === 'text' && typeof b.text === 'string' && b.text.trim())
+      .map(b => b.cache_control && b.cache_control.type === 'ephemeral'
+        ? { type: 'text', text: b.text, cache_control: { type: 'ephemeral' } }
+        : { type: 'text', text: b.text });
+    if (!systeme.length) systeme = '';
+  }
+
   const corps = {
     model:      MODELES[profil] || MODELE_DEFAUT,
     max_tokens: Math.min(Number(max_tokens) || 1500, MAX_TOKENS_LIMIT),
-    system:     typeof system === 'string' ? system : '',
+    system:     systeme,
     messages
   };
   /* Réflexion étendue (Nanika) : le modèle raisonne avant de répondre.

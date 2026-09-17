@@ -79,6 +79,16 @@ const DataStore = {
     return (data || []).map(_mapClientRow);
   },
 
+  /** v53 — juste la colonne opco : sert aux pastilles de la barre latérale,
+      qui chargeaient jusqu'ici TOUS les clients et TOUS leurs dossiers
+      (textes de programme compris) à chaque ouverture. */
+  async getOpcosAvecClients() {
+    const uid = await this._uid();
+    const { data, error } = await supa.from('clients').select('opco').eq('user_id', uid);
+    if (error) this._handleError(error, 'getOpcosAvecClients');
+    return new Set((data || []).map(c => c.opco));
+  },
+
   /** Retourne tous les clients (tous OPCOs) avec leurs dossiers */
   async getAllClients() {
     const uid = await this._uid();

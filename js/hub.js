@@ -499,8 +499,10 @@ const Hub = {
     try { lu = await DataStore.getListeUrgente(true); }
     catch (err) { Toast.show('Erreur : ' + esc(err.message), 'error'); return; }
     if (!this._listes?.length) this._listes = await DataStore.getListes();
-    TachesPage._listes = this._listes;
-    TachesPage.ouvrirForm(
+    // v53 : l'objet s'appelle « Taches » (TachesPage n'existait pas → le
+    // bouton Urgence plantait sans rien dire).
+    this._preparer();
+    Taches.ouvrirForm(
       { description: '', priorite: 'haute', echeance: Dates.aujourdhui(), liste_id: lu?.id || null },
       async () => {
         updateJourneeBadge();

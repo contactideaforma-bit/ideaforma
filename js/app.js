@@ -790,34 +790,28 @@ async function updateJourneeBadge() {
     else       { el.style.display = 'none'; }
   };
 
-  try {
-    const actions = await DataStore.getActionsDuJour(0);   // échéance ≤ aujourd'hui
-    pastille('navJourneeBadge', actions.length);
-  } catch { pastille('navJourneeBadge', 0); }
-
-  try {
-    const hui    = Dates.aujourdhui();
-    const taches = await DataStore.getTachesFiltrees({ fait: false, horizonJours: 0 });
-    pastille('navTachesBadge', taches.filter(t => t.echeance && t.echeance <= hui).length);
-  } catch { pastille('navTachesBadge', 0); }
-
-  try {
-    const j0 = new Date(); j0.setHours(0, 0, 0, 0);
-    const j1 = new Date(j0.getTime() + 86400000);
-    const items = await DataStore.getAgenda(new Date().toISOString(), j1.toISOString(),
-                                            { types: ['evenement', 'session'] });
-    pastille('navAgendaBadge', items.length);
-  } catch { pastille('navAgendaBadge', 0); }
+  // v53 : les trois requêtes partent ensemble (elles étaient enchaînées).
+  const hui = Dates.aujourdhui();
+  const j0  = new Date(); j0.setHours(0, 0, 0, 0);
+  const j1  = new Date(j0.getTime() + 86400000);
+  const [actions, taches, items] = await Promise.all([
+    DataStore.getActionsDuJour(0).catch(() => []),   // échéance ≤ aujourd'hui
+    DataStore.getTachesFiltrees({ fait: false, horizonJours: 0 }).catch(() => []),
+    DataStore.getAgenda(new Date().toISOString(), j1.toISOString(),
+                        { types: ['evenement', 'session'] }).catch(() => [])
+  ]);
+  pastille('navJourneeBadge', actions.length);
+  pastille('navTachesBadge', taches.filter(t => t.echeance && t.echeance <= hui).length);
+  pastille('navAgendaBadge', items.length);
 }
 
 /* ── Nav dots update ── */
 async function updateNavDots() {
   try {
-    const all = await DataStore.getAllClients();
+    const presents = await DataStore.getOpcosAvecClients();
     DataStore.OPCOS.forEach(op => {
-      const count = all.filter(c => c.opco === op).length;
-      const dot   = document.querySelector(`[data-opco="${op}"]`);
-      if (dot) dot.parentElement.classList.toggle('has-clients', count > 0);
+      const dot = document.querySelector(`[data-opco="${op}"]`);
+      if (dot) dot.parentElement.classList.toggle('has-clients', presents.has(op));
     });
   } catch { /* silently ignore */ }
 }
@@ -890,23 +884,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.key === 'Escape') { Modal.close(); MobileNav.close(); }
   });
 
-  // Nav dots async init
-  updateNavDots();
-  updateJourneeBadge();
-
-  // Surveillance des rendez-vous imminents tant que l'onglet est ouvert
-  Notifs.demarrerVeille();
-
   // Le bouton d'assistant, en bas à droite de toutes les pages
   Assistant.monter();
 
-  // Rafraîchissement des pastilles toutes les 5 minutes
-  setInterval(updateJourneeBadge, 300000);
-
-  // Page initiale : celle demandée dans l'URL, sinon le tableau de bord
+  // Page initiale D'ABORD : celle demandée dans l'URL, sinon le tableau de
+  // bord. (v53 : elle partait après les pastilles et la veille, qui lui
+  // volaient la bande passante au démarrage.)
   const depart = location.hash.slice(1);
   Router.navigate(depart && (Router.PAGES[depart] || DataStore.OPCOS.includes(depart))
     ? depart : 'dashboard', true);
   // Raccourci « Parler à Nanika » : le tableau de bord d'abord, puis la voix
   if (/^(vocal|nanika)(\?|$)/.test(depart)) Router.navigate(depart);
+
+  // Le reste (pastilles, veille des rendez-vous) une fois la page lancée
+  setTimeout(() => {
+    updateNavDots();
+    updateJourneeBadge();
+    Notifs.demarrerVeille();
+  }, 1200);
+
+  // Rafraîchissement des pastilles toutes les 5 minutes
+  setInterval(updateJourneeBadge, 300000);
 });

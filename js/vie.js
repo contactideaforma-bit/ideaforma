@@ -74,6 +74,7 @@ Object.assign(DataStore, {
   },
 
   async addListe(d) {
+    if (typeof Assistant !== 'undefined') Assistant._oublierContexte?.();   // v53 : Nanika relit listes/carnet
     const uid = await this._uid();
     const { data, error } = await supa.from('listes').insert({
       user_id: uid,
@@ -932,6 +933,7 @@ Object.assign(DataStore, {
   },
 
   async addContact(d) {
+    if (typeof Assistant !== 'undefined') Assistant._oublierContexte?.();   // v53 : Nanika relit listes/carnet
     const uid = await this._uid();
     const { data, error } = await supa.from('contacts').insert({
       user_id:   uid,
@@ -948,6 +950,7 @@ Object.assign(DataStore, {
   },
 
   async updateContact(id, d) {
+    if (typeof Assistant !== 'undefined') Assistant._oublierContexte?.();   // v53 : Nanika relit listes/carnet
     const uid = await this._uid();
     const patch = {};
     ['prenom', 'nom', 'email', 'telephone', 'societe', 'fonction', 'notes'].forEach(k => {

@@ -1015,16 +1015,34 @@ const Assistant = {
   /* ══════════════════════════════════════════════
      CONTEXTE ENVOYÉ AU MODÈLE
   ══════════════════════════════════════════════ */
-  async systeme(vocal = this._vocal) {
-    const maintenant = new Date();
+  /* ── Contexte (étiquettes, listes, carnet) : mis en cache 60 s ──
+     Chaque question relançait trois requêtes avant même d'appeler le modèle. */
+  _ctxCache: null,
+  async _contexte(force = false) {
+    if (!force && this._ctxCache && Date.now() - this._ctxCache.le < 60000) return this._ctxCache;
     const [etiquettes, listes, contacts] = await Promise.all([
       DataStore.getEtiquettes(), DataStore.getListes(),
       (typeof Mails !== 'undefined' ? Mails.contacts(true) : Promise.resolve([])).catch(() => [])
     ]);
     this._etiquettes = etiquettes;
     this._listes     = listes;
+    this._ctxCache   = { etiquettes, listes, contacts, le: Date.now() };
+    return this._ctxCache;
+  },
+  /* À appeler après une création (liste, contact) pour que Nanika la voie tout de suite */
+  _oublierContexte() { this._ctxCache = null; },
 
-    return `Tu es Nanika, l'assistante personnelle intégrée à IDEAFORMA, l'application de gestion de ton utilisatrice unique — la seule personne qui te parle. Elle est la fondatrice et dirigeante d'IDEAFORMA.
+  /* v53 — le prompt système est rendu en DEUX blocs :
+       1. tout ce qui ne change jamais (personnalité, règles) → mis en cache
+          côté Anthropic (cache_control) : relu en quelques dizaines de ms au
+          lieu d'être retraité à chaque tour, avec les outils ;
+       2. ce qui bouge (heure, étiquettes, listes, carnet, mode vocal).
+     Le serveur (api/ai.js) accepte ce tableau de blocs. */
+  async systeme(vocal = this._vocal) {
+    const maintenant = new Date();
+    const { etiquettes, listes, contacts } = await this._contexte();
+
+    const statique = `Tu es Nanika, l'assistante personnelle intégrée à IDEAFORMA, l'application de gestion de ton utilisatrice unique — la seule personne qui te parle. Elle est la fondatrice et dirigeante d'IDEAFORMA.
 Cette application sert à deux choses : suivre les dossiers de formation professionnelle déposés auprès des OPCO (organisme de formation certifié Qualiopi), et organiser le quotidien — tâches, rendez-vous, notes, documents.
 
 QUI TU ES
@@ -1033,20 +1051,6 @@ Tu n'as aucune ambition propre : tu ne fais que ce que tes outils permettent, su
 
 TU N'ES PAS LIMITÉ À L'APPLICATION
 Réponds à toute question, quel que soit le sujet : culture générale, droit de la formation, rédaction d'un mail ou d'un courrier, calculs, traduction, conseils, idées, explications, vie personnelle. Réponds-y directement, complètement et sans détour, comme un assistant polyvalent de confiance. N'appelle les outils que lorsque la demande concerne les données de l'application.
-
-CONTEXTE TEMPOREL
-Nous sommes le ${Dates.longue(maintenant)} ${maintenant.getFullYear()}, il est ${Dates.heure(maintenant)} (heure de Paris).
-Date du jour au format machine : ${Dates.iso(maintenant)}.
-Calcule toujours les dates relatives ("demain", "vendredi prochain") à partir de là.
-
-ÉTIQUETTES DISPONIBLES (utilise le nom exact)
-${etiquettes.map(e => `- ${e.nom}`).join('\n') || '- aucune'}
-
-LISTES DE TÂCHES DISPONIBLES (nom exact)
-${listes.map(l => `- ${l.nom}`).join('\n') || '- aucune'}
-
-CONTACTS CONNUS (carnet d'adresses — « envoie un mail à Roger » = ce Roger-là)
-${contacts.map(c => `- ${c.prenom}${c.nom ? ' ' + c.nom : ''}${c.societe ? ` (${c.societe}${c.fonction ? ', ' + c.fonction : ''})` : c.fonction ? ` (${c.fonction})` : ''} <${c.email}>${c.telephone ? ` · ${c.telephone}` : ''} — id ${c.id}`).join('\n') || '- aucun pour le moment'}
 
 PRISE DE NOTES RAPIDE — LA RÈGLE D'OR : RIEN NE SE PERD
 L'utilisateur te dicte souvent en vrac, à la voix, plusieurs choses d'un coup.
@@ -1138,7 +1142,21 @@ COMMENT TRAVAILLER
 - Pour les questions sur l'activité (chiffre d'affaires, dossiers en retard), appelle resume_activite ou chercher_dossiers plutôt que de deviner.
 
 TON
-Direct, concret, en français. Pas de listes à puces quand deux phrases suffisent. Pas de formules de politesse inutiles.` + (vocal ? `
+Direct, concret, en français. Pas de listes à puces quand deux phrases suffisent. Pas de formules de politesse inutiles.`;
+
+    const dynamique = `CONTEXTE TEMPOREL
+Nous sommes le ${Dates.longue(maintenant)} ${maintenant.getFullYear()}, il est ${Dates.heure(maintenant)} (heure de Paris).
+Date du jour au format machine : ${Dates.iso(maintenant)}.
+Calcule toujours les dates relatives ("demain", "vendredi prochain") à partir de là.
+
+ÉTIQUETTES DISPONIBLES (utilise le nom exact)
+${etiquettes.map(e => `- ${e.nom}`).join('\n') || '- aucune'}
+
+LISTES DE TÂCHES DISPONIBLES (nom exact)
+${listes.map(l => `- ${l.nom}`).join('\n') || '- aucune'}
+
+CONTACTS CONNUS (carnet d'adresses — « envoie un mail à Roger » = ce Roger-là)
+${contacts.map(c => `- ${c.prenom}${c.nom ? ' ' + c.nom : ''}${c.societe ? ` (${c.societe}${c.fonction ? ', ' + c.fonction : ''})` : c.fonction ? ` (${c.fonction})` : ''} <${c.email}>${c.telephone ? ` · ${c.telephone}` : ''} — id ${c.id}`).join('\n') || '- aucun pour le moment'}` + (vocal ? `
 
 MODE VOCAL ACTIF — CONVERSATION DE VIVE VOIX
 Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te répondra en parlant. Donc :
@@ -1151,6 +1169,11 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
 - Un numéro de téléphone s'écrit en chiffres groupés par deux (06 25 16 13 93) : l'application le lit en lettres toute seule. Ne le convertis pas en mots toi-même.
 - La transcription écrit parfois ton nom « Naïka », « Nanica », « Annika », « Monica », « Nanik » : c'est toi qu'on appelle, comprends-le et ne relève pas.
 - Si elle dit « au revoir », « c'est tout », « merci Nanika, ce sera tout », réponds brièvement : la conversation se termine.` : '');
+
+    return [
+      { type: 'text', text: statique, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: dynamique }
+    ];
   },
 
   /* ══════════════════════════════════════════════
@@ -1337,6 +1360,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     if (this._ouvert) return;
     this._ouvert = true;
     this._eveilCouper();
+    this._contexte().catch(() => {});   // v53 : le contexte se charge pendant qu'elle tape
     const p = document.getElementById('chatbot');
     p.hidden = false;
     document.getElementById('chatbotVoile').hidden = false;
@@ -1621,7 +1645,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     const { data: { session } } = await supa.auth.getSession();
     if (!session?.access_token) return null;
     const ctrl = new AbortController();
-    const garde = setTimeout(() => ctrl.abort(), 20000);
+    const garde = setTimeout(() => ctrl.abort(), 26000);   // api/tts.js a 30 s ; au-delà, voix native
     try {
       const res = await fetch('/api/tts', {
         method: 'POST', signal: ctrl.signal,
@@ -1821,12 +1845,14 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
   /* Prénoms du carnet et noms de listes : soufflés au modèle pour qu'il les
      orthographie bien (« Roger Durand », « Sophie Martin »…). */
   async _indicesVocabulaire() {
+    // v53 : même contexte mis en cache que le prompt (plus deux requêtes
+    // entre la fin de la phrase et le départ de la transcription).
     const mots = [];
     try {
-      const contacts = typeof Mails !== 'undefined' ? await Mails.contacts() : [];
+      const { contacts, listes } = await this._contexte();
       (contacts || []).slice(0, 60).forEach(c => mots.push(`${c.prenom || ''} ${c.nom || ''}`.trim()));
+      (listes || []).slice(0, 30).forEach(l => mots.push(l.nom));
     } catch { /* sans carnet */ }
-    try { (await DataStore.getListes()).slice(0, 30).forEach(l => mots.push(l.nom)); } catch { /* rien */ }
     return mots.filter(Boolean).join(', ');
   },
 
@@ -2297,6 +2323,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     if (this._vocal) return;
     this._vocal = true;
     this._vocalSilences = 0;
+    this._contexte().catch(() => {});   // v53 : carnet et listes prêts avant la première phrase
     this._amorcerAudio();   // dans la foulée du tap : débloque l'audio sur iPhone
     if (this._reco) { try { this._reco.stop(); } catch { /* rien */ } }
     document.getElementById('nanikaVocal').hidden = false;
@@ -2754,6 +2781,24 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     const b = document.getElementById('chatEnvoyer'); if (b) b.disabled = false;
   },
 
+  /* v53 — l'historique est un JOURNAL : on n'attend plus chaque écriture en
+     base avant de parler au modèle (deux ou trois allers-retours Supabase par
+     tour, soit facilement une seconde). Les écritures s'enchaînent dans
+     l'ordre, en arrière-plan ; si l'une échoue, la conversation continue. */
+  OUTILS_LECTURE: new Set(['bilan_du_jour', 'chercher_dossiers', 'chercher_notes', 'derniers_envois',
+                           'lister_agenda', 'lister_taches', 'resume_activite']),
+
+  _fileJournal: Promise.resolve(),
+  _journaliser(titre, role, contenu) {
+    this._fileJournal = this._fileJournal.then(async () => {
+      if (!this.conversationId) {
+        const c = await DataStore.addConversation(String(titre || '').slice(0, 60));
+        this.conversationId = c.id;
+      }
+      await DataStore.addMessage(this.conversationId, role, contenu);
+    }).catch(err => console.warn('[Nanika] journal', err?.message || err));
+  },
+
   async envoyer(texteForce = null, options = {}) {
     if (this._occupe) return;
     const input = document.getElementById('chatInput');
@@ -2767,18 +2812,29 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
     const perime = () => gen !== this._gen;   // une autre demande a pris la main
     document.getElementById('chatEnvoyer').disabled = true;
 
+    // v53 — chien de garde : quoi qu'il arrive (outil qui ne rend jamais la
+    // main, serveur muet, enchaînement trop long), Nanika ne reste jamais
+    // figée sur « Je réfléchis… » plus de 2 min 30. Elle le dit, et on
+    // repart d'un état sain.
+    setTimeout(() => {
+      if (perime() || !this._occupe) return;
+      this._abandonnerDemande();
+      this._parle = false;
+      this._peindre();
+      const fil = document.getElementById('chatFil');
+      fil?.insertAdjacentHTML('beforeend',
+        `<div class="chat-bulle chat-erreur">${Icone('alerte', { taille: 16 })} La demande a pris trop de temps et a été interrompue. Reformulez ou réessayez.</div>`);
+      if (fil) fil.scrollTop = fil.scrollHeight;
+      if (this._vocal) this._apresReponse('', "j'ai mis trop de temps et j'ai préféré m'arrêter");
+    }, 150000);
+
     const incertain = typeof options.confiance === 'number' && options.confiance < 0.65
                       && texte.split(/\s+/).length >= 3;
     const texteModele = incertain ? `[dictée incertaine] ${texte}` : texte;
 
     try {
-      if (!this.conversationId) {
-        const c = await DataStore.addConversation(texte.slice(0, 60));
-        this.conversationId = c.id;
-      }
-
       this._messages.push({ role: 'user', content: [{ type: 'text', text: texteModele }] });
-      await DataStore.addMessage(this.conversationId, 'user', [{ type: 'text', text: texteModele }]);
+      this._journaliser(texte, 'user', [{ type: 'text', text: texteModele }]);
       this._peindre('<span class="chat-points"><i></i><i></i><i></i></span>');
 
       const systeme = await this.systeme();
@@ -2790,7 +2846,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         if (perime()) return;
 
         this._messages.push({ role: 'assistant', content: reponse.content });
-        await DataStore.addMessage(this.conversationId, 'assistant', reponse.content);
+        this._journaliser(texte, 'assistant', reponse.content);
         this._peindre(reponse.stop_reason === 'tool_use' || reponse.stop_reason === 'pause_turn'
           ? '<span class="chat-points"><i></i><i></i><i></i></span>' : null);
 
@@ -2798,23 +2854,36 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         if (reponse.stop_reason === 'pause_turn') continue;
         if (reponse.stop_reason !== 'tool_use') break;
 
-        // Exécution des outils demandés
-        const resultats = [];
-        for (const bloc of reponse.content.filter(b => b.type === 'tool_use')) {
+        // Exécution des outils demandés. v53 : les LECTURES partent en
+        // parallèle (le modèle en demande souvent 2 ou 3 d'un coup : agenda +
+        // tâches + dossiers) ; tout ce qui écrit, envoie ou attend une
+        // validation reste dans l'ordre.
+        const blocsOutils = reponse.content.filter(b => b.type === 'tool_use');
+        const executerBloc = async bloc => {
           let r;
           try { r = await this.executer(bloc.name, bloc.input || {}); }
           catch (err) { r = { ok: false, erreur: err.message }; }
-          if (perime()) return;
-          resultats.push({
+          // Une liste ou un contact vient peut-être d'être créé : le prochain
+          // prompt doit le connaître.
+          if (/contact|liste|creer_tache/.test(bloc.name)) this._oublierContexte();
+          return {
             type: 'tool_result',
             tool_use_id: bloc.id,
             content: JSON.stringify(r).slice(0, 12000),
             is_error: r?.ok === false
-          });
+          };
+        };
+        let resultats;
+        if (blocsOutils.every(b => this.OUTILS_LECTURE.has(b.name))) {
+          resultats = await Promise.all(blocsOutils.map(executerBloc));
+        } else {
+          resultats = [];
+          for (const bloc of blocsOutils) { resultats.push(await executerBloc(bloc)); if (perime()) return; }
         }
+        if (perime()) return;
 
         this._messages.push({ role: 'user', content: resultats });
-        await DataStore.addMessage(this.conversationId, 'user', resultats);
+        this._journaliser(texte, 'user', resultats);
 
         // Dernier tour : on redemande une réponse en désactivant les outils,
         // sinon l'échange se terminerait sur un résultat technique et
@@ -2822,7 +2891,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
         if (tour === 11) {
           const fin = await this._appeler(systeme, outils, { type: 'none' });
           this._messages.push({ role: 'assistant', content: fin.content });
-          await DataStore.addMessage(this.conversationId, 'assistant', fin.content);
+          this._journaliser(texte, 'assistant', fin.content);
         }
       }
 
@@ -2983,7 +3052,8 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
      pour une demande visiblement complexe (longue, ou qui demande d'analyser,
      comparer, planifier, rédiger, chercher). À l'écrit, toujours. */
   _reflexionEtendue(source = null) {
-    if (!this._vocal) return true;
+    // v53 : même règle à l'écrit qu'en vocal (à l'écrit, c'était systématique :
+    // plusieurs secondes de plus pour « coche la tâche X »).
     const liste = source || this._messages;
     let dernier = '';
     for (let i = liste.length - 1; i >= 0; i--) {
@@ -2993,7 +3063,7 @@ Ce que tu écris sera LU À VOIX HAUTE par une synthèse vocale, et elle te rép
       if (t.trim()) { dernier = t; break; }
     }
     return dernier.length > 140 ||
-      /analys|compar|planifi|organis|rédig|redig|cherche|recherch|résum|resum|explique|calcul|propos|prépar|prepar|bilan|point de/i.test(dernier);
+      /analys|compar|planifi|organis|rédig|redig|cherche|recherch|résum|resum|explique|calcul|propos|prépar|prepar|bilan|point de|plusieurs|et puis|ensuite/i.test(dernier);
   },
 
   async _appeler(systeme, outils, toolChoice = null, source = null) {

@@ -10,7 +10,7 @@
      restent servis depuis le cache.
 ───────────────────────────────────────────────────────────────────────────── */
 
-const CACHE_VERSION = 'ideaforma-v52';
+const CACHE_VERSION = 'ideaforma-v53';
 const COQUILLE = [
   '/app.html',
   '/index.html',
@@ -68,9 +68,18 @@ self.addEventListener('activate', event => {
 });
 
 /* ── Requêtes ──
-   Réseau d'abord pour TOUT ce qui vient de notre domaine : on ne veut jamais
-   servir une vieille version de l'application. Le cache ne sert qu'en cas de
-   panne réseau (hors connexion). Supabase et /api ne passent jamais par ici. */
+   v53 — deux régimes, pour que l'ouverture soit instantanée SANS servir une
+   vieille version :
+     • Les pages HTML : réseau d'abord (cache seulement hors connexion).
+       C'est en rechargeant la page que le navigateur revérifie sw.js ; une
+       nouvelle CACHE_VERSION entraîne un nouveau cache et un rechargement
+       (voir Notifs.initServiceWorker → controllerchange).
+     • JS, CSS, images : cache d'abord. Ces fichiers sont préchargés à
+       l'installation et n'évoluent qu'avec la version : les relire sur le
+       réseau à chaque ouverture (25 requêtes) est ce qui rendait l'app lente,
+       surtout sur téléphone. En cas d'absence du cache, réseau puis mise en
+       cache.
+   Supabase et /api ne passent jamais par ici. */
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
@@ -78,16 +87,33 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
+  const estPage = req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/' || url.pathname === '/app';
+
+  if (estPage) {
+    event.respondWith(
+      fetch(req, { cache: 'no-cache' })
+        .then(res => {
+          if (res && res.status === 200 && res.type === 'basic') {
+            const copie = res.clone();
+            caches.open(CACHE_VERSION).then(c => c.put(req, copie));
+          }
+          return res;
+        })
+        .catch(() => caches.match(req).then(hit => hit || caches.match('/app.html')))
+    );
+    return;
+  }
+
   event.respondWith(
-    fetch(req, { cache: 'no-cache' })
-      .then(res => {
-        if (res && res.status === 200 && res.type === 'basic') {
-          const copie = res.clone();
-          caches.open(CACHE_VERSION).then(c => c.put(req, copie));
-        }
-        return res;
+    caches.open(CACHE_VERSION).then(cache =>
+      cache.match(req).then(hit => {
+        if (hit) return hit;
+        return fetch(req).then(res => {
+          if (res && res.status === 200 && res.type === 'basic') cache.put(req, res.clone());
+          return res;
+        });
       })
-      .catch(() => caches.match(req).then(hit => hit || caches.match('/app.html')))
+    ).catch(() => fetch(req))
   );
 });
 
