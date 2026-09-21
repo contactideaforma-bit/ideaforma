@@ -95,6 +95,9 @@
     "api/ai.js": {
       "maxDuration": 60
     },
+    "api/entreprise.js": {
+      "maxDuration": 15
+    },
     "api/tts.js": {
       "maxDuration": 30
     },

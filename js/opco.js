@@ -478,21 +478,35 @@ const OpcoPage = {
       'modal-lg'
     );
     this._initSalariesEvents();
+    this._initClientLookup(opco, c);
   },
 
   _buildClientForm(c) {
     const salaries = c?.salaries?.length ? c.salaries : [{ firstName:'', lastName:'', poste:'' }];
     return `
       <form id="clientForm" novalidate>
+        <div class="form-section lookup-section">
+          <div class="form-section-title">🔎 Remplissage automatique</div>
+          <div class="field">
+            <input type="search" id="lookupInput" autocomplete="off" spellcheck="false"
+              placeholder="Tapez un SIRET, un SIREN ou le nom de la société…" />
+            <div class="lookup-hint">Recherche dans l'annuaire officiel des entreprises — la fiche se remplit toute seule (adresse, effectif, gérant, convention collective, OPCO).</div>
+          </div>
+          <div id="lookupResults" class="lookup-results" hidden></div>
+          <div id="lookupStatus" hidden></div>
+        </div>
+
         <div class="form-section">
           <div class="form-section-title">🏢 Coordonnées de l'entreprise</div>
           <div class="form-grid">
             <div class="field form-col-full"><label>Raison sociale *</label>
               <input type="text" name="companyName" value="${esc(c?.companyName)}" placeholder="Nom de la société" required /></div>
             <div class="field"><label>SIRET</label>
-              <input type="text" name="siret" value="${esc(c?.siret)}" placeholder="14 chiffres" maxlength="14" /></div>
+              <input type="text" name="siret" id="clientSiret" value="${esc(c?.siret)}" placeholder="14 chiffres" maxlength="14" inputmode="numeric" /></div>
             <div class="field"><label>IDCC</label>
               <input type="text" name="idcc" value="${esc(c?.idcc)}" placeholder="Ex. 1979" /></div>
+            <div class="field"><label>Code NAF / APE</label>
+              <input type="text" name="codeNaf" value="${esc(c?.codeNaf)}" placeholder="Ex. 45.20A" /></div>
             <div class="field form-col-full"><label>Adresse</label>
               <input type="text" name="address" value="${esc(c?.address)}" placeholder="Adresse complète" /></div>
             <div class="field"><label>Téléphone</label>
@@ -525,6 +539,133 @@ const OpcoPage = {
           </button>
         </div>
       </form>`;
+  },
+
+  /* ══════════════════════════════════════════════
+     REMPLISSAGE AUTOMATIQUE DE LA FICHE CLIENT
+     (annuaire des entreprises + détection OPCO)
+  ══════════════════════════════════════════════ */
+  _initClientLookup(opco, c) {
+    const input   = document.getElementById('lookupInput');
+    const results = document.getElementById('lookupResults');
+    const status  = document.getElementById('lookupStatus');
+    const siretEl = document.getElementById('clientSiret');
+    if (!input || typeof Entreprise === 'undefined') return;
+
+    const setStatus = (html, cls = 'ai-loading') => {
+      if (!status) return;
+      if (!html) { status.hidden = true; status.innerHTML = ''; return; }
+      status.hidden = false;
+      status.innerHTML = `<div class="${cls}">${html}</div>`;
+    };
+
+    let timer = null, seq = 0;
+    const chercher = async () => {
+      const q = input.value.trim();
+      if (q.length < 3) { results.hidden = true; results.innerHTML = ''; return; }
+      const digits = q.replace(/\s/g, '');
+      if (/^\d{14}$/.test(digits)) { results.hidden = true; await this._appliquerFiche(opco, digits); return; }
+      const mon = ++seq;
+      setStatus('<span class="ai-spinner"></span> Recherche dans l\'annuaire des entreprises…');
+      try {
+        const liste = await Entreprise.rechercher(q);
+        if (mon !== seq) return;
+        setStatus('');
+        if (!liste.length) { results.hidden = false; results.innerHTML = '<div class="lookup-empty">Aucune entreprise trouvée — vérifiez l\'orthographe ou saisissez le SIRET.</div>'; return; }
+        results.hidden = false;
+        results.innerHTML = liste.map(r => `
+          <button type="button" class="lookup-item" data-siret="${esc(r.siret)}">
+            <span class="lookup-nom">${esc(r.nom)}${r.etat && r.etat !== 'A' ? ' <em>(fermée)</em>' : ''}</span>
+            <span class="lookup-meta">${esc([r.codePostal && r.ville ? `${r.codePostal} ${r.ville}` : r.ville, r.naf ? `NAF ${r.naf}` : '', r.effectifLibelle].filter(Boolean).join(' · '))}</span>
+            <span class="lookup-siret">SIRET ${esc(Entreprise.formatSiret(r.siret))}</span>
+          </button>`).join('');
+        results.querySelectorAll('.lookup-item').forEach(btn => btn.addEventListener('click', () => {
+          results.hidden = true;
+          this._appliquerFiche(opco, btn.dataset.siret);
+        }));
+      } catch (err) {
+        if (mon !== seq) return;
+        setStatus(`⚠️ ${esc(err.message)}`, 'ai-error');
+      }
+    };
+
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(chercher, 400); });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); chercher(); } });
+
+    /* Saisie directe d'un SIRET complet dans le champ SIRET */
+    siretEl?.addEventListener('change', () => {
+      const d = siretEl.value.replace(/\s/g, '');
+      if (/^\d{14}$/.test(d) && d !== (c?.siret || '')) this._appliquerFiche(opco, d);
+    });
+
+    /* Fiche existante : on vérifie l'OPCO en arrière-plan sans écraser la saisie */
+    if (c?.siret && /^\d{14}$/.test(c.siret)) this._appliquerFiche(opco, c.siret, { verifierSeulement: true });
+  },
+
+  async _appliquerFiche(opco, siret, { verifierSeulement = false } = {}) {
+    const form   = document.getElementById('clientForm');
+    const status = document.getElementById('lookupStatus');
+    if (!form) return;
+    const set = (name, val, force = false) => {
+      const el = form.querySelector(`[name="${name}"]`);
+      if (!el || val == null || val === '') return;
+      if (force || !el.value.trim()) { el.value = val; el.classList.add('field-auto'); }
+    };
+    const setStatus = (html, cls) => {
+      if (!status) return;
+      status.hidden = !html;
+      status.innerHTML = html ? `<div class="${cls}">${html}</div>` : '';
+    };
+
+    if (!verifierSeulement) setStatus('<span class="ai-spinner"></span> Récupération de la fiche entreprise…', 'ai-loading');
+    let fiche, opcoApi;
+    try {
+      ({ entreprise: fiche, opco: opcoApi } = await Entreprise.fiche(siret));
+    } catch (err) {
+      if (!verifierSeulement) setStatus(`⚠️ ${esc(err.message)}`, 'ai-error');
+      return;
+    }
+
+    if (!verifierSeulement) {
+      const force = true;
+      set('companyName', fiche.raisonSociale || fiche.nom, force);
+      set('siret',       fiche.siret, force);
+      set('address',     fiche.adresse, force);
+      set('codeNaf',     fiche.naf, force);
+      set('idcc',        (fiche.idcc || [])[0] || '', force);
+      set('nomGerant',   fiche.dirigeant);
+      set('employees',   Entreprise.effectifEstime(fiche));
+    }
+
+    /* ── OPCO détecté ── */
+    const det = Entreprise.detecterOpco(fiche, opcoApi);
+    const lignes = [];
+    if (!verifierSeulement) {
+      lignes.push(`✅ Fiche remplie depuis l'annuaire officiel${fiche.etat === 'A' ? '' : ' — <strong>entreprise signalée fermée</strong>'}${fiche.effectifLibelle ? ` · effectif INSEE : ${esc(fiche.effectifLibelle)}` : ''}${fiche.dateCreation ? ` · créée le ${new Date(fiche.dateCreation).toLocaleDateString('fr-FR')}` : ''}.`);
+    }
+    form.dataset.opcoCible = opco;
+    if (!det) {
+      lignes.push(`ℹ️ OPCO non identifiable automatiquement (aucune convention collective déclarée) — le client sera créé dans <strong>${esc(this.CONFIG[opco]?.label || opco)}</strong>.`);
+      setStatus(lignes.join('<br>'), 'ai-success');
+      return;
+    }
+    if (det.code === opco) {
+      lignes.push(`🏛 OPCO confirmé : <strong>${esc(det.label)}</strong> <span class="lookup-source">(source : ${esc(det.source)}${det.detail ? ', ' + esc(det.detail) : ''})</span>`);
+      setStatus(lignes.join('<br>'), 'ai-success');
+      return;
+    }
+    if (det.code) {
+      lignes.push(`⚠️ D'après ${esc(det.source)}${det.detail ? ' (' + esc(det.detail) + ')' : ''}, cette entreprise relève de <strong>${esc(det.label)}</strong>, pas de ${esc(this.CONFIG[opco]?.label || opco)}.
+        <span class="lookup-actions"><button type="button" class="btn btn-secondary btn-sm" id="lookupSwitchOpco">Créer le client dans ${esc(det.label)}</button></span>`);
+      setStatus(lignes.join('<br>'), 'ai-warn');
+      document.getElementById('lookupSwitchOpco')?.addEventListener('click', () => {
+        form.dataset.opcoCible = det.code;
+        setStatus(`✅ Le client sera créé dans <strong>${esc(det.label)}</strong>.`, 'ai-success');
+      });
+    } else {
+      lignes.push(`⚠️ Cette entreprise relève de <strong>${esc(det.label)}</strong>, qui n'est pas parmi les OPCO gérés ici. Vérifiez le financement avant de monter le dossier.`);
+      setStatus(lignes.join('<br>'), 'ai-warn');
+    }
   },
 
   _salaryRow(fn='', ln='', poste='', idx) {
@@ -567,10 +708,12 @@ const OpcoPage = {
       if (fn || ln) salaries.push({ firstName: fn, lastName: ln, poste });
     });
 
+    const opcoCible = form.dataset.opcoCible || opco;
     const data = {
       companyName,
-      siret:     form.querySelector('[name="siret"]').value.trim(),
+      siret:     form.querySelector('[name="siret"]').value.replace(/\s/g, '').trim(),
       idcc:      form.querySelector('[name="idcc"]').value.trim(),
+      codeNaf:   form.querySelector('[name="codeNaf"]').value.trim(),
       address:   form.querySelector('[name="address"]').value.trim(),
       phone:     form.querySelector('[name="phone"]').value.trim(),
       email:     form.querySelector('[name="email"]').value.trim(),
@@ -584,9 +727,10 @@ const OpcoPage = {
 
     try {
       if (id) { await DataStore.updateClient(id, data); Toast.show('Client mis à jour ✓', 'success'); }
-      else    { await DataStore.addClient(opco, data);  Toast.show('Client créé ✓', 'success'); }
+      else    { await DataStore.addClient(opcoCible, data); Toast.show(`Client créé dans ${this.CONFIG[opcoCible]?.label || opcoCible} ✓`, 'success'); }
       Modal.close();
-      await this.render(opco);
+      if (!id && opcoCible !== opco && typeof Router !== 'undefined') Router.navigate(opcoCible);
+      else await this.render(opco);
       updateNavDots();
     } catch (err) {
       Toast.show('Erreur : ' + err.message, 'error');
@@ -690,12 +834,19 @@ const OpcoPage = {
         <div class="form-section">
           <div class="form-section-title">📅 Dates et tarification</div>
           <div class="form-grid">
-            <div class="field"><label>Prix HT (€) *</label>
-              <input type="number" name="price" value="${d?.price||''}"
-                placeholder="Ex. 1500" min="0" step="0.01" required /></div>
+            <div class="field form-col-full"><label>Dispositif / type de formation (barème OPCO)</label>
+              <select name="dispositif" id="fieldDispositif">
+                ${(typeof Tarifs !== 'undefined' ? Tarifs.dispositifs(this.currentOpco) : []).map(t =>
+                  `<option value="${esc(t)}" ${(d?.dispositif || Tarifs.DISPOSITIF_DEFAUT) === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}
+              </select></div>
             <div class="field"><label>Durée totale (heures)</label>
-              <input type="number" name="dureeHeures" value="${d?.dureeHeures ?? ''}"
+              <input type="number" name="dureeHeures" id="fieldDureeHeures" value="${d?.dureeHeures ?? ''}"
                 placeholder="Ex. 14 (7 h par jour si vide)" min="0" step="0.5" /></div>
+            <div class="field"><label>Prix HT (€) *</label>
+              <input type="number" name="price" id="fieldPrice" value="${d?.price||''}"
+                placeholder="Ex. 1500" min="0" step="0.01" required /></div>
+            <input type="hidden" name="tauxHoraire" id="fieldTauxHoraire" value="${d?.tauxHoraire ?? ''}" />
+            <div class="form-col-full" id="tarifBox"></div>
             <div class="field form-col-full"><label>Lieu de la formation</label>
               <input type="text" name="lieu" value="${esc(d?.lieu)}"
                 placeholder="Ex. Dans les locaux de l'entreprise — 25 bd Massenet, 13014 Marseille / À distance" /></div>
@@ -788,6 +939,15 @@ const OpcoPage = {
     });
     this._bindRemoveRows();
 
+    /* ── Tarif conseillé (recalculé à chaque saisie) ── */
+    const form = document.getElementById('dossierForm');
+    const majTarif = () => this._majTarif(c);
+    ['fieldDispositif', 'fieldDureeHeures', 'fieldPrice'].forEach(id =>
+      document.getElementById(id)?.addEventListener('input', majTarif));
+    form?.addEventListener('input', e => { if (e.target.closest('#traineeList')) majTarif(); });
+    form?.addEventListener('click', e => { if (e.target.closest('#traineeList .btn-remove-row, #addTrainee')) setTimeout(majTarif, 0); });
+    majTarif();
+
     /* ── Assistance IA ── */
     document.getElementById('aiAssistBtn')?.addEventListener('click', async () => {
       const btn     = document.getElementById('aiAssistBtn');
@@ -812,6 +972,11 @@ const OpcoPage = {
         if (result.contenu)    document.getElementById('fieldContenu').value   = result.contenu;
         if (result.evaluation) document.getElementById('fieldEvaluation').value = result.evaluation;
         if (result.prerequis)  document.getElementById('fieldPrerequis').value  = result.prerequis;
+        if (result.public_vise) { const pv = form?.querySelector('[name="publicVise"]'); if (pv && !pv.value.trim()) pv.value = result.public_vise; }
+        /* Durée suggérée « 2 jours (14h) » → champ heures s'il est vide */
+        const dureeEl = document.getElementById('fieldDureeHeures');
+        const mh = String(result.duree || '').match(/(\d+(?:[.,]\d+)?)\s*h/i);
+        if (dureeEl && !dureeEl.value && mh) { dureeEl.value = mh[1].replace(',', '.'); majTarif(); }
         if (status) {
           status.innerHTML = `<div class="ai-success">
             ✅ Contenu généré par IA${result.duree ? ` — Durée suggérée : <strong>${result.duree}</strong>` : ''}.
@@ -849,6 +1014,55 @@ const OpcoPage = {
     });
   },
 
+  /* ══════════════════════════════════════════════
+     TARIF HORAIRE CONSEILLÉ SELON L'OPCO
+  ══════════════════════════════════════════════ */
+  _majTarif(c) {
+    const box = document.getElementById('tarifBox');
+    if (!box || typeof Tarifs === 'undefined') return;
+    const opco       = this.currentOpco;
+    const dispositif = document.getElementById('fieldDispositif')?.value || Tarifs.DISPOSITIF_DEFAUT;
+    const heures     = document.getElementById('fieldDureeHeures')?.value;
+    const prix       = document.getElementById('fieldPrice')?.value;
+    const stagiaires = [...document.querySelectorAll('#traineeList .dynamic-row')]
+      .filter(r => r.querySelector('[data-field="firstName"]').value.trim() || r.querySelector('[data-field="lastName"]').value.trim()).length || 1;
+    const effectif   = c?.employees || '';
+
+    const s = Tarifs.suggestion({ opco, dispositif, effectif, heures, stagiaires, prix });
+    if (!s) { box.innerHTML = ''; return; }
+
+    const tauxEl = document.getElementById('fieldTauxHoraire');
+    if (tauxEl) tauxEl.value = s.bareme.tauxMax ?? '';
+
+    const cfg = this.CONFIG[opco] || {};
+    const conseil = s.estimation ? Math.round(s.estimation.max) : null;
+    const prixNum = parseFloat(prix) || 0;
+    const peutAppliquer = conseil && Math.abs(prixNum - conseil) > 0.5;
+
+    box.innerHTML = `
+      <div class="tarif-box">
+        <div class="tarif-head">
+          <span class="tarif-titre">💶 Tarif conseillé — ${esc(cfg.label || opco)}</span>
+          <span class="tarif-taille">${esc(s.taille)}${effectif ? ` · effectif client : ${esc(effectif)}` : ''}</span>
+        </div>
+        <div class="tarif-taux">${esc(s.tauxTexte)}${s.bareme.plafond ? ` <span class="tarif-plafond">· plafond ${Tarifs.eur(s.bareme.plafond)} / formation</span>` : ''}${s.bareme.pourcentage ? '' : ''}</div>
+        ${s.estimation ? `
+          <div class="tarif-estimation">
+            Prise en charge estimée pour <strong>${s.base} ${s.bareme.unite === 'j' ? 'jour(s)' : 'h'}</strong> × <strong>${s.nb} stagiaire${s.nb > 1 ? 's' : ''}</strong> :
+            <strong>${s.estimation.min === s.estimation.max ? Tarifs.eur(s.estimation.max) : `${Tarifs.eur(s.estimation.min)} à ${Tarifs.eur(s.estimation.max)}`} HT</strong>
+            ${peutAppliquer ? `<button type="button" class="btn btn-secondary btn-sm" id="tarifAppliquer">Appliquer ${Tarifs.eur(conseil)}</button>` : ''}
+          </div>` : (s.bareme.tauxMax == null && !s.bareme.pourcentage
+            ? '<div class="tarif-estimation">Pas de taux horaire public pour ce cas — demandez le barème au conseiller OPCO avant de chiffrer.</div>'
+            : (!s.base ? '<div class="tarif-estimation">Renseignez la durée en heures pour obtenir une estimation chiffrée.</div>' : ''))}
+        ${s.messages.map(m => `<div class="tarif-msg tarif-${m.type}">${esc(m.text)}</div>`).join('')}
+      </div>`;
+
+    document.getElementById('tarifAppliquer')?.addEventListener('click', () => {
+      const p = document.getElementById('fieldPrice');
+      if (p) { p.value = conseil; p.classList.add('field-auto'); this._majTarif(c); }
+    });
+  },
+
   async _submitDossierForm(opco, clientId, dossierId) {
     const c    = (this._cachedClients||[]).find(cl => cl.id === clientId);
     const form = document.getElementById('dossierForm');
@@ -881,6 +1095,8 @@ const OpcoPage = {
       publicVise: form.querySelector('[name="publicVise"]').value.trim(),
       moyens:     form.querySelector('[name="moyens"]').value.trim(),
       dureeHeures: form.querySelector('[name="dureeHeures"]').value,
+      dispositif: form.querySelector('[name="dispositif"]')?.value || '',
+      tauxHoraire: form.querySelector('[name="tauxHoraire"]')?.value || '',
       lieu:       form.querySelector('[name="lieu"]').value.trim(),
       status:     form.querySelector('[name="status"]').value,
       notes:      form.querySelector('[name="notes"]').value.trim()

@@ -13,6 +13,7 @@ function _mapClientRow(row) {
     employees:   row.nb_salaries     ?? '',
     nomGerant:   row.nom_gerant      || '',
     idcc:        row.idcc            || '',
+    codeNaf:     row.code_naf        || '',
     salaries:    Array.isArray(row.salaries) ? row.salaries : [],
     /* stats calculées à partir des dossiers joints */
     dossiers:    (row.dossiers || []).map(_mapDossierRow),
@@ -39,6 +40,8 @@ function _mapDossierRow(row) {
     lieu:            row.lieu             || '',
     publicVise:      row.public_vise      || '',
     moyens:          row.moyens           || '',
+    dispositif:      row.dispositif       || '',
+    tauxHoraire:     row.taux_horaire != null ? parseFloat(row.taux_horaire) : null,
     createdAt:       row.cree_le,
     updatedAt:       row.modifie_le
   };
@@ -70,11 +73,11 @@ const DataStore = {
       .from('clients')
       .select(`
         id, opco, nom_entreprise, siret, adresse, tel, email,
-        nb_salaries, nom_gerant, idcc, salaries, cree_le,
+        nb_salaries, nom_gerant, idcc, code_naf, salaries, cree_le,
         dossiers(id, client_id, sujet_formation, prix, dates_formation,
                  salaries, statut, notes, objectifs, contenu, modalite,
                  evaluation, prerequis, duree_heures, lieu, public_vise, moyens,
-                 cree_le, modifie_le)
+                 dispositif, taux_horaire, cree_le, modifie_le)
       `)
       .eq('user_id', uid)
       .eq('opco', opco)
@@ -101,11 +104,11 @@ const DataStore = {
       .from('clients')
       .select(`
         id, opco, nom_entreprise, siret, adresse, tel, email,
-        nb_salaries, nom_gerant, idcc, salaries, cree_le,
+        nb_salaries, nom_gerant, idcc, code_naf, salaries, cree_le,
         dossiers(id, client_id, sujet_formation, prix, dates_formation,
                  salaries, statut, notes, objectifs, contenu, modalite,
                  evaluation, prerequis, duree_heures, lieu, public_vise, moyens,
-                 cree_le, modifie_le)
+                 dispositif, taux_horaire, cree_le, modifie_le)
       `)
       .eq('user_id', uid)
       .order('nom_entreprise', { ascending: true });
@@ -130,6 +133,7 @@ const DataStore = {
         nb_salaries:    d.employees   ? parseInt(d.employees) : null,
         nom_gerant:     d.nomGerant   || null,
         idcc:           d.idcc        || null,
+        code_naf:       d.codeNaf     || null,
         salaries:       d.salaries    || []
       })
       .select()
@@ -153,6 +157,7 @@ const DataStore = {
         nb_salaries:    d.employees   ? parseInt(d.employees) : null,
         nom_gerant:     d.nomGerant   || null,
         idcc:           d.idcc        || null,
+        code_naf:       d.codeNaf     || null,
         salaries:       d.salaries    || []
       })
       .eq('id', id)
@@ -200,7 +205,9 @@ const DataStore = {
         duree_heures:    d.dureeHeures !== undefined && d.dureeHeures !== '' && d.dureeHeures !== null ? parseFloat(d.dureeHeures) : null,
         lieu:            d.lieu           || null,
         public_vise:     d.publicVise     || null,
-        moyens:          d.moyens         || null
+        moyens:          d.moyens         || null,
+        dispositif:      d.dispositif     || null,
+        taux_horaire:    d.tauxHoraire !== undefined && d.tauxHoraire !== '' && d.tauxHoraire !== null ? parseFloat(d.tauxHoraire) : null
       })
       .select()
       .single();
@@ -229,7 +236,9 @@ const DataStore = {
         duree_heures:    d.dureeHeures !== undefined && d.dureeHeures !== '' && d.dureeHeures !== null ? parseFloat(d.dureeHeures) : null,
         lieu:            d.lieu           || null,
         public_vise:     d.publicVise     || null,
-        moyens:          d.moyens         || null
+        moyens:          d.moyens         || null,
+        dispositif:      d.dispositif     || null,
+        taux_horaire:    d.tauxHoraire !== undefined && d.tauxHoraire !== '' && d.tauxHoraire !== null ? parseFloat(d.tauxHoraire) : null
       })
       .eq('id', id)
       .eq('user_id', uid)
