@@ -446,6 +446,11 @@ const SettingsPage = {
                   <input type="text" name="organisme" value="${esc(profile.organisme||profile.nom)}"
                     placeholder="Ex. Ideaforma" required />
                 </div>
+                <div class="field form-col-full">
+                  <label>Dirigeante / formatrice principale (nom affiché sur les documents) *</label>
+                  <input type="text" name="nom" value="${esc(profile.nom)}"
+                    placeholder="Ex. Myriam AYOUAZ" />
+                </div>
                 <div class="field">
                   <label>SIRET</label>
                   <input type="text" name="siret" value="${esc(profile.siret)}"
@@ -459,17 +464,17 @@ const SettingsPage = {
                 <div class="field form-col-full">
                   <label>Adresse complète</label>
                   <input type="text" name="adresse" value="${esc(profile.adresse)}"
-                    placeholder="Ex. 12 rue de la Formation, 75001 Paris" />
+                    placeholder="Ex. 12 rue de la Formation, 13001 Marseille (code postal et ville obligatoires)" />
                 </div>
                 <div class="field">
                   <label>N° Déclaration d'activité (NDA)</label>
                   <input type="text" name="numero_da" value="${esc(profile.numero_da)}"
-                    placeholder="Ex. 11755XXXXXXXXX" />
+                    placeholder="11 chiffres — ex. 93 13 XXXXX 13" />
                 </div>
                 <div class="field">
                   <label>N° Certification Qualiopi</label>
                   <input type="text" name="numero_qualiopi" value="${esc(profile.numero_qualiopi)}"
-                    placeholder="Ex. 2023/2026-XXX" />
+                    placeholder="N° du certificat (≠ NDA)" />
                 </div>
                 <div class="field">
                   <label>Email de l'organisme (sur les documents)</label>
@@ -689,6 +694,7 @@ const SettingsPage = {
       const btn  = document.getElementById('saveSettingsBtn');
       const data = {
         organisme:        form.querySelector('[name="organisme"]').value.trim(),
+        nom:              form.querySelector('[name="nom"]').value.trim(),
         siret:            form.querySelector('[name="siret"]').value.trim(),
         telephone:        form.querySelector('[name="telephone"]').value.trim(),
         adresse:          form.querySelector('[name="adresse"]').value.trim(),
@@ -708,6 +714,7 @@ const SettingsPage = {
       btn.disabled = true; btn.textContent = 'Enregistrement…';
       try {
         await DataStore.updateProfile(data);
+        if (typeof Conformite !== 'undefined') Conformite._of = null;   // le contrôle relit le profil à jour
         Toast.show('Paramètres enregistrés', 'success');
       } catch (err) {
         Toast.show('Erreur : ' + esc(err.message), 'error');

@@ -156,8 +156,8 @@ const Tarifs = {
       { dispositif:'HACCP / Hygiène alimentaire (certifiant)', min:0, max:null, tauxMin:null, tauxMax:null, unite:'h', plafond:null, pourcentage:100, prioritaire:true, note:'Formations certifiantes prioritaires' }
     ],
     constructys: [
-      { dispositif:'Plan de développement des compétences', min:0,  max:9,    tauxMin:20, tauxMax:28, unite:'h', plafond:null, note:'KBIS < 3 mois obligatoire' },
-      { dispositif:'Plan de développement des compétences', min:10, max:49,   tauxMin:14, tauxMax:20, unite:'h', plafond:null, note:'Dépôt 1 mois avant démarrage' },
+      { dispositif:'Plan de développement des compétences', min:0,  max:10,   tauxMin:24, tauxMax:24, unite:'h', plafond:null, plafondJour:840, note:'Bâtiment 2026 : 24 € HT/h/stagiaire, intra plafonné à 840 € HT/jour/groupe — dépôt ≥ 15 jours avant le début' },
+      { dispositif:'Plan de développement des compétences', min:11, max:49,   tauxMin:19, tauxMax:19, unite:'h', plafond:null, plafondJour:665, note:'Bâtiment 2026 : 19 € HT/h/stagiaire, intra plafonné à 665 € HT/jour/groupe — dépôt ≥ 15 jours avant le début' },
       { dispositif:'Plan de développement des compétences', min:50, max:null, tauxMin:12, tauxMax:15, unite:'h', plafond:null, note:'Sur accord préalable' },
       { dispositif:'Formations sécurité réglementaires (CACES, habilitations, travail en hauteur)', min:0, max:null, tauxMin:28, tauxMax:28, unite:'h', plafond:null, prioritaire:true, note:'Aligner sur les thèmes prioritaires annuels' },
       { dispositif:'Habilitations électriques (B0, H0, BR…)', min:0, max:null, tauxMin:25, tauxMax:25, unite:'h', plafond:null, prioritaire:true, note:'Vérifier la liste des thèmes prioritaires' }
@@ -199,14 +199,14 @@ const Tarifs = {
    * Calcule la suggestion complète.
    * @returns {object|null} { bareme, taille, tauxTexte, estimation:{min,max}, base, tauxActuel, ecart, messages[] }
    */
-  suggestion({ opco, dispositif, effectif, heures, stagiaires, prix }) {
+  suggestion({ opco, dispositif, effectif, heures, stagiaires, prix, jours: nbJours }) {
     const b = this.bareme(opco, dispositif, effectif);
     if (!b) return null;
 
     const h   = parseFloat(heures) || 0;
     const nb  = Math.max(1, parseInt(stagiaires) || 1);
     const p   = parseFloat(prix) || 0;
-    const jours = h ? Math.max(1, Math.ceil(h / 7)) : 0;
+    const jours = parseInt(nbJours) > 0 ? parseInt(nbJours) : (h ? Math.max(1, Math.ceil(h / 7)) : 0);
     const unite = b.unite === 'j' ? '€/jour/stagiaire' : '€/h/stagiaire';
 
     let tauxTexte = '';
@@ -224,6 +224,11 @@ const Tarifs = {
       estimation.max = Math.min(estimation.max, b.plafond);
       estimation.plafonne = b.tauxMax * base * nb > b.plafond;
     }
+    /* Plafond intra-entreprise par jour et par groupe (ex. Constructys bâtiment) */
+    if (estimation && b.plafondJour && jours) {
+      const cap = b.plafondJour * jours;
+      if (estimation.max > cap) { estimation.max = cap; estimation.min = Math.min(estimation.min, cap); estimation.plafondJour = true; }
+    }
 
     /* Taux réellement pratiqué avec le prix saisi */
     let tauxActuel = null, ecart = null;
@@ -235,8 +240,12 @@ const Tarifs = {
     const messages = [];
     if (b.effectifInconnu) messages.push({ type:'info', text:'Renseignez l\'effectif du client pour affiner le barème.' });
     if (b.note) messages.push({ type:'info', text: b.note });
+    if (estimation?.plafondJour) messages.push({ type:'warn', text:`Plafond intra-entreprise : ${this.eur(b.plafondJour)} par jour et par groupe (${jours} jour${jours > 1 ? 's' : ''}).` });
     if (estimation?.plafonne) messages.push({ type:'warn', text:`Plafond ${this.eur(b.plafond)} par formation atteint — le reste sera à la charge de l'entreprise.` });
-    if (ecart != null && ecart > 0.5) {
+    const resteCharge = (p && estimation) ? p - estimation.max : (ecart != null ? ecart * base * nb : 0);
+    if (p && estimation && resteCharge > 1) {
+      messages.push({ type:'warn', text:`Prix saisi = ${tauxActuel.toFixed(2).replace('.', ',')} ${unite}, au-dessus de la prise en charge OPCO (max. ${this.eur(estimation.max)}) : reste à charge d'environ ${this.eur(resteCharge)} HT pour l'entreprise.` });
+    } else if (ecart != null && ecart > 0.5) {
       messages.push({ type:'warn', text:`Prix saisi = ${tauxActuel.toFixed(2).replace('.', ',')} ${unite}, au-dessus du plafond OPCO : reste à charge d'environ ${this.eur(ecart * base * nb)} HT pour l'entreprise.` });
     } else if (ecart != null && ecart < -3 && b.tauxMin != null) {
       messages.push({ type:'ok', text:`Prix saisi = ${tauxActuel.toFixed(2).replace('.', ',')} ${unite} : marge de ${this.eur(-ecart * base * nb)} HT sous le plafond.` });
@@ -248,8 +257,8 @@ const Tarifs = {
   },
 
   /** Prix HT conseillé (taux max × durée × stagiaires, borné au plafond) */
-  prixConseille({ opco, dispositif, effectif, heures, stagiaires }) {
-    const s = this.suggestion({ opco, dispositif, effectif, heures, stagiaires });
+  prixConseille({ opco, dispositif, effectif, heures, stagiaires, jours }) {
+    const s = this.suggestion({ opco, dispositif, effectif, heures, stagiaires, jours });
     if (!s?.estimation) return null;
     return Math.round(s.estimation.max);
   }

@@ -100,12 +100,27 @@ const Documents = {
     }).join(', ') || 'À définir';
     const modalite = this.MODALITE[dossier.modalite] || this.MODALITE.presentiel;
     const distanciel = dossier.modalite === 'distanciel';
+    const mixte = dossier.modalite === 'mixte';
+    const locaux = dossier.address ? `dans les locaux de l'entreprise — ${dossier.address}` : 'dans les locaux de l\'entreprise';
     const lieu = dossier.lieu
       || (distanciel ? 'À distance — classe virtuelle (visioconférence)'
-                     : (dossier.address ? `Dans les locaux de l'entreprise — ${dossier.address}` : 'Dans les locaux de l\'entreprise'));
-    const stagiaires = (dossier.trainees || []).filter(t => t.firstName || t.lastName);
+        : mixte ? `Présentiel : ${locaux} ; distanciel : classe virtuelle (visioconférence)`
+        : locaux.charAt(0).toUpperCase() + locaux.slice(1));
+    /* Stagiaires : NOM en capitales + Prénom, poste repris de la fiche client */
+    const titre = v => String(v || '').trim().toLowerCase().replace(/(^|[\s\-'])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+    const cle = t => [t.lastName, t.firstName].map(v => String(v || '').trim().toLowerCase()).sort().join('|');
+    const stagiaires = (dossier.trainees || []).filter(t => t.firstName || t.lastName).map(t => {
+      const sal = (dossier.salariesClient || []).find(sc => cle(sc) === cle(t));
+      const lastName = String(t.lastName || '').trim().toUpperCase(), firstName = titre(t.firstName);
+      return { ...t, lastName, firstName, nomComplet: `${lastName} ${firstName}`.trim(), fonction: t.fonction || sal?.poste || '' };
+    });
+    /* Répartition présentiel / distanciel lue dans les titres de modules */
+    const modules = typeof Conformite !== 'undefined' ? Conformite.modules(dossier.contenu) : [];
+    const hDist = modules.filter(m => m.modalite === 'distanciel').reduce((s, m) => s + (m.heures || 0), 0);
+    const hPres = modules.filter(m => m.modalite === 'presentiel').reduce((s, m) => s + (m.heures || 0), 0);
     return {
-      jours, nbJ, heures, hParJ, periode, datesDetail, modalite, distanciel, lieu, stagiaires,
+      jours, nbJ, heures, hParJ, periode, datesDetail, modalite, distanciel, mixte, lieu, stagiaires, hDist, hPres,
+      modaliteDetail: mixte && (hDist || hPres) ? `${modalite} — ${this._fmtH(hPres)} en présentiel, ${this._fmtH(hDist)} à distance` : modalite,
       dureeLabel: `${this._fmtH(heures)}${nbJ ? ` — ${nbJ} jour${nbJ > 1 ? 's' : ''} (${this._fmtH(hParJ)}/jour)` : ''}`,
       formateur: dossier.formateur || of.dirigeant || of.nom,
       opcoLabel: (typeof OpcoPage !== 'undefined' && OpcoPage.CONFIG?.[dossier.opco]?.label) || dossier.opco || 'OPCO',
@@ -138,11 +153,11 @@ const Documents = {
     y = this._kv(doc, y, [
       ['Intitulé', dossier.trainingSubject],
       ['Nature de l\'action', 'Action de formation (art. L. 6313-1 du Code du travail)'],
-      ['Modalité', x.modalite],
+      ['Modalité', x.modaliteDetail],
       ['Durée', x.dureeLabel],
       ['Dates', x.datesDetail],
       ['Lieu', x.lieu],
-      ['Effectif', x.stagiaires.length ? `${x.stagiaires.length} stagiaire${x.stagiaires.length > 1 ? 's' : ''} : ${x.stagiaires.map(t => `${t.firstName} ${t.lastName}`.trim()).join(', ')}` : 'À préciser'],
+      ['Effectif', x.stagiaires.length ? `${x.stagiaires.length} stagiaire${x.stagiaires.length > 1 ? 's' : ''} : ${x.stagiaires.map(t => t.nomComplet).join(', ')}` : 'À préciser'],
       ['Financement', `Prise en charge demandée auprès de ${x.opcoLabel} (plan de développement des compétences)`]
     ]);
 
@@ -201,7 +216,7 @@ const Documents = {
       ['Public visé / prérequis', `${dossier.publicVise || 'Salarié(s) de l\'entreprise'} — Prérequis : ${dossier.prerequis || 'aucun'}`],
       ['Durée', x.dureeLabel],
       ['Dates', x.datesDetail],
-      ['Modalité', x.modalite],
+      ['Modalité', x.modaliteDetail],
       ['Lieu', x.lieu],
       ['Formateur', x.formateur],
       ['Effectif', x.stagiaires.length ? `${x.stagiaires.length} stagiaire${x.stagiaires.length > 1 ? 's' : ''} — liste nominative en Annexe 2` : 'À préciser — liste nominative en Annexe 2'],
@@ -289,9 +304,9 @@ const Documents = {
       ['Durée totale', x.dureeLabel],
       ['Dates', x.datesDetail],
       ['Lieu de la formation', x.lieu],
-      ['Public visé', dossier.publicVise || (x.stagiaires.length ? `Salarié(s) de l'entreprise — ${x.stagiaires.length} apprenant${x.stagiaires.length > 1 ? 's' : ''}` : 'Salariés de l\'entreprise')],
+      ['Public visé', dossier.publicVise || (x.stagiaires.length ? `Salarié(s) de l'entreprise${[...new Set(x.stagiaires.map(t => t.fonction).filter(Boolean))].length ? ` (${[...new Set(x.stagiaires.map(t => t.fonction).filter(Boolean))].join(', ').toLowerCase()})` : ''} — ${x.stagiaires.length} apprenant${x.stagiaires.length > 1 ? 's' : ''}` : 'Salariés de l\'entreprise')],
       ['Niveau requis / prérequis', dossier.prerequis || 'Aucun prérequis — formation ouverte à tout niveau'],
-      ['Modalité pédagogique', x.modalite],
+      ['Modalité pédagogique', x.modaliteDetail],
       ['Formateur', x.formateur],
       ['Financement', `Dans le cadre d'une prise en charge ${x.opcoLabel}`]
     ]);
@@ -304,7 +319,7 @@ const Documents = {
     if (x.stagiaires.length) {
       y = this._subBand(doc, y, x.stagiaires.length > 1 ? 'Salariés formés' : 'Salarié formé');
       y = this._kv(doc, y, [
-        ['Nom / Prénom', x.stagiaires.map(t => `${t.lastName || ''} ${t.firstName || ''}`.trim()).join(', ')],
+        ['Nom / Prénom', x.stagiaires.map(t => t.nomComplet).join(', ')],
         ['Statut', 'Salarié(s)'],
         ['Effectif formé', `${x.stagiaires.length} personne${x.stagiaires.length > 1 ? 's' : ''}`]
       ]);
@@ -321,13 +336,18 @@ const Documents = {
     y = this._kv(doc, y, [
       ['Méthodes pédagogiques', dossier.moyens || 'Apprentissage par la pratique, démonstrations en temps réel, exercices progressifs, échanges questions / réponses, accompagnement individualisé.'],
       ['Supports fournis', 'Support de cours numérique remis à chaque stagiaire à l\'issue de la formation.'],
-      ['Moyens techniques', x.distanciel ? 'Classe virtuelle (visioconférence), partage d\'écran, documents partagés ; prérequis : ordinateur, connexion internet, micro et caméra.' : 'Matériel et outils de travail du bénéficiaire, mis en situation réelle ; vidéoprojection ou partage d\'écran si nécessaire.'],
+      ['Moyens techniques', x.distanciel ? 'Classe virtuelle (visioconférence), partage d\'écran, documents partagés ; prérequis : ordinateur, connexion internet, micro et caméra.'
+        : x.mixte ? 'Présentiel : matériel et outils de travail du bénéficiaire, mise en situation réelle. Distanciel : classe virtuelle synchrone (visioconférence), partage d\'écran et documents partagés ; prérequis : ordinateur ou tablette, connexion internet, micro et caméra.'
+        : 'Matériel et outils de travail du bénéficiaire, mis en situation réelle ; vidéoprojection ou partage d\'écran si nécessaire.'],
+      ...((x.distanciel || x.mixte) ? [['Assistance à distance', `Assistance technique et pédagogique assurée par ${x.formateur} pendant toute la durée de la formation (réponse sous 24 h ouvrées par e-mail ou téléphone) ; lien de connexion et prérequis techniques transmis au plus tard 48 h avant chaque séquence.`]] : []),
       ['Environnement', x.lieu]
     ]);
 
     y = this._band(doc, y, '6. Modalités de suivi et d\'évaluation');
     y = this._kv(doc, y, [
-      ['Suivi de l\'exécution', x.distanciel ? 'Relevé de connexion et attestation d\'assiduité signée par le formateur.' : 'Feuille d\'émargement signée par demi-journée par les stagiaires et le formateur.'],
+      ['Suivi de l\'exécution', x.distanciel ? 'Relevé de connexion et attestation d\'assiduité signée par le formateur.'
+        : x.mixte ? 'Présentiel : feuille d\'émargement signée par demi-journée par les stagiaires et le formateur. Distanciel : relevé de connexion (horodatage) et attestation d\'assiduité signée par le formateur.'
+        : 'Feuille d\'émargement signée par demi-journée par les stagiaires et le formateur.'],
       ['Évaluation des acquis', dossier.evaluation || 'Évaluation continue (exercices pratiques guidés à chaque module) et évaluation finale des acquis.'],
       ['Satisfaction', 'Questionnaire de satisfaction à chaud complété par le stagiaire ; évaluation à froid proposée à l\'entreprise à 2–3 mois.'],
       ['Sanction', 'Certificat de réalisation et attestation de fin de formation (formation non certifiante).']
@@ -381,7 +401,7 @@ const Documents = {
         x.datesDetail, this._fmtH(x.heures), String(x.stagiaires.length || '—'), this._fmtEuro(dossier.price)]],
       { widths: [70, 40, 20, 20, 32], aligns: { 2:'center', 3:'center', 4:'right' }, totals: this._totalRows(dossier.price, x, of, 5) });
     if (x.stagiaires.length) {
-      y = this._para(doc, y, `Stagiaires formés : ${x.stagiaires.map(t => `${t.firstName} ${t.lastName}`.trim()).join(', ')}.`, { size: 8.5, color: this.MUTED });
+      y = this._para(doc, y, `Stagiaires formés : ${x.stagiaires.map(t => t.nomComplet).join(', ')}.`, { size: 8.5, color: this.MUTED });
     }
 
     y = this._band(doc, y, '3. Conditions de règlement');
@@ -426,7 +446,7 @@ const Documents = {
       ]);
 
       y = this._band(doc, y, '2. Émargement des stagiaires (signature par demi-journée)');
-      const rows = x.stagiaires.map((t, i) => [String(i + 1), `${t.lastName || ''} ${t.firstName || ''}`.trim(), t.fonction || '', '', '']);
+      const rows = x.stagiaires.map((t, i) => [String(i + 1), t.nomComplet, t.fonction || '', '', '']);
       while (rows.length < 8) rows.push([String(rows.length + 1), '', '', '', '']);
       y = this._prog(doc, y, ['N°', 'Nom et prénom', 'Fonction', 'Signature matin', 'Signature après-midi'], rows,
         { widths: [10, 58, 34, 40, 40], aligns: { 0:'center' }, minH: 10,
@@ -465,7 +485,7 @@ const Documents = {
 
     y = this._band(doc, y, '2. Relevé de connexion (une ligne par stagiaire et par journée)');
     const rows = [];
-    const noms = x.stagiaires.length ? x.stagiaires.map(t => `${t.lastName || ''} ${t.firstName || ''}`.trim()) : ['', '', ''];
+    const noms = x.stagiaires.length ? x.stagiaires.map(t => t.nomComplet) : ['', '', ''];
     x.jours.forEach(j => noms.forEach(n => rows.push([n, new Date(j + 'T00:00').toLocaleDateString('fr-FR'), '', '', '', '', ''])));
     y = this._prog(doc, y,
       ['Nom et prénom', 'Date', 'Connexion', 'Déconnexion', 'Durée', 'Activités réalisées', 'Visa / signature électronique'],
@@ -496,7 +516,7 @@ const Documents = {
 
     x.stagiaires.forEach((t, idx) => {
       if (idx > 0) doc.addPage();
-      const nom = `${t.firstName || ''} ${t.lastName || ''}`.trim();
+      const nom = t.nomComplet;
       let y = this._header(doc, of);
       y = this._title(doc, y, 'Certificat de réalisation',
         `N° ${num}-${String(idx + 1).padStart(2, '0')} — établi conformément à l'article L. 6353-1 du Code du travail et au modèle du ministère du Travail`);
@@ -568,14 +588,15 @@ const Documents = {
 
   /** Objectifs : une ligne de texte = une coche verte */
   _objectifs(doc, y, texte) {
-    const lignes = String(texte || '').split('\n').map(l => l.replace(/^[\s•\-–*✔✓]+/, '').trim()).filter(Boolean);
+    const lignes = this._lignes(texte).split('\n').map(l => l.replace(/^[\s•\-–*✔✓]+/, '').trim())
+      .filter(l => l && !/capables?\s+de\s*:?\s*$/i.test(l));
     const rows = (lignes.length ? lignes : ['Mettre en œuvre les compétences visées par la formation dans son activité professionnelle.']).map(l => ['', l]);
     return this._table(doc, y, { body: rows, widths: [8, this.W - 8], check: true });
   },
 
   /** Contenu : les lignes « Module / Jour / Séquence / Partie … » deviennent des titres */
   _contenuTable(doc, y, contenu, x) {
-    const lignes = String(contenu || '').split('\n').map(l => l.trim()).filter(Boolean);
+    const lignes = this._clean(contenu).split('\n').map(l => l.trim()).filter(Boolean);
     if (!lignes.length) {
       return this._kv(doc, y, [['Programme', 'Le programme détaillé est remis avec la convention de formation.']]);
     }
@@ -662,7 +683,7 @@ const Documents = {
 
   /** Bandeau de section navy */
   _band(doc, y, titre) {
-    y = this._need(doc, y, 22);                // bandeau + au moins une ligne dessous
+    y = this._need(doc, y, 38);                // bandeau + en-tête + 1re ligne du tableau (jamais seul en bas de page)
     doc.setFillColor(...this.NAVY);
     doc.rect(this.ML, y, this.W, 7, 'F');
     doc.setFont('helvetica', 'bold').setFontSize(9.2).setTextColor(255, 255, 255);
@@ -683,7 +704,18 @@ const Documents = {
 
   /** Tableau label / valeur */
   _kv(doc, y, rows) {
-    return this._table(doc, y, { body: rows.map(([k, v]) => [k, String(v ?? '—')]), widths: [50, this.W - 50], label: true });
+    return this._table(doc, y, { body: rows.map(([k, v]) => [k, this._lignes(v ?? '—')]), widths: [50, this.W - 50], label: true });
+  },
+
+  /** Nettoie un texte pour le PDF : espaces insécables (que la police PDF
+      affiche « / »), puces collées en fin de phrase → une puce par ligne. */
+  _clean(t) {
+    return String(t ?? '').replace(/[\u202F\u00A0\u2007]/g, ' ').replace(/[\u2018\u2019]/g, "'").replace(/\t/g, ' ');
+  },
+  _lignes(t) {
+    return this._clean(t)
+      .replace(/\s*([•▪●])\s*/g, (m, p, i) => (i === 0 ? '• ' : '\n• '))
+      .replace(/\n{2,}/g, '\n').trim();
   },
 
   /** Tableau « programme » : en-tête navy, lignes alternées, lignes TOTAL */
@@ -709,10 +741,10 @@ const Documents = {
       startY: y,
       margin: { left: this.ML, right: this.MR, top: this.TOP, bottom: this.PAGE_H - this.BOTTOM },
       head: o.head ? [o.head] : undefined,
-      body: o.body,
+      body: o.body.map(r => r.map(c => (c && typeof c === 'object') ? { ...c, content: this._clean(c.content) } : this._clean(c))),
       theme: 'grid',
       tableWidth: this.W,
-      styles: { font:'helvetica', fontSize: o.bodySize || 8.5, cellPadding: { top: 1.8, bottom: 1.8, left: 2.2, right: 2.2 },
+      styles: { font:'helvetica', fontSize: o.bodySize || 8.5, cellPadding: { top: 1.8, bottom: 1.8, left: 2.4, right: 3.2 },
                 lineColor: this.LINE, lineWidth: 0.25, textColor: this.TEXT, valign:'middle', overflow:'linebreak',
                 minCellHeight: o.minH || 0 },
       headStyles: { fillColor: o.navyHead ? this.NAVY : this.LABEL, textColor: o.navyHead ? [255,255,255] : this.NAVY,
@@ -754,14 +786,25 @@ const Documents = {
     const size = o.size || 8.8;
     doc.setFont('helvetica', o.style || 'normal').setFontSize(size).setTextColor(...(o.color || this.TEXT));
     const lh = size * 0.42;
-    const lignes = doc.splitTextToSize(String(texte || ''), this.W);
-    for (const l of lignes) {
+    const lignes = doc.splitTextToSize(this._clean(texte), this.W - 1);
+    lignes.forEach((l, i) => {
       y = this._need(doc, y, lh);
       doc.setFont('helvetica', o.style || 'normal').setFontSize(size).setTextColor(...(o.color || this.TEXT));
-      doc.text(l, this.ML, y);
+      this._ligneJustifiee(doc, l, this.ML, y, this.W - 1, i === lignes.length - 1);
       y += lh;
-    }
+    });
     return y + 2;
+  },
+
+  /** Écrit une ligne justifiée (la dernière ligne d'un paragraphe reste alignée à gauche) */
+  _ligneJustifiee(doc, ligne, x, y, largeur, derniere) {
+    const mots = String(ligne).trim().split(/ +/);
+    if (derniere || mots.length < 2) { doc.text(String(ligne).trim(), x, y); return; }
+    const occupe = mots.reduce((s, m) => s + doc.getTextWidth(m), 0);
+    const espace = (largeur - occupe) / (mots.length - 1);
+    if (espace > doc.getTextWidth(' ') * 4) { doc.text(String(ligne).trim(), x, y); return; }
+    let cx = x;
+    mots.forEach(m => { doc.text(m, cx, y); cx += doc.getTextWidth(m) + espace; });
   },
 
   /** Article : titre navy en gras puis paragraphe */
@@ -776,11 +819,11 @@ const Documents = {
   _bullets(doc, y, items) {
     const size = 8.8, lh = size * 0.42;
     for (const it of items) {
-      const lignes = doc.splitTextToSize(String(it), this.W - 5);
-      y = this._need(doc, y, lh * Math.min(lignes.length, 2));
       doc.setFont('helvetica', 'normal').setFontSize(size).setTextColor(...this.TEXT);
+      const lignes = doc.splitTextToSize(this._clean(it), this.W - 7);
+      y = this._need(doc, y, lh * Math.min(lignes.length, 2));
       doc.text('•', this.ML + 1, y);
-      for (const l of lignes) { y = this._need(doc, y, lh); doc.text(l, this.ML + 5, y); y += lh; }
+      lignes.forEach((l, i) => { y = this._need(doc, y, lh); this._ligneJustifiee(doc, l, this.ML + 5, y, this.W - 7, i === lignes.length - 1); y += lh; });
       y += 1;
     }
     return y + 1;
@@ -947,7 +990,7 @@ const Documents = {
         + band('4. Dispositions financières') + totalHtml + `<p>Règlement à 30 jours par virement ; subrogation ${esc(x.opcoLabel)} possible. Dédit : 30 % du prix en cas d'annulation moins de 10 jours ouvrés avant le début ; abandon facturé au prorata des heures réalisées ; force majeure sans indemnité.</p>`
         + band('5. Signatures') + '<p>Fait en deux exemplaires originaux, à ____________, le ____________.</p>' + sig(`Pour l'Entreprise — ${dossier.companyName}`, `Pour l'Organisme — ${of.nom}`)
         + band('Annexe 1 — Programme') + kv([['Objectifs', dossier.objectifs || '—'], ['Contenu', dossier.contenu || '—'], ['Évaluation', dossier.evaluation || '—']])
-        + band('Annexe 2 — Stagiaires') + `<ol>${x.stagiaires.map(t => `<li>${esc(t.firstName)} ${esc(t.lastName)}</li>`).join('')}</ol>`;
+        + band('Annexe 2 — Stagiaires') + `<ol>${x.stagiaires.map(t => `<li>${esc(t.nomComplet)}</li>`).join('')}</ol>`;
     } else if (docType === 'PROGRAMME') {
       body += titre('Programme de formation', dossier.trainingSubject)
         + band('1. Informations générales') + kv([['Intitulé', dossier.trainingSubject], ['Durée', x.dureeLabel], ['Dates', x.datesDetail], ['Lieu', x.lieu], ['Public visé', dossier.publicVise || 'Salariés de l\'entreprise'], ['Prérequis', dossier.prerequis || 'Aucun'], ['Modalité', x.modalite], ['Formateur', x.formateur], ['Financement', x.opcoLabel]])
@@ -977,7 +1020,7 @@ const Documents = {
      UTILITAIRES
   ══════════════════════════════════════════════════════════════════════ */
   _today() { return new Date().toLocaleDateString('fr-FR'); },
-  _fmtEuro(n) { return new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR', maximumFractionDigits:2 }).format(n || 0); },
+  _fmtEuro(n) { return new Intl.NumberFormat('fr-FR', { style:'currency', currency:'EUR', minimumFractionDigits:2, maximumFractionDigits:2 }).format(Number(n) || 0).replace(/[\u202F\u00A0]/g, ' '); },
   _fmtH(h) { const v = Math.round(Number(h || 0) * 100) / 100; return `${String(v).replace('.', ',')} h`; },
   _dateLongue(iso) {
     const s = new Date(iso + 'T00:00').toLocaleDateString('fr-FR', { weekday:'long', day:'numeric', month:'long', year:'numeric' });

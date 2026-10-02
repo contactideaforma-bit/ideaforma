@@ -1791,3 +1791,30 @@ html, body { overflow-x: hidden; }
 .nanika-nuage[data-etat="ecoute"] .nuage-halo { transform: scale(calc(1 + var(--niveau, 0) * .4)); transition: transform .12s ease-out; }
 .chatbot-micro.transcrit { opacity: .55; animation: nanika-transcrit 1s ease-in-out infinite; }
 @keyframes nanika-transcrit { 50% { opacity: 1; } }
+
+/* ── Formulaire formation : champs longs qui s'agrandissent (v56) ── */
+#dossierForm .field textarea {
+  width: 100%; box-sizing: border-box; resize: vertical;
+  line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+#dossierForm .field textarea.auto-grow { overflow: hidden; min-height: 44px; }
+#dossierForm .field input { min-width: 0; text-overflow: ellipsis; }
+#dossierForm .form-grid > .field { min-width: 0; }
+
+/* ── Contrôle de conformité OPCO (v56) ── */
+.trainee-head { display:flex; gap:8px; font-size:11.5px; font-weight:600; color:var(--text-muted); margin:0 0 4px; padding-right:34px; }
+.trainee-head span { flex:1; } .trainee-head span:last-child { flex:0; }
+.conf-box { border:1.5px solid #1F3A5F; border-radius:10px; background:#fff; padding:12px 14px; }
+.conf-box.conf-bloque { border-color:#B42318; background:#FFF8F7; }
+.conf-box.conf-alerte { border-color:#B54708; background:#FFFCF5; }
+.conf-box.conf-ok     { border-color:#2E7D32; background:#F6FBF6; }
+.conf-head { font-weight:700; font-size:13px; color:#1F3A5F; margin-bottom:8px; }
+.conf-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; }
+.conf-item { font-size:12.8px; line-height:1.45; padding-left:20px; position:relative; color:#1E293B; }
+.conf-item::before { position:absolute; left:0; top:0; font-weight:700; }
+.conf-b::before  { content:'✕'; color:#B42318; }
+.conf-a::before  { content:'!'; color:#B54708; left:4px; }
+.conf-ok::before { content:'✓'; color:#2E7D32; }
+.conf-detail { color:#475569; font-size:12.2px; margin-top:2px; }
+.conf-ou { font-size:11px; color:#1F3A5F; border:1px solid #B9C4D0; border-radius:6px; padding:0 6px; margin-left:4px; white-space:nowrap; }
+.conf-intro { font-size:13px; margin:0 0 10px; color:#1E293B; }

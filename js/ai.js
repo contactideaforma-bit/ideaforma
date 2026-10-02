@@ -31,53 +31,75 @@ const AI = {
   _parseJSON(text) {
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) throw new Error('Réponse IA non parseable');
-    return JSON.parse(match[0]);
+    try { return JSON.parse(match[0]); } catch { /* retours à la ligne bruts dans les chaînes → on les échappe */ }
+    let out = '', dansChaine = false, echap = false;
+    for (const ch of match[0]) {
+      if (dansChaine && !echap && (ch === '\n' || ch === '\r' || ch === '\t')) { out += ch === '\n' ? '\\n' : (ch === '\t' ? ' ' : ''); continue; }
+      if (ch === '"' && !echap) dansChaine = !dansChaine;
+      echap = !echap && ch === '\\';
+      out += ch;
+    }
+    return JSON.parse(out);
   },
 
   /* ══════════════════════════════════════════════
      GÉNÉRATION COMPLÈTE DU CONTENU D'UNE FORMATION
      Prend en compte les contraintes de l'OPCO
   ══════════════════════════════════════════════ */
-  async genererFormation(opco, trainingSubject, clientInfo = {}) {
+  async genererFormation(opco, trainingSubject, clientInfo = {}, ctx = {}) {
     const cfg = OpcoPage?.CONFIG?.[opco] || {};
+    const modalite = ctx.modalite || 'presentiel';
+    const heures = parseFloat(ctx.dureeHeures) || null;
+    const nbJours = parseInt(ctx.nbJours) || null;
+    const postes = (clientInfo.salaries || []).map(s => s.poste).filter(Boolean);
+    const stag = (ctx.stagiaires || []).map(t => {
+      const sal = (clientInfo.salaries || []).find(s =>
+        [s.lastName, s.firstName].map(x => String(x || '').toLowerCase()).sort().join('|') ===
+        [t.lastName, t.firstName].map(x => String(x || '').toLowerCase()).sort().join('|'));
+      return sal?.poste || '';
+    }).filter(Boolean);
+    const libMod = { presentiel: 'présentiel (dans les locaux de l\'entreprise)', distanciel: 'à distance (classe virtuelle)', mixte: 'mixte : une partie en présentiel, une partie à distance' }[modalite];
 
-    const system = `Tu es un expert en formation professionnelle continue en France.
-Tu rédiges des programmes de formation conformes aux exigences des OPCOs.
-Tu connais la réglementation (Loi Avenir, Qualiopi, Art. L.6353-1 du Code du Travail).
-Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après le JSON.`;
+    const system = `Tu es ingénieur pédagogique senior dans un organisme de formation certifié Qualiopi, spécialiste des dossiers de prise en charge OPCO.
+Tu rédiges des programmes qu'un conseiller OPCO valide sans demande de complément : précis, réalistes, sans formule creuse, sans contradiction.
+Tu connais le Code du travail (L. 6313-1, L. 6353-1), le référentiel Qualiopi et les exigences des OPCO pour la FOAD (assistance technique et pédagogique, activités à distance, suivi de l'assiduité).
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte avant ni après.`;
 
-    const prompt = `Génère le contenu pédagogique complet pour cette formation professionnelle.
+    const prompt = `Génère le contenu pédagogique complet de cette action de formation.
 
 CONTEXTE :
-- Intitulé de la formation : "${trainingSubject}"
-- Entreprise cliente : ${clientInfo.companyName || 'non précisée'}
-- Convention collective (IDCC) : ${clientInfo.idcc || 'non précisée'}
-- Secteur d'activité : ${cfg.sectors || 'non précisé'}
+- Intitulé : "${trainingSubject}"
+- Entreprise : ${clientInfo.companyName || 'non précisée'} — effectif : ${clientInfo.employees || 'inconnu'} salarié(s) — IDCC ${clientInfo.idcc || 'non précisée'}
+- Postes réellement occupés par les stagiaires : ${stag.length ? stag.join(', ') : (postes.length ? postes.join(', ') : 'non précisés')}
+- Nombre de stagiaires : ${(ctx.stagiaires || []).length || 'non précisé'}
+- Modalité : ${libMod}
+- Durée IMPOSÉE : ${heures ? `${heures} heures` : 'à proposer'}${nbJours ? ` sur ${nbJours} jour(s)` : ''}
+- OPCO : ${cfg.label || opco} — secteurs : ${cfg.sectors || 'non précisé'} — plafond : ${cfg.ceiling || 'non précisé'}
+- Points d'attention OPCO : ${(cfg.alerts || []).join('. ') || '—'}
 
-CONTEXTE OPCO — ${cfg.label || opco} :
-- Secteurs couverts : ${cfg.sectors || 'non précisé'}
-- Plafond horaire de prise en charge : ${cfg.ceiling || 'non précisé'}
-- Délai de dépôt du dossier : ${cfg.deadline || 'avant le démarrage'}
-- Documents requis par l'OPCO : ${(cfg.documents || []).join(', ') || 'convention, programme, devis'}
-- Points d'attention : ${(cfg.alerts || []).join('. ') || 'vérifier l\'adhésion'}
-
-INSTRUCTIONS :
-- Les objectifs doivent être mesurables et conformes aux attendus Qualiopi
-- Le programme doit être structuré en modules avec durées
-- Le contenu doit être cohérent avec le secteur et le plafond OPCO
-- Durée recommandée cohérente avec le prix habituel du secteur
+RÈGLES IMPÉRATIVES :
+1. Objectifs : 3 à 5, chacun commence par un verbe d'action observable (identifier, appliquer, réaliser, analyser, mettre en œuvre…). Jamais « connaître », « comprendre », « être sensibilisé ».
+2. Contenu : chaque titre de module suit EXACTEMENT ce format : « Module N — Titre (X h — présentiel) : » ou « Module N — Titre (X h — à distance) : ». ${heures ? `La somme des X doit faire exactement ${heures} h.` : 'La somme des X doit égaler la durée proposée.'} ${nbJours && heures ? `Répartis de façon réaliste sur ${nbJours} jour(s) (7 h maximum par jour).` : ''}
+3. ${modalite === 'mixte' ? 'Mixte : place les apports théoriques à distance et la pratique / mises en situation en présentiel ; chaque module indique sa modalité.' : modalite === 'distanciel' ? 'Tous les modules sont « à distance » (classe virtuelle synchrone).' : 'Tous les modules sont « présentiel ».'}
+4. Sous chaque module, 3 à 6 points concrets, propres au métier des stagiaires, précédés de « • », un par ligne. Aucune incohérence technique (ex. pas d'« EPI adaptés au stress »).
+5. Évaluation : une modalité par ligne précédée de « • » (positionnement initial, évaluations formatives par module, évaluation finale des acquis, satisfaction à chaud et à froid${modalite !== 'presentiel' ? ', suivi de l\'assiduité à distance par relevé de connexion' : ''}).
+6. Public visé : décris les salariés réellement concernés (postes ci-dessus, secteur), en une phrase. Jamais la liste des secteurs de la convention collective.
+7. Moyens : méthodes et outils concrets${modalite !== 'presentiel' ? ', dont l\'outil de classe virtuelle, l\'assistance technique et pédagogique (délai de réponse) et les activités à distance' : ''}.
+8. points_attention : liste (éventuellement vide) des risques de refus OPCO que tu repères dans le contexte (ex. durée irréaliste, intitulé hors champ, effectif / IDCC incohérents).
 
 Génère ce JSON (sans rien d'autre) :
 {
-  "objectifs": "À l'issue de la formation, le stagiaire sera capable de :\\n• [compétence 1 concrète]\\n• [compétence 2]\\n• [compétence 3]\\n• [compétence 4]",
-  "contenu": "Module 1 — [Titre] (Xh) :\\n  • [point]\\n  • [point]\\n\\nModule 2 — [Titre] (Xh) :\\n  • [point]\\n  • [point]\\n\\nModule 3 — [Titre] (Xh) :\\n  • [point]\\n  • [point]",
-  "evaluation": "[Modalités d'évaluation adaptées au secteur et à Qualiopi]",
-  "prerequis": "[Prérequis adaptés au public cible]",
-  "duree": "[Durée recommandée, ex: 2 jours (14h)]",
-  "public_vise": "[Description du public visé en une phrase]"
+  "objectifs": "À l'issue de la formation, le stagiaire sera capable de :\\n• …\\n• …\\n• …",
+  "contenu": "Module 1 — … (X h — présentiel) :\\n• …\\n• …\\n\\nModule 2 — … (X h — à distance) :\\n• …\\n• …",
+  "evaluation": "• …\\n• …\\n• …\\n• …",
+  "prerequis": "…",
+  "duree": "${heures ? `${heures} h` : 'ex. 2 jours (14 h)'}",
+  "public_vise": "…",
+  "moyens": "…",
+  "points_attention": ["…"]
 }`;
 
-    const text = await this._call(prompt, system, 1400);
+    const text = await this._call(prompt, system, 2600);
     return this._parseJSON(text);
   },
 
@@ -112,39 +134,42 @@ Contraintes : texte professionnel, conforme aux exigences Qualiopi, adapté au s
      Vérifie que le dossier est complet et cohérent
      avec les exigences de l'OPCO
   ══════════════════════════════════════════════ */
-  async verifierDossier(opco, dossierData, clientData) {
+  async verifierDossier(opco, d, client = {}, regles = null) {
     const cfg = OpcoPage?.CONFIG?.[opco] || {};
-
-    const system = `Tu es un expert en dossiers OPCO. Tu vérifies la conformité et la cohérence des dossiers de formation.
+    const system = `Tu es conseiller OPCO expérimenté : tu instruis des demandes de prise en charge et tu repères ce qui ferait refuser ou suspendre un dossier.
+Tu relis le CONTENU (cohérence, réalisme, précision), les contrôles de forme ayant déjà été faits par un programme.
 Réponds UNIQUEMENT avec un objet JSON valide.`;
+    const deja = regles ? [...regles.bloquants, ...regles.alertes].map(x => '- ' + x.titre).join('\n') : '';
+    const prompt = `Relis ce dossier de formation destiné à ${cfg.label || opco}.
 
-    const prompt = `Vérifie ce dossier de formation pour ${cfg.label || opco}.
+Entreprise : ${d.companyName || '—'} — ${client.employees || '?'} salariés — IDCC ${client.idcc || '?'}
+Intitulé : ${d.trainingSubject || '—'}
+Modalité : ${d.modalite || '—'} — Durée : ${d.dureeHeures || '?'} h — Dates : ${(d.trainingDates || []).map(x => `${x.start} → ${x.end || x.start}`).join(', ')}
+Stagiaires : ${(d.trainees || []).length} — postes : ${(client.salaries || []).map(s => s.poste).filter(Boolean).join(', ') || 'non précisés'}
+Prix HT : ${d.price || 0} €
+Public visé : ${d.publicVise || '—'}
+Prérequis : ${d.prerequis || '—'}
+Objectifs :
+${d.objectifs || '—'}
+Programme :
+${d.contenu || '—'}
+Évaluation :
+${d.evaluation || '—'}
+Moyens : ${d.moyens || '—'}
+Lieu : ${d.lieu || '—'}
 
-DOSSIER :
-- Intitulé : ${dossierData.trainingSubject || '—'}
-- Prix HT : ${dossierData.price || 0} €
-- Durée : ${dossierData.trainingDates?.length ? dossierData.trainingDates.length + ' période(s)' : 'non précisée'}
-- Objectifs : ${dossierData.objectifs ? 'oui' : 'manquants'}
-- Programme : ${dossierData.contenu ? 'oui' : 'manquant'}
-- Évaluation : ${dossierData.evaluation ? 'oui' : 'manquante'}
-- Participants : ${dossierData.trainees?.length || 0}
-- IDCC : ${clientData.idcc || 'non précisé'}
+Points déjà signalés par le contrôle automatique (ne les répète pas) :
+${deja || '- aucun'}
 
-EXIGENCES OPCO ${cfg.label} :
-- Plafond : ${cfg.ceiling}
-- Délai : ${cfg.deadline}
-- Documents : ${(cfg.documents || []).join(', ')}
+Cherche : contradictions ou formulations absurdes, contenu générique non adapté aux postes, objectifs non mesurables, programme trop chargé pour la durée, adéquation intitulé / contenu / public, éléments FOAD manquants, tout ce qu'un conseiller ${cfg.label || 'OPCO'} demanderait de corriger.
 
-Génère ce JSON :
+JSON attendu :
 {
-  "score": <0-100>,
-  "statut": "conforme" | "attention" | "incomplet",
-  "points_forts": ["...", "..."],
-  "points_manquants": ["...", "..."],
-  "recommandations": ["...", "..."]
+  "statut": "conforme" | "a_corriger",
+  "synthese": "une phrase",
+  "problemes": [ { "champ": "Objectifs|Programme|Évaluation|Public visé|Moyens|Durée|Autre", "probleme": "…", "correction": "texte de remplacement ou action précise" } ]
 }`;
-
-    const text = await this._call(prompt, system, 800);
+    const text = await this._call(prompt, system, 1800);
     return this._parseJSON(text);
   }
 };

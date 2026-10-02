@@ -409,6 +409,9 @@ const DataStore = {
     };
     // Logo seulement si fourni
     if (updates.logo_base64 !== undefined) patch.logo_base64 = updates.logo_base64;
+    /* Un champ absent de `updates` n'est pas écrasé (avant : le nom de la
+       dirigeante était remis à vide à chaque enregistrement des paramètres) */
+    Object.keys(patch).forEach(k => { if (!(k in updates)) delete patch[k]; });
 
     const { data, error } = await supa
       .from('profiles')

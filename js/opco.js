@@ -102,13 +102,13 @@ const OpcoPage = {
     constructys: {
       label:'Constructys', shortLabel:'Constructys', color:'#F59E0B',
       sectors:'Bâtiment, travaux publics, négoce de matériaux, génie civil, menuiserie, plomberie, électricité du bâtiment',
-      deadline:'1 mois avant le démarrage de la formation — délai strict',
-      ceiling:'12 à 28 €/h HT selon type de formation',
+      deadline:'15 jours calendaires minimum avant le début de la formation (Constructys 2026) — viser 1 mois',
+      ceiling:'Bâtiment 2026 : 24 €/h/stagiaire (< 11 salariés, 840 €/jour/groupe en intra), 19 €/h (11-49 salariés, 665 €/jour/groupe)',
       website:'https://www.constructys.fr',
       contact:'constructys.fr',
       phone:'01 55 68 70 00',
       documents:['Devis signé par l\'employeur','Programme pédagogique détaillé','Attestation Qualiopi valide','KBIS de moins de 3 mois','Convention de formation signée','Attestation de présence à fournir après chaque session'],
-      alerts:['KBIS de moins de 3 mois obligatoire — à demander en amont','Les attestations de présence sont une condition sine qua non du paiement','Respecter le délai d\'1 mois — refus systématique si tardif'],
+      alerts:['KBIS de moins de 3 mois obligatoire — à demander en amont','Les attestations de présence sont une condition sine qua non du paiement','Demande reçue au moins 15 jours avant le début (viser 1 mois) — refus si tardive'],
       tips:[
         '📌 Demander le KBIS DÈS la signature du devis — délai de 3 mois très souvent oublié et cause de rejets.',
         '🏗️ Les formations habilitations (travaux en hauteur, CACES, électrique) sont hautement prioritaires et bien financées.',
@@ -124,8 +124,8 @@ const OpcoPage = {
       ],
       plafonds:[
         { type:'Formations sécurité réglementaires (CACES, habilitations, travail en hauteur)', taille:'Tous effectifs', taux:'Jusqu\'à 28 €/h', plafond:'Thèmes prioritaires Constructys', note:'Toujours bien financées — à aligner sur thèmes annuels' },
-        { type:'Plan de développement des compétences', taille:'TPE < 10 salariés', taux:'20–28 €/h', plafond:'Fonds mutualisés BTP', note:'KBIS < 3 mois obligatoire' },
-        { type:'Plan de développement des compétences', taille:'PME 10–49 salariés', taux:'14–20 €/h', plafond:'Sur enveloppe annuelle', note:'Dépôt 1 mois avant démarrage' },
+        { type:'Plan de développement des compétences (Bâtiment 2026)', taille:'< 11 salariés', taux:'24 €/h/stagiaire', plafond:'840 € HT/jour/groupe en intra', note:'Demande ≥ 15 jours avant le début' },
+        { type:'Plan de développement des compétences (Bâtiment 2026)', taille:'11–49 salariés', taux:'19 €/h/stagiaire', plafond:'665 € HT/jour/groupe en intra', note:'Demande ≥ 15 jours avant le début' },
         { type:'Plan de développement des compétences', taille:'≥ 50 salariés', taux:'12–15 €/h', plafond:'Sur accord préalable', note:'' },
         { type:'Habilitations électriques (B0, H0, BR…)', taille:'Tous effectifs', taux:'Jusqu\'à 25 €/h', plafond:'Thèmes prioritaires', note:'Vérifier liste thèmes prioritaires annuels' },
         { type:'Alternance BTP', taille:'Tous effectifs', taux:'NPEC branche', plafond:'Selon diplôme préparé', note:'Chaque entreprise = dossier séparé' }
@@ -769,6 +769,7 @@ const OpcoPage = {
 
         <div class="form-section">
           <div class="form-section-title">👥 Participants à cette formation</div>
+          <div class="trainee-head"><span>Prénom</span><span>NOM (comme sur la pièce d'identité)</span><span></span></div>
           <div class="dynamic-list" id="traineeList">
             ${trainees.map((t,i) => this._traineeRow(t.firstName, t.lastName, i)).join('')}
           </div>
@@ -797,14 +798,14 @@ const OpcoPage = {
                 Objectifs pédagogiques
                 <button type="button" class="btn-reformuler" data-field="objectifs">↺ Reformuler</button>
               </label>
-              <textarea name="objectifs" id="fieldObjectifs" rows="4"
+              <textarea name="objectifs" id="fieldObjectifs" rows="4" class="auto-grow"
                 placeholder="À l'issue de la formation, le stagiaire sera capable de…">${esc(d?.objectifs)}</textarea></div>
             <div class="field form-col-full">
               <label style="display:flex;align-items:center;justify-content:space-between;">
                 Programme / Contenu des modules
                 <button type="button" class="btn-reformuler" data-field="contenu">↺ Reformuler</button>
               </label>
-              <textarea name="contenu" id="fieldContenu" rows="5"
+              <textarea name="contenu" id="fieldContenu" rows="5" class="auto-grow"
                 placeholder="Module 1 : …&#10;Module 2 : …&#10;Module 3 : …">${esc(d?.contenu)}</textarea></div>
             <div class="field"><label>Modalité pédagogique</label>
               <select name="modalite">
@@ -812,22 +813,22 @@ const OpcoPage = {
                 <option value="distanciel" ${d?.modalite==='distanciel'?'selected':''}>Distanciel</option>
                 <option value="mixte"      ${d?.modalite==='mixte'?'selected':''}>Mixte (présentiel + distanciel)</option>
               </select></div>
-            <div class="field">
+            <div class="field form-col-full">
               <label style="display:flex;align-items:center;justify-content:space-between;">
-                Modalité d'évaluation
+                Modalités d'évaluation
                 <button type="button" class="btn-reformuler" data-field="evaluation">↺ Reformuler</button>
               </label>
-              <input type="text" name="evaluation" id="fieldEvaluation" value="${esc(d?.evaluation)}"
-                placeholder="Ex. QCM, mise en situation, entretien…" /></div>
+              <textarea name="evaluation" id="fieldEvaluation" rows="3" class="auto-grow"
+                placeholder="Ex. QCM, mise en situation, entretien… (une modalité par ligne)">${esc(d?.evaluation)}</textarea></div>
             <div class="field form-col-full"><label>Prérequis</label>
-              <input type="text" name="prerequis" id="fieldPrerequis" value="${esc(d?.prerequis)}"
-                placeholder="Ex. Aucun prérequis / Maîtrise de base du français…" /></div>
+              <textarea name="prerequis" id="fieldPrerequis" rows="2" class="auto-grow"
+                placeholder="Ex. Aucun prérequis / Maîtrise de base du français…">${esc(d?.prerequis)}</textarea></div>
             <div class="field form-col-full"><label>Public visé</label>
-              <input type="text" name="publicVise" value="${esc(d?.publicVise)}"
-                placeholder="Ex. Salariés de l'atelier — réceptionnaires et carrossiers" /></div>
+              <textarea name="publicVise" rows="2" class="auto-grow"
+                placeholder="Ex. Salariés de l'atelier — réceptionnaires et carrossiers">${esc(d?.publicVise)}</textarea></div>
             <div class="field form-col-full"><label>Méthodes et moyens pédagogiques</label>
-              <input type="text" name="moyens" value="${esc(d?.moyens)}"
-                placeholder="Ex. Démonstrations, exercices pratiques sur les outils de l'entreprise, support remis…" /></div>
+              <textarea name="moyens" rows="2" class="auto-grow"
+                placeholder="Ex. Démonstrations, exercices pratiques sur les outils de l'entreprise, support remis…">${esc(d?.moyens)}</textarea></div>
           </div>
         </div>
 
@@ -864,6 +865,8 @@ const OpcoPage = {
             </button>
           </div>
         </div>
+
+        <div class="form-section" id="conformiteBox"></div>
 
         <div class="form-section">
           <div class="form-section-title">🏷️ Statut</div>
@@ -919,6 +922,11 @@ const OpcoPage = {
   },
 
   _initDossierFormEvents(c, d) {
+    /* Champs longs : la zone s'agrandit avec le texte (plus de texte qui dépasse) */
+    const ajuster = el => { el.style.height = 'auto'; el.style.height = (el.scrollHeight + 2) + 'px'; };
+    this._ajusterChamps = () => document.querySelectorAll('#dossierForm textarea.auto-grow').forEach(ajuster);
+    document.querySelectorAll('#dossierForm textarea.auto-grow').forEach(el => el.addEventListener('input', () => ajuster(el)));
+    requestAnimationFrame(() => this._ajusterChamps());
     let traineeCount = document.querySelectorAll('#traineeList .dynamic-row').length;
     let dateCount    = document.querySelectorAll('#dateList .dynamic-row').length;
 
@@ -946,7 +954,26 @@ const OpcoPage = {
       document.getElementById(id)?.addEventListener('input', majTarif));
     form?.addEventListener('input', e => { if (e.target.closest('#traineeList')) majTarif(); });
     form?.addEventListener('click', e => { if (e.target.closest('#traineeList .btn-remove-row, #addTrainee')) setTimeout(majTarif, 0); });
+    form?.addEventListener('change', e => { if (e.target.closest('#dateList')) majTarif(); });
     majTarif();
+
+    /* ── Contrôle de conformité en direct (règles OPCO) ── */
+    let minuteur = null;
+    this._majConformite = async () => {
+      const box = document.getElementById('conformiteBox');
+      if (!box || typeof Conformite === 'undefined') return;
+      try {
+        const of = await Conformite.profil();
+        const data = this._lireFormulaire(form);
+        const r = Conformite.verifier({ dossier: { ...data, status: data.status }, client: c, of, opco: this.currentOpco, typeDoc: 'devis' });
+        box.innerHTML = Conformite.panneau(r);
+      } catch (err) { console.warn('[Conformité]', err); }
+    };
+    const planifier = () => { clearTimeout(minuteur); minuteur = setTimeout(() => this._majConformite(), 500); };
+    form?.addEventListener('input', planifier);
+    form?.addEventListener('change', planifier);
+    form?.addEventListener('click', e => { if (e.target.closest('.btn-remove-row, #addTrainee, #addDate, .status-option')) planifier(); });
+    this._majConformite();
 
     /* ── Assistance IA ── */
     document.getElementById('aiAssistBtn')?.addEventListener('click', async () => {
@@ -967,16 +994,27 @@ const OpcoPage = {
       }
 
       try {
-        const result = await AI.genererFormation(this.currentOpco, subject, c);
+        const lu = this._lireFormulaire(form);
+        const nbJours = Documents._expandDates(lu.trainingDates).length;
+        const result = await AI.genererFormation(this.currentOpco, subject, c, {
+          modalite: lu.modalite, dureeHeures: lu.dureeHeures, nbJours,
+          stagiaires: lu.trainees, lieu: lu.lieu
+        });
         if (result.objectifs)  document.getElementById('fieldObjectifs').value = result.objectifs;
         if (result.contenu)    document.getElementById('fieldContenu').value   = result.contenu;
         if (result.evaluation) document.getElementById('fieldEvaluation').value = result.evaluation;
         if (result.prerequis)  document.getElementById('fieldPrerequis').value  = result.prerequis;
-        if (result.public_vise) { const pv = form?.querySelector('[name="publicVise"]'); if (pv && !pv.value.trim()) pv.value = result.public_vise; }
+        if (result.public_vise) { const pv = form?.querySelector('[name="publicVise"]'); if (pv && (!pv.value.trim() || Conformite.publicGenerique(pv.value))) pv.value = result.public_vise; }
+        if (result.moyens) { const mo = form?.querySelector('[name="moyens"]'); if (mo && !mo.value.trim()) mo.value = result.moyens; }
+        if (Array.isArray(result.points_attention) && result.points_attention.length && status) {
+          setTimeout(() => status.insertAdjacentHTML('beforeend', `<div class="ai-error" style="margin-top:6px;">${result.points_attention.map(esc).join('<br>')}</div>`), 0);
+        }
+        this._majConformite?.();
+        this._ajusterChamps?.();
         /* Durée suggérée « 2 jours (14h) » → champ heures s'il est vide */
         const dureeEl = document.getElementById('fieldDureeHeures');
         const mh = String(result.duree || '').match(/(\d+(?:[.,]\d+)?)\s*h/i);
-        if (dureeEl && !dureeEl.value && mh) { dureeEl.value = mh[1].replace(',', '.'); majTarif(); }
+        if (dureeEl && !dureeEl.value && mh) { dureeEl.value = mh[1].replace(',', '.'); majTarif(); this._majConformite?.(); }
         if (status) {
           status.innerHTML = `<div class="ai-success">
             ✅ Contenu généré par IA${result.duree ? ` — Durée suggérée : <strong>${result.duree}</strong>` : ''}.
@@ -1007,6 +1045,8 @@ const OpcoPage = {
         try {
           const result = await AI.reformuler(field, el.value, this.currentOpco, subject);
           el.value = result;
+          this._ajusterChamps?.();
+          this._majConformite?.();
           Toast.show('Reformulé ✓', 'success');
         } catch (err) { Toast.show('Erreur : ' + err.message, 'error'); }
         btn.disabled = false; btn.textContent = '↺ Reformuler';
@@ -1028,7 +1068,10 @@ const OpcoPage = {
       .filter(r => r.querySelector('[data-field="firstName"]').value.trim() || r.querySelector('[data-field="lastName"]').value.trim()).length || 1;
     const effectif   = c?.employees || '';
 
-    const s = Tarifs.suggestion({ opco, dispositif, effectif, heures, stagiaires, prix });
+    const dates = [...document.querySelectorAll('#dateList .dynamic-row')].map(r => ({
+      start: r.querySelector('[data-field="start"]').value, end: r.querySelector('[data-field="end"]').value })).filter(x => x.start);
+    const jours = typeof Documents !== 'undefined' ? Documents._expandDates(dates).length : 0;
+    const s = Tarifs.suggestion({ opco, dispositif, effectif, heures, stagiaires, prix, jours });
     if (!s) { box.innerHTML = ''; return; }
 
     const tauxEl = document.getElementById('fieldTauxHoraire');
@@ -1069,38 +1112,11 @@ const OpcoPage = {
     const trainingSubject = form.querySelector('[name="trainingSubject"]').value.trim();
     if (!trainingSubject) { Toast.show('L\'intitulé est requis', 'error'); return; }
 
-    const trainees = [];
-    form.querySelectorAll('#traineeList .dynamic-row').forEach(row => {
-      const fn = row.querySelector('[data-field="firstName"]').value.trim();
-      const ln = row.querySelector('[data-field="lastName"]').value.trim();
-      if (fn || ln) trainees.push({ firstName: fn, lastName: ln });
-    });
+    const data = this._lireFormulaire(form);
 
-    const trainingDates = [];
-    form.querySelectorAll('#dateList .dynamic-row').forEach(row => {
-      const start = row.querySelector('[data-field="start"]').value;
-      const end   = row.querySelector('[data-field="end"]').value;
-      if (start) trainingDates.push({ start, end });
-    });
-
-    const data = {
-      trainingSubject,
-      trainees, trainingDates,
-      price:      form.querySelector('[name="price"]').value,
-      objectifs:  form.querySelector('[name="objectifs"]').value.trim(),
-      contenu:    form.querySelector('[name="contenu"]').value.trim(),
-      modalite:   form.querySelector('[name="modalite"]').value,
-      evaluation: form.querySelector('[name="evaluation"]').value.trim(),
-      prerequis:  form.querySelector('[name="prerequis"]').value.trim(),
-      publicVise: form.querySelector('[name="publicVise"]').value.trim(),
-      moyens:     form.querySelector('[name="moyens"]').value.trim(),
-      dureeHeures: form.querySelector('[name="dureeHeures"]').value,
-      dispositif: form.querySelector('[name="dispositif"]')?.value || '',
-      tauxHoraire: form.querySelector('[name="tauxHoraire"]')?.value || '',
-      lieu:       form.querySelector('[name="lieu"]').value.trim(),
-      status:     form.querySelector('[name="status"]').value,
-      notes:      form.querySelector('[name="notes"]').value.trim()
-    };
+    /* Ne pas enregistrer en l'état une incohérence nom / prénom sans le signaler */
+    const inverses = data.trainees.filter(t => Conformite.nomInverse(t));
+    if (inverses.length) Toast.show(`Nom / prénom peut-être inversé : ${esc(inverses.map(t => `prénom « ${t.firstName} », nom « ${t.lastName} »`).join(' ; '))}`, 'warning', 7000);
 
     // Documents à générer (création seulement)
     const genDevis      = !dossierId && form.querySelector('[name="genDevis"]')?.checked;
@@ -1122,15 +1138,19 @@ const OpcoPage = {
       Modal.close();
       await this.render(opco);
 
-      // Générer les documents automatiquement si demandé
-      if (dossier && c) {
-        const docData = { ...dossier, ...data, companyName: c.companyName, siret: c.siret,
-          address: c.address, phone: c.phone, email: c.email,
-          nomGerant: c.nomGerant, idcc: c.idcc, opco };
-
-        if (genDevis)      await Documents.genererDevis(docData);
-        if (genProgramme)  await Documents.genererProgramme(docData);
-        if (genConvention) await Documents.genererConvention(docData);
+      // Générer les documents automatiquement si demandé — après contrôle de conformité
+      if (dossier && c && (genDevis || genProgramme || genConvention)) {
+        const docData = this._docData(c, { ...dossier, ...data }, opco);
+        await new Promise(r => setTimeout(r, 250));   // laisse la fenêtre précédente se fermer
+        await Conformite.controlerPuisGenerer({
+          dossier: docData, client: c, opco, typeDoc: 'devis',
+          corriger: () => this.openDossierForm(opco, clientId, dossier.id),
+          generer: async () => {
+            if (genDevis)      await Documents.genererDevis(docData);
+            if (genProgramme)  await Documents.genererProgramme(docData);
+            if (genConvention) await Documents.genererConvention(docData);
+          }
+        });
       }
 
       updateNavDots();
@@ -1141,6 +1161,49 @@ const OpcoPage = {
     }
   },
 
+  /** Données du dossier enrichies de la fiche client, pour les documents */
+  _docData(c, d, opco) {
+    return { ...d, companyName: c.companyName, siret: c.siret, address: c.address, phone: c.phone,
+      email: c.email, codeNaf: c.codeNaf, nomGerant: c.nomGerant, idcc: c.idcc, employees: c.employees,
+      salariesClient: c.salaries || [], opco };
+  },
+
+  /** Lit le formulaire formation (noms normalisés : NOM en capitales, Prénom) */
+  _lireFormulaire(form) {
+    const trainees = [];
+    form.querySelectorAll('#traineeList .dynamic-row').forEach(row => {
+      const fn = row.querySelector('[data-field="firstName"]').value.trim();
+      const ln = row.querySelector('[data-field="lastName"]').value.trim();
+      if (fn || ln) trainees.push(Conformite.normaliserNom({ firstName: fn, lastName: ln }));
+    });
+
+    const trainingDates = [];
+    form.querySelectorAll('#dateList .dynamic-row').forEach(row => {
+      const start = row.querySelector('[data-field="start"]').value;
+      const end   = row.querySelector('[data-field="end"]').value;
+      if (start) trainingDates.push({ start, end });
+    });
+
+    return {
+      trainingSubject: form.querySelector('[name="trainingSubject"]').value.trim(),
+      trainees, trainingDates,
+      price:      form.querySelector('[name="price"]').value,
+      objectifs:  form.querySelector('[name="objectifs"]').value.trim(),
+      contenu:    form.querySelector('[name="contenu"]').value.trim(),
+      modalite:   form.querySelector('[name="modalite"]').value,
+      evaluation: form.querySelector('[name="evaluation"]').value.trim(),
+      prerequis:  form.querySelector('[name="prerequis"]').value.trim(),
+      publicVise: form.querySelector('[name="publicVise"]').value.trim(),
+      moyens:     form.querySelector('[name="moyens"]').value.trim(),
+      dureeHeures: form.querySelector('[name="dureeHeures"]').value,
+      dispositif: form.querySelector('[name="dispositif"]')?.value || '',
+      tauxHoraire: form.querySelector('[name="tauxHoraire"]')?.value || '',
+      lieu:       form.querySelector('[name="lieu"]').value.trim(),
+      status:     form.querySelector('[name="status"]').value,
+      notes:      form.querySelector('[name="notes"]').value.trim()
+    };
+  },
+
   /* ══════════════════════════════════════════════
      MENU DOCUMENTS
   ══════════════════════════════════════════════ */
@@ -1149,9 +1212,7 @@ const OpcoPage = {
     const d = c ? (c.dossiers||[]).find(dos => dos.id === dossierId) : null;
     if (!c || !d) return;
 
-    const docData = { ...d, companyName: c.companyName, siret: c.siret,
-      address: c.address, phone: c.phone, email: c.email, codeNaf: c.codeNaf,
-      nomGerant: c.nomGerant, idcc: c.idcc, opco };
+    const docData = this._docData(c, d, opco);
 
     Modal.open(`📄 Documents — ${esc(d.trainingSubject)}`, `
       <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
@@ -1206,6 +1267,15 @@ const OpcoPage = {
         btn.addEventListener('click', async () => {
           btn.disabled = true; btn.style.opacity = '0.6';
           try {
+            const type = btn.dataset.doc;
+            if (['devis', 'programme', 'convention', 'facture'].includes(type)) {
+              const lancer = { devis: () => Documents.genererDevis(docData), programme: () => Documents.genererProgramme(docData),
+                               convention: () => Documents.genererConvention(docData), facture: () => Documents.genererFacture(docData) }[type];
+              await Conformite.controlerPuisGenerer({ dossier: docData, client: c, opco, typeDoc: type, generer: lancer,
+                corriger: () => this.openDossierForm(opco, clientId, dossierId) });
+              btn.disabled = false; btn.style.opacity = '1';
+              return;
+            }
             switch (btn.dataset.doc) {
               case 'devis':      await Documents.genererDevis(docData);      break;
               case 'programme':  await Documents.genererProgramme(docData);  break;
