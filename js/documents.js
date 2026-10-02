@@ -229,7 +229,7 @@ const Documents = {
     y = this._article(doc, y, 'Article 3.2 — Suivi de l\'exécution',
       'L\'assiduité des stagiaires est attestée par une feuille d\'émargement signée par demi-journée par les stagiaires et le formateur (présentiel) ou par un relevé de connexion accompagné d\'une attestation d\'assiduité (distanciel). Un certificat de réalisation est établi pour chaque stagiaire à l\'issue de l\'action.');
     y = this._article(doc, y, 'Article 3.3 — Évaluation',
-      `${dossier.evaluation || 'Évaluation des acquis en continu (exercices, mises en situation) et en fin de formation.'} Un questionnaire de satisfaction est complété par chaque stagiaire ; une attestation de fin de formation lui est remise. Une évaluation à froid est proposée au Client dans les trois mois suivant la formation.`);
+      `${String(dossier.evaluation || 'Évaluation des acquis en continu (exercices, mises en situation) et en fin de formation.').trim().replace(/([^.;:!?])$/, '$1.')}\nUn questionnaire de satisfaction est complété par chaque stagiaire ; une attestation de fin de formation lui est remise. Une évaluation à froid est proposée au Client dans les trois mois suivant la formation.`);
     y = this._article(doc, y, 'Article 3.4 — Règlement intérieur',
       'Le règlement intérieur applicable aux stagiaires (art. L. 6352-3 du Code du travail) est remis au Client avec la présente convention ; le Client s\'engage à le porter à la connaissance des stagiaires avant le début de la formation.');
 
@@ -805,12 +805,15 @@ const Documents = {
     const size = o.size || 8.8;
     doc.setFont('helvetica', o.style || 'normal').setFontSize(size).setTextColor(...(o.color || this.TEXT));
     const lh = size * 0.42;
-    const lignes = doc.splitTextToSize(this._clean(texte), this.W - 1);
-    lignes.forEach((l, i) => {
-      y = this._need(doc, y, lh);
-      doc.setFont('helvetica', o.style || 'normal').setFontSize(size).setTextColor(...(o.color || this.TEXT));
-      this._ligneJustifiee(doc, l, this.ML, y, this.W - 1, i === lignes.length - 1);
-      y += lh;
+    /* Chaque retour à la ligne = un paragraphe : sa dernière ligne n'est pas étirée */
+    this._clean(texte).split('\n').forEach(par => {
+      const lignes = doc.splitTextToSize(par, this.W - 1);
+      lignes.forEach((l, i) => {
+        y = this._need(doc, y, lh);
+        doc.setFont('helvetica', o.style || 'normal').setFontSize(size).setTextColor(...(o.color || this.TEXT));
+        this._ligneJustifiee(doc, l, this.ML, y, this.W - 1, i === lignes.length - 1);
+        y += lh;
+      });
     });
     return y + 2;
   },
