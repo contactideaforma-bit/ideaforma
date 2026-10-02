@@ -382,6 +382,34 @@ const DataStore = {
      PROFIL
   ══════════════════════════════════════════════ */
 
+  /* ══════════════════════════════════════════════
+     FORMATRICE PRINCIPALE (table formateurs, statut « interne »)
+     Diplômes, expériences et domaines justifiables — Qualiopi ind. 21-22
+  ══════════════════════════════════════════════ */
+  async getFormateurPrincipal() {
+    const uid = await this._uid();
+    const { data, error } = await supa.from('formateurs').select('*')
+      .eq('user_id', uid).eq('statut', 'interne').eq('actif', true)
+      .order('cree_le', { ascending: true }).limit(1);
+    if (error) { console.warn('[formateurs]', error.message); return null; }
+    return data?.[0] || null;
+  },
+
+  async saveFormateurPrincipal(f) {
+    const uid = await this._uid();
+    const ligne = {
+      user_id: uid, statut: 'interne', actif: true,
+      nom: f.nom || '—', prenom: f.prenom || null, email: f.email || null, telephone: f.telephone || null,
+      specialites: f.specialites || null, qualifications: f.qualifications || null
+    };
+    const req = f.id
+      ? supa.from('formateurs').update(ligne).eq('id', f.id).eq('user_id', uid).select().single()
+      : supa.from('formateurs').insert(ligne).select().single();
+    const { data, error } = await req;
+    if (error) this._handleError(error, 'saveFormateurPrincipal');
+    return data;
+  },
+
   async getProfile() {
     const uid = await this._uid();
     const { data } = await supa.from('profiles').select('*').eq('id', uid).single();

@@ -1035,7 +1035,13 @@ const OpcoPage = {
         const jours = Documents._expandDates(lu.trainingDates);
         const heures = parseFloat(lu.dureeHeures) || prop.heures;
         /* 2. Contenu calé sur le planning, contrôlé puis corrigé automatiquement */
+        const ofp = await Conformite.profil();
+        const avant = ofp.formatrice ? Formatrice.analyser({ trainingSubject: subject, objectifs: lu.objectifs, contenu: '' }, ofp.formatrice) : null;
+        if (avant?.hors.length || avant?.reglementees.length) {
+          Toast.show(`Attention : « ${esc(subject)} » sort de vos domaines justifiables — les documents seront bloqués`, 'warning', 8000);
+        }
         const result = await AI.genererFormationConforme(this.currentOpco, subject, c, {
+          formatrice: ofp.formatrice,
           modalite: lu.modalite, dureeHeures: heures, nbJours: jours.length,
           stagiaires: lu.trainees, lieu: lu.lieu, creneaux: CriteresOpco.creneaux(jours, heures)
         });
@@ -1203,12 +1209,48 @@ const OpcoPage = {
         const el = champ('publicVise');
         const cle = t => [t.lastName, t.firstName].map(v => String(v || '').trim().toLowerCase()).sort().join('|');
         const sal = (c.salaries || []).filter(s => !lu.trainees.length || lu.trainees.some(t => cle(t) === cle(s)));
-        const postes = [...new Set(sal.map(s => String(s.poste || '').trim().toLowerCase()).filter(Boolean))];
+        const postes = this._postesLisibles(sal.map(s => s.poste));
         const n = lu.trainees.length;
         el.value = postes.length
           ? `Salariés de ${c.companyName} occupant les postes de ${postes.join(', ')} (${n} stagiaire${n > 1 ? 's' : ''}), concernés par « ${lu.trainingSubject} » dans leur activité quotidienne.`
           : `Salariés de ${c.companyName} concernés par « ${lu.trainingSubject} » dans leur activité quotidienne (${n} stagiaire${n > 1 ? 's' : ''}).`;
         if (!postes.length) Toast.show('Ajoutez les postes des salariés dans la fiche client pour un public visé plus précis', 'info', 5000);
+        montrer(el);
+        break;
+      }
+      case 'parametres': {
+        // la saisie est déjà sauvegardée en brouillon : elle sera proposée à la réouverture
+        Modal.close();
+        await Router.navigate('settings');
+        setTimeout(() => { const el = document.getElementById('formatriceCard'); el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 600);
+        Toast.show('Votre saisie est conservée : rouvrez la formation pour la restaurer', 'info', 6000);
+        return;
+      }
+      case 'retirerAffirmations': {
+        ['moyens', 'contenu', 'evaluation', 'publicVise'].forEach(n => {
+          const el = champ(n); if (!el) return;
+          el.value = String(el.value || '').split('\n')
+            .map(l => Formatrice.AFFIRMATIONS.test(l) ? Formatrice.nettoyer(l) : l)
+            .filter((l, i, t) => l.trim() || (i > 0 && t[i - 1].trim())).join('\n').trim();
+        });
+        montrer(champ('moyens'));
+        break;
+      }
+      case 'nettoyerMoyens': {
+        ['moyens', 'contenu'].forEach(n => {
+          const el = champ(n); if (!el) return;
+          el.value = String(el.value || '').split('\n').map(l => Formatrice.phrases(l)
+              .filter(ph => !/\d+\s*m²/i.test(ph)).join(' ')
+              .replace(/\s*,?\s*(si possible|éventuellement)\b/gi, '').replace(/\(\s*\)/g, '').replace(/\s{2,}/g, ' ').trim())
+            .join('\n').trim();
+        });
+        montrer(champ('moyens'));
+        break;
+      }
+      case 'froid': {
+        const el = champ('evaluation');
+        const ligne = '• Évaluation à froid : questionnaire adressé au stagiaire et à l\'entreprise 2 à 3 mois après la formation';
+        el.value = /froid/i.test(el.value) ? el.value.split('\n').map(l => /froid/i.test(l) ? ligne : l).join('\n') : `${el.value.trim()}\n${ligne}`;
         montrer(el);
         break;
       }
@@ -1270,6 +1312,21 @@ const OpcoPage = {
     this._ajusterChamps?.();
     this._majTarif(c);
     this._majConformite?.();
+  },
+
+  /** « CHEF DE CHANTIER / MACON », « MACON » → « chefs de chantier, maçons » (accents, sans doublon) */
+  _postesLisibles(liste) {
+    const ACC = { macon: 'maçon', secretaire: 'secrétaire', electricien: 'électricien', mecanicien: 'mécanicien', receptionnaire: 'réceptionnaire',
+      carrossier: 'carrossier', peintre: 'peintre', plombier: 'plombier', menuisier: 'menuisier', comptable: 'comptable', gerant: 'gérant',
+      assistante: 'assistante', assistant: 'assistant', vendeur: 'vendeur', employe: 'employé', employee: 'employée', preparateur: 'préparateur',
+      'chef de chantier': 'chef de chantier', 'chef d\'equipe': 'chef d\'équipe', 'conducteur de travaux': 'conducteur de travaux', ouvrier: 'ouvrier', apprenti: 'apprenti' };
+    const sansAcc = t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const vus = new Map();
+    (liste || []).flatMap(p => String(p || '').split(/[\/,;&]| et /i)).map(p => p.trim().toLowerCase()).filter(Boolean).forEach(p => {
+      const cle = sansAcc(p);
+      if (!vus.has(cle)) vus.set(cle, ACC[cle] || p);
+    });
+    return [...vus.values()];
   },
 
   _nbStagiairesForm() {

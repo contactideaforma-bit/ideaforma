@@ -611,6 +611,9 @@ const SettingsPage = {
           </div>
         </div>
 
+        <!-- ── Profil de la formatrice (garde-fous de compétence) ── -->
+        <div id="formatriceCard"></div>
+
         <!-- ── Info PDF ── -->
         <div class="section-card">
           <div class="section-card-header">
@@ -679,6 +682,7 @@ const SettingsPage = {
     this._bindPasswordForm();
     this._bindNotifications();
     this._bindEtiquettes();
+    if (typeof Formatrice !== 'undefined') Formatrice.monter(document.getElementById('formatriceCard'), profile);
 
     // ── Logo events ──
     document.getElementById('pickLogoBtn')?.addEventListener('click', () =>

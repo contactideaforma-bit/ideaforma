@@ -80,7 +80,9 @@ CONTEXTE :
 - OPCO : ${cfg.label || opco} — secteurs : ${cfg.sectors || 'non précisé'}
 - Règles de prise en charge 2026 : ${cfg.ceiling || 'non précisé'}
 - Points d'attention OPCO : ${(cfg.alerts || []).join('. ') || '—'}
-- Exigences FOAD de l'OPCO : ${regles?.foad || '—'}${planningTxt ? `
+- Exigences FOAD de l'OPCO : ${regles?.foad || '—'}
+- PROFIL RÉEL DE LA FORMATRICE (seule intervenante) :
+${typeof Formatrice !== 'undefined' ? Formatrice.pourIA(ctx.formatrice) : 'non renseigné'}${planningTxt ? `
 - PLANNING RETENU (demi-journées) :
 ${planningTxt}` : ''}${ctx.corrections?.length ? `
 
@@ -95,7 +97,11 @@ RÈGLES IMPÉRATIVES :
 5. Évaluation : une modalité par ligne précédée de « • » (positionnement initial, évaluations formatives par module, évaluation finale des acquis, satisfaction à chaud et à froid${modalite !== 'presentiel' ? ', suivi de l\'assiduité à distance par relevé de connexion' : ''}).
 6. Public visé : décris les salariés réellement concernés (postes ci-dessus, secteur), en une phrase. Jamais la liste des secteurs de la convention collective.
 7. Moyens : méthodes et outils concrets${modalite !== 'presentiel' ? ', dont l\'outil de classe virtuelle, l\'assistance technique et pédagogique (délai de réponse) et les activités à distance' : ''}.
-8. points_attention : liste (éventuellement vide) des risques de refus OPCO que tu repères dans le contexte (ex. durée irréaliste, intitulé hors champ, effectif / IDCC incohérents).
+8. points_attention : liste (éventuellement vide) des risques de refus OPCO que tu repères dans le contexte (ex. durée irréaliste, intitulé hors champ, effectif / IDCC incohérents). Si le thème sort des domaines justifiables de la formatrice, c'est le PREMIER point.
+9. N'écris JAMAIS de qualification, certification, spécialité ou expérience du formateur (« formateur certifié », « expert », « expérience en bâtiment »…) : seul le profil réel ci-dessus fait foi et le nom suffit. N'invente aucun intervenant.
+10. Aucune formulation conditionnelle (« si possible », « éventuellement ») ni exigence non vérifiée (surface de salle, matériel fourni par le client).
+11. Évaluation à froid : 2 à 3 mois après la formation. Supports : un support de cours numérique remis à chaque stagiaire (pas d'autres supports annoncés).
+12. Ne dépasse pas les compétences de la formatrice : reste sur ce qu'une personne de ce profil peut transmettre de façon crédible.
 
 Génère ce JSON (sans rien d'autre) :
 {
@@ -140,6 +146,13 @@ Génère ce JSON (sans rien d'autre) :
     if (vagues.length) err.push(`Objectifs non mesurables à réécrire avec un verbe observable : ${vagues.join(' ; ')}.`);
     if (Conformite._items(r.evaluation).length < 3) err.push('Les modalités d\'évaluation doivent lister au moins 3 éléments, un par ligne.');
     if (Conformite.publicGenerique(r.public_vise)) err.push('Le public visé ne doit pas recopier la liste des secteurs de la convention collective : décris les postes réels.');
+    if (typeof Formatrice !== 'undefined') {
+      const inv = ['moyens', 'contenu', 'evaluation', 'public_vise'].flatMap(ch => Formatrice.phrases(r[ch]).filter(ph => Formatrice.AFFIRMATIONS.test(ph)));
+      if (inv.length) err.push(`Supprime toute qualification attribuée au formateur : « ${inv[0].slice(0, 140)} ».`);
+    }
+    if (/si possible|éventuellement|\d+\s*m²/i.test(`${r.moyens || ''} ${r.contenu || ''}`)) err.push('Retire les formulations conditionnelles (« si possible », « éventuellement ») et les exigences de surface.');
+    const froid = String(r.evaluation || '').match(/froid[^\n]*?(\d+)\s*jours/i);
+    if (froid && parseInt(froid[1]) < 60) err.push('L\'évaluation à froid doit être prévue 2 à 3 mois après la formation.');
     return err;
   },
 
@@ -209,6 +222,9 @@ ${d.contenu || '—'}
 ${d.evaluation || '—'}
 Moyens : ${d.moyens || '—'}
 Lieu : ${d.lieu || '—'}
+
+Profil réel de la formatrice (vérifie que le thème et le contenu restent dans ses compétences justifiables, et qu'aucune qualification n'est inventée) :
+${typeof Formatrice !== 'undefined' ? Formatrice.pourIA(client.__formatrice || (typeof Conformite !== 'undefined' ? Conformite._of?.formatrice : null)) : '—'}
 
 Points déjà signalés par le contrôle automatique (ne les répète pas) :
 ${deja || '- aucun'}

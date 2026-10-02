@@ -62,11 +62,26 @@ const Conformite = {
     if (this.WEBMAILS.test(of.email || '')) add(A, 'Adresse e-mail personnelle sur les documents', `${of.email} : utilisez l'adresse professionnelle de l'organisme.`, 'Paramètres');
     if (!of.referentHandicap) add(A, 'Référent handicap non nommé', 'Qualiopi (indicateur 26) : nommez un référent handicap et son contact.', 'Paramètres');
 
+    /* ── 1 bis. Compétence de la formatrice (Qualiopi 21-22) : jamais de thème injustifiable ni de qualification inventée ── */
+    if (typeof Formatrice !== 'undefined' && of.formatrice !== undefined) {
+      if (of.formatrice === null) add(B, 'Profil de la formatrice non renseigné', 'Diplômes, expériences et domaines justifiables : l\'appli en a besoin pour vérifier que vous pouvez animer ce thème (l\'OPCO peut demander votre CV).', 'Paramètres');
+      else {
+        const an = Formatrice.analyser(dossier, of.formatrice);
+        if (an.hors.length) add(B, `Thème hors des compétences justifiables de la formatrice : ${an.hors.map(d => d.label.split(' (')[0]).join(', ')}`,
+          `Qualiopi (indicateurs 21-22) exige des compétences adaptées et l'OPCO peut demander le CV. Vos domaines : ${Formatrice.libelles(of.formatrice).map(l => l.split(' (')[0]).join(' ; ') || 'aucun'}. Solutions : choisir un thème de vos domaines, ou faire animer cette action par un formateur qualifié en sous-traitance (contrat + CV au dossier).`, 'Formation');
+        an.reglementees.forEach(r => add(B, `Formation réglementée : ${r.label}`, 'Elle doit être animée par un formateur certifié (ou un organisme habilité). Sans certification déclarée dans votre profil, sous-traitez-la.', 'Formation'));
+        if (an.affirmations.length) add(B, 'Qualification du formateur inventée dans le texte', `« ${an.affirmations[0].phrase.slice(0, 160)} »${an.affirmations.length > 1 ? ` (+ ${an.affirmations.length - 1} autre(s))` : ''} — rien de tel ne figure dans votre profil : à retirer.`, 'Formation');
+      }
+    }
+
     /* ── 2. Entreprise cliente ── */
     const siret = String(client.siret || '').replace(/\s/g, '');
     if (!/^\d{14}$/.test(siret)) add(B, 'SIRET du client manquant ou invalide', siret ? `« ${client.siret} » ne comporte pas 14 chiffres.` : '', 'Fiche client');
     if (!/\b\d{5}\b/.test(client.address || '')) add(A, 'Adresse du client sans code postal', '', 'Fiche client');
     if (!client.nomGerant) add(A, 'Représentant légal du client non renseigné', 'Nécessaire pour la signature du devis et de la convention.', 'Fiche client');
+    else if (!/\s/.test(client.nomGerant.trim()) || !/,|gérant|gerant|président|president|directeur|directrice|dirigeant/i.test(client.nomGerant))
+      add(A, 'Représentant légal incomplet', `« ${client.nomGerant} » : indiquez prénom, NOM et qualité (ex. « Massoud MESSOUT, gérant ») — c'est lui qui signe.`, 'Fiche client');
+    if (!client.phone && !client.email) add(A, 'Contact du client manquant', 'Téléphone ou e-mail du signataire : la ligne « Contact » des documents est vide.', 'Fiche client');
 
     const idcc = String(client.idcc || '').trim();
     const eff = parseInt(client.employees);
@@ -146,6 +161,10 @@ const Conformite = {
       }
     }
     if (!String(dossier.evaluation || '').trim()) add(B, 'Modalités d\'évaluation manquantes', '', 'Formation');
+    const froid = String(dossier.evaluation || '').match(/froid[^\n]*?(\d+)\s*jours/i);
+    if (froid && parseInt(froid[1]) < 60) add(A, `Évaluation à froid à ${froid[1]} jours`, 'Les autres documents annoncent une évaluation à froid à 2-3 mois : harmonisez.', 'Formation');
+    const flous = `${dossier.moyens || ''}\n${dossier.contenu || ''}`.match(/si possible|éventuellement|au (minimum|moins) \d+\s*m²|\d+\s*m²/gi);
+    if (flous) add(A, 'Formulations imprécises dans les moyens', `« ${[...new Set(flous.map(f => f.toLowerCase()))].join(' », « ')} » : un document contractuel ne promet rien de conditionnel ni d'exigence non vérifiée.`, 'Formation');
     if (dossier.modalite === 'mixte' || dossier.modalite === 'distanciel') {
       const txt = String(dossier.moyens || '');
       if (!/visio|classe virtuelle|plateforme|teams|zoom|meet|lms|e-learning|en ligne/i.test(txt))
@@ -253,7 +272,11 @@ const Conformite = {
   ══════════════════════════════════════════════════════════════════════ */
   _of: null, _ofAt: 0,
   async profil() {
-    if (!this._of || Date.now() - this._ofAt > 60000) { this._of = await Documents._getOFProfile(); this._ofAt = Date.now(); }
+    if (!this._of || Date.now() - this._ofAt > 60000) {
+      const of = await Documents._getOFProfile();
+      of.formatrice = typeof Formatrice !== 'undefined' ? await Formatrice.charger() : undefined;   // undefined = non vérifiable
+      this._of = of; this._ofAt = Date.now();
+    }
     return this._of;
   },
 
@@ -282,6 +305,13 @@ const Conformite = {
       [/IDCC\) non renseignée|ne relève pas de|Branche du client/, { type: 'client', champs: [P('idcc', 'IDCC (fiche de paie)', client.idcc || '', 'Ex. 1596')] }],
       [/Effectif du client/, { type: 'client', champs: [P('employees', 'Effectif (salariés)', '', 'Ex. 7')] }],
       [/Code NAF du client/, { type: 'client', champs: [P('codeNaf', 'Code NAF', client.codeNaf || '', 'Ex. 4520A')] }],
+      [/Profil de la formatrice/, { type: 'action', action: 'parametres', label: 'Ouvrir le profil de la formatrice' }],
+      [/hors des compétences/, { type: 'action', action: 'parametres', label: 'Revoir mon profil (uniquement si je peux le justifier)' }],
+      [/Qualification du formateur inventée/, { type: 'action', action: 'retirerAffirmations', label: 'Retirer ces phrases' }],
+      [/Formulations imprécises/, { type: 'action', action: 'nettoyerMoyens', label: 'Nettoyer le texte' }],
+      [/Évaluation à froid à/, { type: 'action', action: 'froid', label: 'Passer l\'évaluation à froid à 2-3 mois' }],
+      [/Représentant légal incomplet/, { type: 'client', champs: [P('nomGerant', 'Prénom NOM, qualité', client.nomGerant || '', 'Ex. Massoud MESSOUT, gérant')] }],
+      [/Contact du client/, { type: 'client', auMoinsUn: true, champs: [P('phone', 'Téléphone', client.phone || '', '06…'), P('email', 'E-mail', client.email || '', 'contact@…')] }],
       [/peut-être inversé/, { type: 'action', action: 'inverserNoms', label: 'Inverser prénom et nom de ces stagiaires' }],
       [/Aucun stagiaire|Stagiaire incomplet/, { type: 'action', action: 'champ:#traineeList', label: 'Aller aux participants' }],
       [/Dates de formation manquantes|Délai de dépôt|déjà commencé|par jour|Répartition irrégulière|Durée supérieure/, { type: 'action', action: 'proposition', label: 'Recalculer durée, dates et prix' }],
@@ -332,7 +362,7 @@ const Conformite = {
         if (fix.type === 'action') { await ctx.action?.(fix.action, fix); }
         else {
           const valeurs = btn.dataset.unClic ? { ...fix.set } : Object.fromEntries(fix.champs.map((c, j) => [c.cle, racine.querySelector(`[data-fix-champ="${idx}-${j}"]`)?.value.trim() || '']));
-          if (Object.values(valeurs).some(v => !v)) { Toast.show('Complétez le champ avant d\'enregistrer', 'warning'); btn.disabled = false; return; }
+          if (fix.auMoinsUn ? Object.values(valeurs).every(v => !v) : Object.values(valeurs).some(v => !v)) { Toast.show('Complétez le champ avant d\'enregistrer', 'warning'); btn.disabled = false; return; }
           if (fix.type === 'profil') {
             await DataStore.updateProfile(valeurs);
             this._of = null;

@@ -1853,3 +1853,9 @@ html, body { overflow-x: hidden; }
 .conf-champ input { font-size:13px; padding:6px 9px; border:1.5px solid #B9C4D0; border-radius:8px; background:#fff; color:#1E293B; }
 .conf-ou-sep { font-size:12px; color:#475569; align-self:center; }
 .conf-flash { outline:3px solid #F59E0B !important; outline-offset:2px; transition:outline .3s; }
+
+/* ── v62 : profil de la formatrice ── */
+.formatrice-domaines { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:8px; }
+.formatrice-domaines label { display:flex; align-items:flex-start; gap:8px; font-size:13px; font-weight:400; color:var(--text);
+  border:1px solid var(--border); border-radius:8px; padding:8px 10px; cursor:pointer; line-height:1.4; }
+.formatrice-domaines input { width:16px; height:16px; margin-top:1px; flex:0 0 auto; }
