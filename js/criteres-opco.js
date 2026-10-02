@@ -52,7 +52,7 @@ const CriteresOpco = {
       label: 'OPCO Mobilités', website: 'https://www.opcomobilites.fr',
       delaiJours: 30, dateLimiteDepot: '12-31',
       deadline: 'Demande à déposer le plus tôt possible, avant le début (l\'appli impose 1 mois) — au plus tard le 31/12 de l\'année',
-      ceiling: 'Services de l\'automobile (IDCC 1090) : budget annuel 1 500 € (< 11 sal.) à 2 700 € (40-49 sal.) ; Plan TPE 2026 (< 11 sal., NAF 4520A / 4511Z / 4520B) : 65 €/h, 21 h maximum.',
+      ceiling: 'Services de l\'automobile (IDCC 1090) : budget annuel 1 500 € (< 11 sal.) à 2 700 € (40-49 sal.) ; Plan TPE 2026 (< 11 sal., NAF 4520A / 4511Z / 4520B) : 65 €/h par entreprise (quel que soit le nombre de stagiaires), 21 h maximum, soit 1 365 € HT au plus.',
       alerts: [
         'Plan TPE auto : réservé aux < 11 salariés, NAF 4520A / 4511Z / 4520B, 21 h maximum',
         'Plan TPE : habilitations électriques et climatisation exclues',
@@ -63,7 +63,7 @@ const CriteresOpco = {
       plafonds: [
         { type: 'Plan de développement (budget annuel)', taille: '< 11 salariés', taux: 'Budget', plafond: '1 500 € / an', note: 'Coûts pédagogiques seulement' },
         { type: 'Plan de développement (budget annuel)', taille: '11–19 / 20–29 / 30–39 / 40–49', taux: 'Budget', plafond: '1 800 / 2 100 / 2 400 / 2 700 € / an', note: '' },
-        { type: 'Plan TPE 2026 — services de l\'automobile', taille: '< 11 salariés (NAF 4520A, 4511Z, 4520B)', taux: '65 €/h', plafond: '21 h maximum', note: 'Hors habilitations électriques et climatisation' }
+        { type: 'Plan TPE 2026 — services de l\'automobile', taille: '< 11 salariés (NAF 4520A, 4511Z, 4520B)', taux: '65 €/h par entreprise', plafond: '21 h maximum (1 365 € HT)', note: 'Indépendant du nombre de stagiaires — hors habilitations électriques et climatisation' }
       ],
       thresholds: ['Durée minimale : 1 h', 'Date limite de dépôt : 31/12/2026', 'Organisme certifié Qualiopi obligatoire']
     },
@@ -122,7 +122,7 @@ const CriteresOpco = {
       { dispositif: 'Plan de développement des compétences', min: 50, max: null, tauxMin: null, tauxMax: null, unite: 'h', note: 'Barème ≥ 50 salariés non publié — demander l\'accord du conseiller' }
     ],
     opco_mobilite: [
-      { dispositif: 'Plan TPE 2026 — services de l\'automobile', idcc: ['1090'], naf: ['4520A', '4511Z', '4520B'], min: 0, max: 10, tauxMin: 65, tauxMax: 65, unite: 'h', dureeMax: 21, exclusions: /habilitation|électrique|electrique|climatisation|clim\b/i, note: 'Plan TPE : 65 € HT/h, 21 h max, hors habilitations électriques et climatisation (taux à confirmer : par heure de formation)' },
+      { dispositif: 'Plan TPE 2026 — services de l\'automobile', idcc: ['1090'], naf: ['4520A', '4511Z', '4520B'], min: 0, max: 10, tauxMin: 65, tauxMax: 65, unite: 'h', parEntreprise: true, dureeMax: 21, exclusions: /habilitation|électrique|electrique|climatisation|clim\b/i, note: 'Plan TPE : 65 € HT par heure de formation et par entreprise (pas par stagiaire), 21 h max soit 1 365 € HT, hors habilitations électriques et climatisation' },
       { dispositif: 'Plan de développement des compétences', min: 0,  max: 10, tauxMin: null, tauxMax: null, unite: 'h', budgetAnnuel: 1500, note: 'Budget annuel 1 500 € (coûts pédagogiques)' },
       { dispositif: 'Plan de développement des compétences', min: 11, max: 19, tauxMin: null, tauxMax: null, unite: 'h', budgetAnnuel: 1800, note: 'Budget annuel 1 800 €' },
       { dispositif: 'Plan de développement des compétences', min: 20, max: 29, tauxMin: null, tauxMax: null, unite: 'h', budgetAnnuel: 2100, note: 'Budget annuel 2 100 €' },
@@ -264,7 +264,9 @@ const CriteresOpco = {
   financement({ bareme: b, heures, jours, nb }) {
     if (!b) return { max: null };
     const limites = [];
-    if (b.tauxMax != null) limites.push({ v: b.tauxMax * heures * nb, txt: `${b.tauxMax} €/h × ${this._h(heures)} × ${nb} stagiaire${nb > 1 ? 's' : ''}` });
+    if (b.tauxMax != null) limites.push(b.parEntreprise
+      ? { v: b.tauxMax * heures, txt: `${b.tauxMax} €/h par entreprise × ${this._h(heures)} (quel que soit le nombre de stagiaires)` }
+      : { v: b.tauxMax * heures * nb, txt: `${b.tauxMax} €/h × ${this._h(heures)} × ${nb} stagiaire${nb > 1 ? 's' : ''}` });
     if (b.plafondJour && jours) limites.push({ v: b.plafondJour * jours, txt: `${Tarifs.eur(b.plafondJour)}/jour/groupe × ${jours} jour${jours > 1 ? 's' : ''}` });
     if (b.plafond) limites.push({ v: b.plafond, txt: `plafond ${Tarifs.eur(b.plafond)} par action` });
     if (b.budgetAnnuel) limites.push({ v: b.budgetAnnuel, txt: `budget annuel ${Tarifs.eur(b.budgetAnnuel)}` });

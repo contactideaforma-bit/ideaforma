@@ -223,6 +223,7 @@ const Tarifs = {
 
     let tauxTexte = '';
     if (b.tauxMin == null) tauxTexte = b.budgetAnnuel ? `budget annuel ${this.eur(b.budgetAnnuel)} par entreprise` : 'barème non publié — voir le conseiller';
+    else if (b.parEntreprise) tauxTexte = `${b.tauxMax} €/h par entreprise (indépendant du nombre de stagiaires)${b.dureeMax ? `, ${b.dureeMax} h max` : ''}`;
     else if (b.tauxMin === b.tauxMax) tauxTexte = `${b.tauxMax} ${unite}`;
     else tauxTexte = `${b.tauxMin} à ${b.tauxMax} ${unite}`;
     if (b.plafondJour) tauxTexte += ` · ${this.eur(b.plafondJour)}/jour/groupe en intra`;
@@ -234,7 +235,7 @@ const Tarifs = {
 
     let tauxActuel = null, ecart = null;
     if (p && h) {
-      tauxActuel = p / h / nb;
+      tauxActuel = b.parEntreprise ? p / h : p / h / nb;
       if (b.tauxMax != null) ecart = tauxActuel - b.tauxMax;
     }
 
