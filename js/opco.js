@@ -766,6 +766,7 @@ const OpcoPage = {
 
     return `
       <form id="dossierForm" novalidate>
+        <div id="brouillonBox"></div>
 
         <div class="form-section">
           <div class="form-section-title">👥 Participants à cette formation</div>
@@ -977,9 +978,20 @@ const OpcoPage = {
         const data = this._lireFormulaire(form);
         const r = Conformite.verifier({ dossier: { ...data, status: data.status }, client: c, of, opco: this.currentOpco, typeDoc: 'devis' });
         box.innerHTML = Conformite.panneau(r);
+        Conformite.brancherCorrectifs(box, r, {
+          client: c,
+          action: (nom, fix) => this._executerCorrectif(c, nom, fix),
+          apres: () => { this._majTarif(c); this._majConformite(); }
+        });
       } catch (err) { console.warn('[Conformité]', err); }
     };
-    const planifier = () => { clearTimeout(minuteur); minuteur = setTimeout(() => this._majConformite(), 500); };
+    /* ── Brouillon automatique : rien n'est perdu si la fenêtre se ferme ── */
+    const cleBrouillon = this._cleBrouillon(c, d);
+    const sauverBrouillon = () => {
+      try { localStorage.setItem(cleBrouillon, JSON.stringify({ t: Date.now(), data: this._lireFormulaire(form) })); } catch { /* stockage indisponible */ }
+    };
+    this._proposerBrouillon(c, d, cleBrouillon);
+    const planifier = () => { clearTimeout(minuteur); minuteur = setTimeout(() => { this._majConformite(); sauverBrouillon(); }, 500); };
     form?.addEventListener('input', planifier);
     form?.addEventListener('change', planifier);
     form?.addEventListener('click', e => { if (e.target.closest('.btn-remove-row, #addTrainee, #addDate, .status-option')) planifier(); });
@@ -1025,6 +1037,8 @@ const OpcoPage = {
         if (Array.isArray(result.points_attention) && result.points_attention.length && status) {
           setTimeout(() => status.insertAdjacentHTML('beforeend', `<div class="ai-error" style="margin-top:6px;">${result.points_attention.map(esc).join('<br>')}</div>`), 0);
         }
+        if (typeof Modal !== 'undefined') Modal._sale = true;
+        form?.dispatchEvent(new Event('input', { bubbles: true }));   // brouillon + contrôle
         this._majConformite?.();
         this._ajusterChamps?.();
         /* Durée suggérée « 2 jours (14h) » → champ heures s'il est vide */
@@ -1117,6 +1131,135 @@ const OpcoPage = {
     });
   },
 
+  /** Ouvre la formation puis applique le raccourci choisi dans la fenêtre de contrôle */
+  _ouvrirEtCorriger(opco, clientId, dossierId, action) {
+    this.openDossierForm(opco, clientId, dossierId);
+    const c = (this._cachedClients || []).find(cl => cl.id === clientId);
+    if (action) setTimeout(() => this._executerCorrectif(c, action), 350);
+  },
+
+  /** Raccourcis de correction appliqués directement dans le formulaire formation */
+  async _executerCorrectif(c, nom, fix = {}) {
+    const form = document.getElementById('dossierForm');
+    if (!form) return;
+    const champ = n => form.querySelector(`[name="${n}"]`);
+    const montrer = el => { if (!el) return; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('conf-flash'); setTimeout(() => el.classList.remove('conf-flash'), 1800); };
+    const lu = this._lireFormulaire(form);
+    switch (nom) {
+      case 'inverserNoms': {
+        let n = 0;
+        form.querySelectorAll('#traineeList .dynamic-row').forEach(row => {
+          const fn = row.querySelector('[data-field="firstName"]'), ln = row.querySelector('[data-field="lastName"]');
+          if (Conformite.nomInverse(Conformite.normaliserNom({ firstName: fn.value, lastName: ln.value }))) { [fn.value, ln.value] = [ln.value, fn.value]; n++; }
+        });
+        Toast.show(`${n} stagiaire(s) corrigé(s) — vérifiez sur les fiches de paie`, 'success');
+        montrer(document.getElementById('traineeList'));
+        break;
+      }
+      case 'proposition': {
+        const p = this._calculerProposition(c);
+        this._appliquerProposition(c, p);
+        Toast.show(`${String(p.heures).replace('.', ',')} h sur ${p.nbJours} jour(s), ${Tarifs.eur(p.prix)} HT — dépôt avant le ${p.depotAvant?.toLocaleDateString('fr-FR') || '—'}`, 'success', 6000);
+        montrer(document.getElementById('dateList'));
+        break;
+      }
+      case 'prix': {
+        const el = document.getElementById('fieldPrice');
+        if (el && fix.valeur) { el.value = fix.valeur; el.classList.add('field-auto'); montrer(el); }
+        break;
+      }
+      case 'ia':
+        montrer(document.getElementById('aiStatus') || document.getElementById('aiAssistBtn'));
+        document.getElementById('aiAssistBtn')?.click();
+        break;
+      case 'moyens': {
+        const el = champ('moyens');
+        const ajout = 'Séquences à distance : classe virtuelle synchrone (visioconférence) avec partage d\'écran et documents partagés ; assistance technique et pédagogique assurée par la formatrice pendant toute la formation (réponse sous 24 h ouvrées) ; lien de connexion et prérequis techniques transmis 48 h avant ; assiduité suivie par relevé de connexion.';
+        el.value = [el.value.trim(), ajout].filter(Boolean).join('\n');
+        montrer(el);
+        break;
+      }
+      case 'lieu': {
+        const el = champ('lieu');
+        const locaux = c.address ? `dans les locaux de l'entreprise — ${c.address}` : 'dans les locaux de l\'entreprise';
+        el.value = lu.modalite === 'mixte' ? `Présentiel : ${locaux} ; distanciel : classe virtuelle (visioconférence)`
+          : lu.modalite === 'distanciel' ? 'À distance — classe virtuelle (visioconférence)' : locaux.charAt(0).toUpperCase() + locaux.slice(1);
+        montrer(el);
+        break;
+      }
+      case 'publicVise': {
+        const el = champ('publicVise');
+        const cle = t => [t.lastName, t.firstName].map(v => String(v || '').trim().toLowerCase()).sort().join('|');
+        const sal = (c.salaries || []).filter(s => !lu.trainees.length || lu.trainees.some(t => cle(t) === cle(s)));
+        const postes = [...new Set(sal.map(s => String(s.poste || '').trim().toLowerCase()).filter(Boolean))];
+        const n = lu.trainees.length;
+        el.value = postes.length
+          ? `Salariés de ${c.companyName} occupant les postes de ${postes.join(', ')} (${n} stagiaire${n > 1 ? 's' : ''}), concernés par « ${lu.trainingSubject} » dans leur activité quotidienne.`
+          : `Salariés de ${c.companyName} concernés par « ${lu.trainingSubject} » dans leur activité quotidienne (${n} stagiaire${n > 1 ? 's' : ''}).`;
+        if (!postes.length) Toast.show('Ajoutez les postes des salariés dans la fiche client pour un public visé plus précis', 'info', 5000);
+        montrer(el);
+        break;
+      }
+      case 'dispositifPDC': {
+        const el = document.getElementById('fieldDispositif');
+        if (el) { el.value = 'Plan de développement des compétences'; montrer(el); }
+        break;
+      }
+      default:
+        if (nom?.startsWith('champ:')) montrer(form.querySelector(nom.slice(6)));
+    }
+    form.dispatchEvent(new Event('input', { bubbles: true }));   // marque le formulaire comme modifié
+    this._ajusterChamps?.();
+    this._majTarif(c);
+    this._majConformite?.();
+  },
+
+  _cleBrouillon(c, d) { return `brouillon_formation_${c?.id || 'x'}_${d?.id || 'nouvelle'}`; },
+
+  /** Un brouillon plus récent que la version enregistrée ? On propose de le restaurer. */
+  _proposerBrouillon(c, d, cle) {
+    const box = document.getElementById('brouillonBox');
+    let b = null;
+    try { b = JSON.parse(localStorage.getItem(cle) || 'null'); } catch { b = null; }
+    if (!box || !b?.data) return;
+    const enregistre = d?.updatedAt ? new Date(d.updatedAt).getTime() : 0;
+    const vieux = Date.now() - b.t > 14 * 86400000;
+    const identique = JSON.stringify(b.data) === JSON.stringify(this._lireFormulaire(document.getElementById('dossierForm')));
+    if (vieux || identique || b.t <= enregistre) { try { localStorage.removeItem(cle); } catch { /* */ } return; }
+    const quand = new Date(b.t).toLocaleString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+    box.innerHTML = `<div class="brouillon-box">
+      <span>Une saisie non enregistrée du ${esc(quand)} a été retrouvée.</span>
+      <div><button type="button" class="btn btn-primary btn-sm" id="brouillonRestaurer">Restaurer</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="brouillonIgnorer">Ignorer</button></div></div>`;
+    document.getElementById('brouillonRestaurer').addEventListener('click', () => {
+      this._remplirFormulaire(c, b.data); box.innerHTML = '';
+      if (typeof Modal !== 'undefined') Modal._sale = true;
+      Toast.show('Saisie restaurée — pensez à enregistrer', 'success');
+    });
+    document.getElementById('brouillonIgnorer').addEventListener('click', () => {
+      box.innerHTML = ''; try { localStorage.removeItem(cle); } catch { /* */ }
+    });
+  },
+
+  _remplirFormulaire(c, data) {
+    const form = document.getElementById('dossierForm');
+    if (!form || !data) return;
+    ['trainingSubject', 'objectifs', 'contenu', 'modalite', 'evaluation', 'prerequis', 'publicVise', 'moyens', 'dureeHeures', 'dispositif', 'price', 'lieu', 'notes']
+      .forEach(n => { const el = form.querySelector(`[name="${n}"]`); if (el && data[n] != null) el.value = data[n]; });
+    if (data.status) {
+      document.getElementById('statusHidden').value = data.status;
+      form.querySelectorAll('.status-option').forEach(o => o.classList.toggle('selected', o.dataset.status === data.status));
+    }
+    const tl = document.getElementById('traineeList');
+    if (tl && data.trainees?.length) tl.innerHTML = data.trainees.map((t, i) => this._traineeRow(t.firstName, t.lastName, i)).join('');
+    const dl = document.getElementById('dateList');
+    if (dl && data.trainingDates?.length) dl.innerHTML = data.trainingDates.map((x, i) => this._dateRow(x.start, x.end, i)).join('');
+    this._bindRemoveRows();
+    this._ajusterChamps?.();
+    this._majTarif(c);
+    this._majConformite?.();
+  },
+
   _nbStagiairesForm() {
     return [...document.querySelectorAll('#traineeList .dynamic-row')]
       .filter(r => r.querySelector('[data-field="firstName"]').value.trim() || r.querySelector('[data-field="lastName"]').value.trim()).length || 1;
@@ -1181,6 +1324,8 @@ const OpcoPage = {
       this._bindRemoveRows();
     }
     if (prix && (!seulementVides || !prix.value)) { prix.value = p.prix; prix.classList.add('field-auto'); }
+    if (typeof Modal !== 'undefined') Modal._sale = true;
+    document.getElementById('dossierForm')?.dispatchEvent(new Event('input', { bubbles: true }));
     this._majTarif(c);
     this._majConformite?.();
   },
@@ -1214,6 +1359,7 @@ const OpcoPage = {
         dossier = await DataStore.addDossier(clientId, data);
         Toast.show('Formation créée ✓', 'success');
       }
+      try { localStorage.removeItem(this._cleBrouillon(c, dossierId ? { id: dossierId } : null)); } catch { /* */ }
       Modal.close();
       await this.render(opco);
 
@@ -1223,7 +1369,7 @@ const OpcoPage = {
         await new Promise(r => setTimeout(r, 250));   // laisse la fenêtre précédente se fermer
         await Conformite.controlerPuisGenerer({
           dossier: docData, client: c, opco, typeDoc: 'devis',
-          corriger: () => this.openDossierForm(opco, clientId, dossier.id),
+          corriger: (action) => this._ouvrirEtCorriger(opco, clientId, dossier.id, action),
           generer: async () => {
             if (genDevis)      await Documents.genererDevis(docData);
             if (genProgramme)  await Documents.genererProgramme(docData);
@@ -1351,7 +1497,7 @@ const OpcoPage = {
               const lancer = { devis: () => Documents.genererDevis(docData), programme: () => Documents.genererProgramme(docData),
                                convention: () => Documents.genererConvention(docData), facture: () => Documents.genererFacture(docData) }[type];
               await Conformite.controlerPuisGenerer({ dossier: docData, client: c, opco, typeDoc: type, generer: lancer,
-                corriger: () => this.openDossierForm(opco, clientId, dossierId) });
+                corriger: (action) => this._ouvrirEtCorriger(opco, clientId, dossierId, action) });
               btn.disabled = false; btn.style.opacity = '1';
               return;
             }

@@ -2,17 +2,33 @@
 
 /* ── Modal ── */
 const Modal = {
+  /* Sécurité anti-perte (v59) : dès qu'un champ de la fenêtre a été modifié,
+     un clic à côté, la croix, Échap ou « Annuler » demandent confirmation
+     au lieu de fermer et de perdre la saisie. */
+  _sale: false,
+  _ecoute: false,
+
   open(title, body, actions = [], sizeClass = '') {
     document.getElementById('modalTitle').textContent = title;
-    document.getElementById('modalBody').innerHTML = body;
+    const corps = document.getElementById('modalBody');
+    corps.innerHTML = body;
     document.getElementById('modal').className = `modal ${sizeClass}`;
+    this._sale = false;
+    if (!this._ecoute) {
+      const marquer = e => { if (e.isTrusted !== false && e.target.matches?.('input, textarea, select')) this._sale = true; };
+      corps.addEventListener('input', marquer);
+      corps.addEventListener('change', marquer);
+      corps.addEventListener('input', e => { if (e.target.id === 'dossierForm') this._sale = true; });
+      this._ecoute = true;
+    }
 
     const footer = document.getElementById('modalFooter');
     footer.innerHTML = actions.map((a, i) =>
       `<button class="${a.cls}" id="modalAction${i}">${a.label}</button>`
     ).join('');
     actions.forEach((a, i) => {
-      document.getElementById(`modalAction${i}`)?.addEventListener('click', a.action);
+      const fn = /^annuler$/i.test(String(a.label).trim()) ? () => this.demanderFermeture() : a.action;
+      document.getElementById(`modalAction${i}`)?.addEventListener('click', fn);
     });
 
     const overlay = document.getElementById('modalOverlay');
@@ -21,9 +37,31 @@ const Modal = {
   },
 
   close() {
+    this._sale = false;
+    document.getElementById('modalGarde')?.remove();
     const overlay = document.getElementById('modalOverlay');
     overlay.classList.remove('visible');
-    setTimeout(() => { overlay.style.display = 'none'; }, 200);
+    setTimeout(() => { if (!overlay.classList.contains('visible')) overlay.style.display = 'none'; }, 200);
+  },
+
+  estOuverte() { return document.getElementById('modalOverlay')?.classList.contains('visible'); },
+
+  /** Fermeture « involontaire » (clic à côté, croix, Échap, Annuler) : confirmation si saisie en cours */
+  demanderFermeture() {
+    if (!this._sale) { this.close(); return; }
+    if (document.getElementById('modalGarde')) { document.getElementById('modalGarde').classList.add('garde-secoue'); setTimeout(() => document.getElementById('modalGarde')?.classList.remove('garde-secoue'), 500); return; }
+    const footer = document.getElementById('modalFooter');
+    footer.insertAdjacentHTML('beforebegin', `
+      <div id="modalGarde" class="modal-garde">
+        <span>Des modifications ne sont pas enregistrées. Quitter quand même ?</span>
+        <div class="modal-garde-btns">
+          <button type="button" class="btn btn-primary btn-sm" id="gardeRester">Continuer la saisie</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="gardeQuitter">Quitter sans enregistrer</button>
+        </div>
+      </div>`);
+    document.getElementById('gardeRester').addEventListener('click', () => document.getElementById('modalGarde')?.remove());
+    document.getElementById('gardeQuitter').addEventListener('click', () => this.close());
+    document.getElementById('gardeRester').focus();
   }
 };
 
@@ -894,6 +932,8 @@ document.addEventListener('DOMContentLoaded', async () => {
      worker) puis recharge l'application avec des données fraîches. */
   document.getElementById('refreshBtn')?.addEventListener('click', async () => {
     const btn = document.getElementById('refreshBtn');
+    if (Modal.estOuverte() && Modal._sale && !confirm('Une saisie n\'est pas enregistrée. Actualiser quand même ?')) return;
+    Modal._sale = false;
     btn.classList.add('refresh-en-cours'); btn.disabled = true;
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
@@ -919,9 +959,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('logoutBtn').addEventListener('click', () => Auth.logout());
 
   // Modal close
-  document.getElementById('modalClose').addEventListener('click', () => Modal.close());
+  document.getElementById('modalClose').addEventListener('click', () => Modal.demanderFermeture());
   document.getElementById('modalOverlay').addEventListener('click', e => {
-    if (e.target === e.currentTarget) Modal.close();
+    if (e.target === e.currentTarget) Modal.demanderFermeture();
+  });
+  /* Fermeture de l'onglet / rechargement avec une saisie en cours */
+  window.addEventListener('beforeunload', e => {
+    if (Modal.estOuverte() && Modal._sale) { e.preventDefault(); e.returnValue = ''; }
   });
 
   // Navigation clicks
@@ -942,7 +986,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Keyboard
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { Modal.close(); MobileNav.close(); }
+    if (e.key === 'Escape') { if (Modal.estOuverte()) Modal.demanderFermeture(); MobileNav.close(); }
   });
 
   // Le bouton d'assistant, en bas à droite de toutes les pages

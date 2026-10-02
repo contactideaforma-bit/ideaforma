@@ -40,6 +40,7 @@ const Conformite = {
   ══════════════════════════════════════════════════════════════════════ */
   verifier({ dossier = {}, client = {}, of = {}, opco, typeDoc = 'devis' }) {
     const B = [], A = [], OK = [];
+    const fx = {};   // valeurs utiles aux raccourcis de correction
     const add = (liste, titre, detail = '', ou = '') => liste.push({ titre, detail, ou });
     const cfg = (typeof OpcoPage !== 'undefined' && OpcoPage.CONFIG?.[opco]) || {};
     const opcoLabel = cfg.label || opco || 'l\'OPCO';
@@ -73,6 +74,7 @@ const Conformite = {
     else {
       const regle = this.IDCC_EFFECTIF[idcc];
       if (regle && Number.isFinite(eff)) {
+        if ((regle.max != null && eff > regle.max) || (regle.min != null && eff < regle.min)) fx.idccAutre = regle.autre;
         if ((regle.max != null && eff > regle.max) || (regle.min != null && eff < regle.min))
           add(B, `IDCC ${idcc} incohérent avec l'effectif (${eff} salariés)`,
             `L'IDCC ${idcc} = ${regle.libelle}. Avec ${eff} salariés, c'est en principe l'IDCC ${regle.autre}. Vérifiez sur une fiche de paie avant de déposer.`, 'Fiche client');
@@ -187,6 +189,7 @@ const Conformite = {
       if (!prix) add(B, 'Prix HT manquant', '', 'Formation');
       else if (typeof Tarifs !== 'undefined') {
         const s = Tarifs.suggestion({ opco, dispositif: dossier.dispositif, effectif: client.employees, heures, stagiaires: stag.length || 1, prix, jours: jours.length, client });
+        if (s?.estimation) fx.prixMax = Math.floor(s.estimation.max);
         if (s?.estimation && prix > s.estimation.max + 1) {
           add(A, `Prix au-dessus de la prise en charge ${opcoLabel}`,
             `${Tarifs.eur(prix)} demandés, prise en charge maximale estimée ${Tarifs.eur(s.estimation.max)} (limitée par : ${s.estimation.detail}). Reste à charge de l'entreprise : ${Tarifs.eur(prix - s.estimation.max)} — à faire accepter par le client, ou ajustez le prix à ${Tarifs.eur(s.estimation.max)}.`, 'Formation');
@@ -194,6 +197,7 @@ const Conformite = {
       }
     }
 
+    [...B, ...A].forEach(i => { i.fix = this.correctif(i, { of, client, fx }); });
     const score = Math.max(0, 100 - B.length * 20 - A.length * 5);
     return { bloquants: B, alertes: A, ok: OK, score, opcoLabel };
   },
@@ -253,8 +257,94 @@ const Conformite = {
     return this._of;
   },
 
-  _liste(items, cls) {
-    return items.map(i => `<li class="conf-item ${cls}"><strong>${this._esc(i.titre)}</strong>${i.ou ? ` <span class="conf-ou">${this._esc(i.ou)}</span>` : ''}${i.detail ? `<div class="conf-detail">${this._esc(i.detail)}</div>` : ''}</li>`).join('');
+  /* ══════════════════════════════════════════════════════════════════════
+     RACCOURCIS DE CORRECTION
+     profil : petit formulaire en ligne, enregistré dans les Paramètres
+     client : idem dans la fiche client (ou bouton « en un clic »)
+     action : correction automatique dans le formulaire formation
+  ══════════════════════════════════════════════════════════════════════ */
+  correctif(item, { of = {}, client = {}, fx = {} }) {
+    const t = item.titre;
+    const P = (cle, label, valeur = '', placeholder = '') => ({ cle, label, valeur, placeholder });
+    const pro = /idea ?forma/i.test(of.nom || '') ? 'contact@ideaforma.fr' : '';
+    const emailPro = this.WEBMAILS.test(of.email || '') ? pro : (of.email || '');
+    const regles = [
+      [/NDA\) manquant|Format du NDA/, { type: 'profil', champs: [P('numero_da', 'N° de déclaration d\'activité', of.da || '', '11 chiffres')] }],
+      [/certificat Qualiopi manquant|Qualiopi ressemble/, { type: 'profil', champs: [P('numero_qualiopi', 'N° du certificat Qualiopi', '', 'tel qu\'écrit sur le certificat')] }],
+      [/dirigeante \/ formatrice/, { type: 'profil', champs: [P('nom', 'Nom affiché (dirigeante / formatrice)', '', 'Ex. Myriam AYOUAZ')] }],
+      [/Adresse de l'organisme/, { type: 'profil', champs: [P('adresse', 'Adresse complète', of.adresse || '', 'N°, rue, code postal, ville')] }],
+      [/e-mail personnelle/, { type: 'profil', champs: [P('email', 'E-mail sur les documents', pro, 'contact@…')] }],
+      [/Référent handicap/, { type: 'profil', champs: [P('referent_handicap', 'Référent handicap', of.dirigeant || '', 'Nom'), P('referent_handicap_contact', 'Contact', emailPro, 'E-mail ou téléphone')] }],
+      [/SIRET du client/, { type: 'client', champs: [P('siret', 'SIRET', client.siret || '', '14 chiffres')] }],
+      [/Adresse du client/, { type: 'client', champs: [P('address', 'Adresse du client', client.address || '', 'N°, rue, code postal, ville')] }],
+      [/Représentant légal du client/, { type: 'client', champs: [P('nomGerant', 'Représentant légal', '', 'Nom et prénom')] }],
+      [/IDCC .* incohérent/, { type: 'client', set: { idcc: fx.idccAutre }, label: `Passer le client en IDCC ${fx.idccAutre}`, champs: [P('idcc', 'IDCC (fiche de paie)', client.idcc || '')] }],
+      [/IDCC\) non renseignée|ne relève pas de|Branche du client/, { type: 'client', champs: [P('idcc', 'IDCC (fiche de paie)', client.idcc || '', 'Ex. 1596')] }],
+      [/Effectif du client/, { type: 'client', champs: [P('employees', 'Effectif (salariés)', '', 'Ex. 7')] }],
+      [/Code NAF du client/, { type: 'client', champs: [P('codeNaf', 'Code NAF', client.codeNaf || '', 'Ex. 4520A')] }],
+      [/peut-être inversé/, { type: 'action', action: 'inverserNoms', label: 'Inverser prénom et nom de ces stagiaires' }],
+      [/Aucun stagiaire|Stagiaire incomplet/, { type: 'action', action: 'champ:#traineeList', label: 'Aller aux participants' }],
+      [/Dates de formation manquantes|Délai de dépôt|déjà commencé|par jour|Répartition irrégulière|Durée supérieure/, { type: 'action', action: 'proposition', label: 'Recalculer durée, dates et prix' }],
+      [/Prix HT manquant/, { type: 'action', action: 'proposition', label: 'Calculer le prix' }],
+      [/Prix au-dessus/, { type: 'action', action: 'prix', valeur: fx.prixMax, label: fx.prixMax ? `Appliquer ${Tarifs.eur(fx.prixMax)}` : 'Ajuster le prix' }],
+      [/Objectifs|Programme détaillé|Durée manquante sur|Total des modules|modalité non précisée|mixte sans|Modules non calés|Modalités d'évaluation/, { type: 'action', action: 'ia', label: 'Régénérer le contenu avec l\'IA' }],
+      [/Moyens à distance/, { type: 'action', action: 'moyens', label: 'Insérer les moyens à distance' }],
+      [/Lieu imprécis/, { type: 'action', action: 'lieu', label: 'Utiliser le lieu automatique' }],
+      [/Public visé/, { type: 'action', action: 'publicVise', label: 'Rédiger à partir des postes' }],
+      [/Thème exclu|NAF .* non éligible|Effectif trop élevé/, { type: 'action', action: 'dispositifPDC', label: 'Passer en plan de développement des compétences' }]
+    ];
+    const r = regles.find(([re]) => re.test(t));
+    return r ? r[1] : null;
+  },
+
+  _fixHtml(fix, idx) {
+    if (!fix) return '';
+    if (fix.type === 'action') return `<div class="conf-fix"><button type="button" class="conf-btn" data-fix="${idx}">${this._esc(fix.label)}</button></div>`;
+    const un = fix.set && Object.values(fix.set).every(v => v) ? `<button type="button" class="conf-btn" data-fix="${idx}" data-un-clic="1">${this._esc(fix.label)}</button>` : '';
+    const champs = fix.champs.map((c, j) => `<label class="conf-champ"><span>${this._esc(c.label)}</span>
+        <input type="text" data-fix-champ="${idx}-${j}" value="${this._esc(c.valeur)}" placeholder="${this._esc(c.placeholder)}"></label>`).join('');
+    return `<div class="conf-fix">${un}${un ? '<span class="conf-ou-sep">ou</span>' : ''}${champs}
+      <button type="button" class="conf-btn conf-btn-plein" data-fix="${idx}">Enregistrer${fix.type === 'profil' ? ' dans les Paramètres' : ' dans la fiche client'}</button></div>`;
+  },
+
+  _liste(items, cls, base = 0) {
+    return items.map((i, k) => `<li class="conf-item ${cls}"><strong>${this._esc(i.titre)}</strong>${i.ou ? ` <span class="conf-ou">${this._esc(i.ou)}</span>` : ''}${i.detail ? `<div class="conf-detail">${this._esc(i.detail)}</div>` : ''}${this._fixHtml(i.fix, base + k)}</li>`).join('');
+  },
+
+  /**
+   * Branche les raccourcis d'un encadré. ctx : { client, action(nomAction, fix) → Promise|void, apres() }
+   */
+  brancherCorrectifs(racine, r, ctx = {}) {
+    if (!racine) return;
+    const items = [...r.bloquants, ...r.alertes];
+    racine.querySelectorAll('[data-fix]').forEach(btn => btn.addEventListener('click', async ev => {
+      ev.preventDefault();
+      const idx = +btn.dataset.fix, fix = items[idx]?.fix;
+      if (!fix) return;
+      btn.disabled = true;
+      try {
+        if (fix.type === 'action') { await ctx.action?.(fix.action, fix); }
+        else {
+          const valeurs = btn.dataset.unClic ? { ...fix.set } : Object.fromEntries(fix.champs.map((c, j) => [c.cle, racine.querySelector(`[data-fix-champ="${idx}-${j}"]`)?.value.trim() || '']));
+          if (Object.values(valeurs).some(v => !v)) { Toast.show('Complétez le champ avant d\'enregistrer', 'warning'); btn.disabled = false; return; }
+          if (fix.type === 'profil') {
+            await DataStore.updateProfile(valeurs);
+            this._of = null;
+          } else {
+            const c = ctx.client;
+            if (!c?.id) throw new Error('fiche client introuvable');
+            Object.assign(c, valeurs);
+            await DataStore.updateClient(c.id, c);
+          }
+          Toast.show('Corrigé ✓', 'success');
+        }
+        await ctx.apres?.();
+      } catch (err) {
+        console.error(err);
+        Toast.show('Correction impossible : ' + this._esc(err.message), 'error');
+        btn.disabled = false;
+      }
+    }));
   },
   _esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); },
 
@@ -265,7 +355,7 @@ const Conformite = {
       : (r.alertes.length ? `Conforme — ${r.alertes.length} point(s) à vérifier` : `Dossier conforme pour ${r.opcoLabel}`);
     return `<div class="conf-box conf-${etat}">
       <div class="conf-head">Contrôle de conformité · ${this._esc(titre)}</div>
-      <ul class="conf-list">${this._liste(r.bloquants, 'conf-b')}${this._liste(r.alertes, 'conf-a')}${this._liste(r.ok, 'conf-ok')}</ul>
+      <ul class="conf-list">${this._liste(r.bloquants, 'conf-b')}${this._liste(r.alertes, 'conf-a', r.bloquants.length)}${this._liste(r.ok, 'conf-ok')}</ul>
     </div>`;
   },
 
@@ -274,21 +364,36 @@ const Conformite = {
    * Retourne true si la génération a eu lieu.
    */
   async controlerPuisGenerer({ dossier, client, opco, typeDoc, generer, corriger }) {
-    const of = await this.profil();
-    const r = this.verifier({ dossier, client, of, opco, typeDoc });
-    if (!r.bloquants.length && !r.alertes.length) { await generer(); return true; }
+    const synchroClient = () => Object.assign(dossier, {
+      companyName: client.companyName, siret: client.siret, address: client.address, nomGerant: client.nomGerant,
+      idcc: client.idcc, employees: client.employees, codeNaf: client.codeNaf });
+    const of0 = await this.profil();
+    const r0 = this.verifier({ dossier, client, of: of0, opco, typeDoc });
+    if (!r0.bloquants.length && !r0.alertes.length) { await generer(); return true; }
 
     return new Promise(resolve => {
-      const actions = [{ label: 'Fermer', cls: 'btn btn-secondary', action: () => { Modal.close(); resolve(false); } }];
-      if (corriger) actions.push({ label: 'Corriger la formation', cls: 'btn btn-secondary', action: () => { corriger(); resolve(false); } });
-      actions.push({ label: 'Analyse IA du contenu', cls: 'btn btn-secondary', action: () => this._analyseIA({ dossier, client, opco, r }) });
-      if (!r.bloquants.length) actions.push({ label: 'Générer le document', cls: 'btn btn-primary',
-        action: async () => { await generer(); resolve(true); } });
-
-      Modal.open(`Contrôle de conformité — ${r.opcoLabel}`, `
-        ${r.bloquants.length ? `<p class="conf-intro">Le document n'est pas généré : ces points feraient rejeter la demande. Corrigez-les puis relancez.</p>` : `<p class="conf-intro">Aucun point bloquant. Vérifiez ces points avant l'envoi :</p>`}
-        ${this.panneau(r)}
-        <div id="confIA"></div>`, actions, 'modal-lg');
+      const afficher = async () => {
+        synchroClient();
+        const of = await this.profil();
+        const r = this.verifier({ dossier, client, of, opco, typeDoc });
+        const actions = [{ label: 'Fermer', cls: 'btn btn-secondary', action: () => { Modal.close(); resolve(false); } }];
+        if (corriger) actions.push({ label: 'Ouvrir la formation', cls: 'btn btn-secondary', action: () => { corriger(); resolve(false); } });
+        actions.push({ label: 'Analyse IA du contenu', cls: 'btn btn-secondary', action: () => this._analyseIA({ dossier, client, opco, r }) });
+        if (!r.bloquants.length) actions.push({ label: 'Générer le document', cls: 'btn btn-primary',
+          action: async () => { await generer(); resolve(true); } });
+        Modal.open(`Contrôle de conformité — ${r.opcoLabel}`, `
+          ${r.bloquants.length ? `<p class="conf-intro">Le document n'est pas généré : ces points feraient rejeter la demande. Corrigez-les directement ci-dessous (boutons sous chaque point), puis générez.</p>`
+            : `<p class="conf-intro">Aucun point bloquant. Vérifiez ces points avant l'envoi :</p>`}
+          <div id="confPanneauModal">${this.panneau(r)}</div>
+          <div id="confIA"></div>`, actions, 'modal-lg');
+        this.brancherCorrectifs(document.getElementById('confPanneauModal'), r, {
+          client,
+          /* Les corrections du contenu se font dans le formulaire : on l'ouvre et on applique le raccourci */
+          action: async (nom) => { if (corriger) { corriger(nom); resolve(false); } },
+          apres: async () => { if (document.getElementById('confPanneauModal')) await afficher(); }
+        });
+      };
+      afficher();
     });
   },
 
