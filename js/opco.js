@@ -977,7 +977,17 @@ const OpcoPage = {
         const of = await Conformite.profil();
         const data = this._lireFormulaire(form);
         const r = Conformite.verifier({ dossier: { ...data, status: data.status }, client: c, of, opco: this.currentOpco, typeDoc: 'devis' });
+        /* Ce qui est en cours de frappe dans les champs de correction est conservé au rafraîchissement */
+        const enCours = {};
+        box.querySelectorAll('[data-fix-champ]').forEach(i => { if (i.value) enCours[i.closest('li')?.querySelector('strong')?.textContent + '|' + i.dataset.fixChamp.split('-')[1]] = i.value; });
+        const focus = document.activeElement?.closest?.('#conformiteBox') ? document.activeElement : null;
+        const cleFocus = focus?.dataset?.fixChamp ? focus.closest('li')?.querySelector('strong')?.textContent + '|' + focus.dataset.fixChamp.split('-')[1] : null;
         box.innerHTML = Conformite.panneau(r);
+        box.querySelectorAll('[data-fix-champ]').forEach(i => {
+          const cle = i.closest('li')?.querySelector('strong')?.textContent + '|' + i.dataset.fixChamp.split('-')[1];
+          if (enCours[cle] != null) i.value = enCours[cle];
+          if (cle === cleFocus) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+        });
         Conformite.brancherCorrectifs(box, r, {
           client: c,
           action: (nom, fix) => this._executerCorrectif(c, nom, fix),
@@ -992,8 +1002,10 @@ const OpcoPage = {
     };
     this._proposerBrouillon(c, d, cleBrouillon);
     const planifier = () => { clearTimeout(minuteur); minuteur = setTimeout(() => { this._majConformite(); sauverBrouillon(); }, 500); };
-    form?.addEventListener('input', planifier);
-    form?.addEventListener('change', planifier);
+    /* Les champs de correction (dans l'encadré) ne relancent pas le contrôle : sinon le texte disparaît pendant la frappe */
+    const horsCorrections = e => !e.target.closest?.('#conformiteBox');
+    form?.addEventListener('input', e => { if (horsCorrections(e)) planifier(); });
+    form?.addEventListener('change', e => { if (horsCorrections(e)) planifier(); });
     form?.addEventListener('click', e => { if (e.target.closest('.btn-remove-row, #addTrainee, #addDate, .status-option')) planifier(); });
     this._majConformite();
 

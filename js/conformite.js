@@ -317,6 +317,12 @@ const Conformite = {
   brancherCorrectifs(racine, r, ctx = {}) {
     if (!racine) return;
     const items = [...r.bloquants, ...r.alertes];
+    /* Entrée dans un champ de correction = Enregistrer (et pas d'envoi du formulaire) */
+    racine.querySelectorAll('[data-fix-champ]').forEach(inp => inp.addEventListener('keydown', ev => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      inp.closest('.conf-fix')?.querySelector('.conf-btn-plein')?.click();
+    }));
     racine.querySelectorAll('[data-fix]').forEach(btn => btn.addEventListener('click', async ev => {
       ev.preventDefault();
       const idx = +btn.dataset.fix, fix = items[idx]?.fix;
