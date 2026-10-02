@@ -833,7 +833,11 @@ const OpcoPage = {
         </div>
 
         <div class="form-section">
-          <div class="form-section-title">📅 Dates et tarification</div>
+          <div class="form-section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+            <span>📅 Dates et tarification</span>
+            <button type="button" class="btn-ai" id="propBtn" title="Durée, jours, horaires et prix calculés selon les critères de l'OPCO">⚙ Proposer durée, dates et prix</button>
+          </div>
+          <div id="propositionBox"></div>
           <div class="form-grid">
             <div class="field form-col-full"><label>Dispositif / type de formation (barème OPCO)</label>
               <select name="dispositif" id="fieldDispositif">
@@ -957,6 +961,12 @@ const OpcoPage = {
     form?.addEventListener('change', e => { if (e.target.closest('#dateList')) majTarif(); });
     majTarif();
 
+    /* ── Proposition automatique durée / dates / prix ── */
+    document.getElementById('propBtn')?.addEventListener('click', () => {
+      try { this._afficherProposition(c, this._calculerProposition(c)); }
+      catch (err) { console.error(err); Toast.show('Proposition impossible : ' + esc(err.message), 'error'); }
+    });
+
     /* ── Contrôle de conformité en direct (règles OPCO) ── */
     let minuteur = null;
     this._majConformite = async () => {
@@ -994,12 +1004,18 @@ const OpcoPage = {
       }
 
       try {
+        /* 1. Durée, dates et prix conformes à l'OPCO (champs vides complétés automatiquement) */
+        const prop = this._calculerProposition(c);
+        this._appliquerProposition(c, prop, { seulementVides: true });
         const lu = this._lireFormulaire(form);
-        const nbJours = Documents._expandDates(lu.trainingDates).length;
-        const result = await AI.genererFormation(this.currentOpco, subject, c, {
-          modalite: lu.modalite, dureeHeures: lu.dureeHeures, nbJours,
-          stagiaires: lu.trainees, lieu: lu.lieu
+        const jours = Documents._expandDates(lu.trainingDates);
+        const heures = parseFloat(lu.dureeHeures) || prop.heures;
+        /* 2. Contenu calé sur le planning, contrôlé puis corrigé automatiquement */
+        const result = await AI.genererFormationConforme(this.currentOpco, subject, c, {
+          modalite: lu.modalite, dureeHeures: heures, nbJours: jours.length,
+          stagiaires: lu.trainees, lieu: lu.lieu, creneaux: CriteresOpco.creneaux(jours, heures)
         });
+        if (result.erreurs_restantes?.length) result.points_attention = [...(result.points_attention || []), ...result.erreurs_restantes.map(e => 'À corriger : ' + e)];
         if (result.objectifs)  document.getElementById('fieldObjectifs').value = result.objectifs;
         if (result.contenu)    document.getElementById('fieldContenu').value   = result.contenu;
         if (result.evaluation) document.getElementById('fieldEvaluation').value = result.evaluation;
@@ -1064,46 +1080,109 @@ const OpcoPage = {
     const dispositif = document.getElementById('fieldDispositif')?.value || Tarifs.DISPOSITIF_DEFAUT;
     const heures     = document.getElementById('fieldDureeHeures')?.value;
     const prix       = document.getElementById('fieldPrice')?.value;
-    const stagiaires = [...document.querySelectorAll('#traineeList .dynamic-row')]
-      .filter(r => r.querySelector('[data-field="firstName"]').value.trim() || r.querySelector('[data-field="lastName"]').value.trim()).length || 1;
+    const stagiaires = this._nbStagiairesForm();
     const effectif   = c?.employees || '';
-
-    const dates = [...document.querySelectorAll('#dateList .dynamic-row')].map(r => ({
-      start: r.querySelector('[data-field="start"]').value, end: r.querySelector('[data-field="end"]').value })).filter(x => x.start);
-    const jours = typeof Documents !== 'undefined' ? Documents._expandDates(dates).length : 0;
-    const s = Tarifs.suggestion({ opco, dispositif, effectif, heures, stagiaires, prix, jours });
+    const jours = Documents._expandDates(this._datesForm()).length;
+    const s = Tarifs.suggestion({ opco, dispositif, effectif, heures, stagiaires, prix, jours, client: c });
     if (!s) { box.innerHTML = ''; return; }
 
     const tauxEl = document.getElementById('fieldTauxHoraire');
     if (tauxEl) tauxEl.value = s.bareme.tauxMax ?? '';
 
     const cfg = this.CONFIG[opco] || {};
-    const conseil = s.estimation ? Math.round(s.estimation.max) : null;
+    const conseil = s.estimation ? Math.floor(s.estimation.max) : null;
     const prixNum = parseFloat(prix) || 0;
     const peutAppliquer = conseil && Math.abs(prixNum - conseil) > 0.5;
 
     box.innerHTML = `
       <div class="tarif-box">
         <div class="tarif-head">
-          <span class="tarif-titre">💶 Tarif conseillé — ${esc(cfg.label || opco)}</span>
-          <span class="tarif-taille">${esc(s.taille)}${effectif ? ` · effectif client : ${esc(effectif)}` : ''}</span>
+          <span class="tarif-titre">💶 Prise en charge — ${esc(cfg.label || opco)}</span>
+          <span class="tarif-taille">${esc(s.bareme.branche ? s.bareme.branche + ' · ' : '')}${esc(s.taille)}${effectif ? ` · effectif client : ${esc(effectif)}` : ''}</span>
         </div>
-        <div class="tarif-taux">${esc(s.tauxTexte)}${s.bareme.plafond ? ` <span class="tarif-plafond">· plafond ${Tarifs.eur(s.bareme.plafond)} / formation</span>` : ''}${s.bareme.pourcentage ? '' : ''}</div>
+        <div class="tarif-taux">${esc(s.tauxTexte)}</div>
         ${s.estimation ? `
           <div class="tarif-estimation">
-            Prise en charge estimée pour <strong>${s.base} ${s.bareme.unite === 'j' ? 'jour(s)' : 'h'}</strong> × <strong>${s.nb} stagiaire${s.nb > 1 ? 's' : ''}</strong> :
-            <strong>${s.estimation.min === s.estimation.max ? Tarifs.eur(s.estimation.max) : `${Tarifs.eur(s.estimation.min)} à ${Tarifs.eur(s.estimation.max)}`} HT</strong>
+            Maximum finançable pour <strong>${esc(String(s.base).replace('.', ','))} h</strong> × <strong>${s.nb} stagiaire${s.nb > 1 ? 's' : ''}</strong>${s.jours ? ` sur <strong>${s.jours} jour${s.jours > 1 ? 's' : ''}</strong>` : ''} :
+            <strong>${Tarifs.eur(s.estimation.max)} HT</strong>
             ${peutAppliquer ? `<button type="button" class="btn btn-secondary btn-sm" id="tarifAppliquer">Appliquer ${Tarifs.eur(conseil)}</button>` : ''}
-          </div>` : (s.bareme.tauxMax == null && !s.bareme.pourcentage
-            ? '<div class="tarif-estimation">Pas de taux horaire public pour ce cas — demandez le barème au conseiller OPCO avant de chiffrer.</div>'
-            : (!s.base ? '<div class="tarif-estimation">Renseignez la durée en heures pour obtenir une estimation chiffrée.</div>' : ''))}
+          </div>` : (!s.base ? '<div class="tarif-estimation">Renseignez la durée, ou utilisez « Proposer durée, dates et prix ».</div>'
+            : '<div class="tarif-estimation">Pas de plafond publié pour ce cas — faites valider le prix par le conseiller OPCO.</div>')}
         ${s.messages.map(m => `<div class="tarif-msg tarif-${m.type}">${esc(m.text)}</div>`).join('')}
       </div>`;
 
     document.getElementById('tarifAppliquer')?.addEventListener('click', () => {
       const p = document.getElementById('fieldPrice');
-      if (p) { p.value = conseil; p.classList.add('field-auto'); this._majTarif(c); }
+      if (p) { p.value = conseil; p.classList.add('field-auto'); this._majTarif(c); this._majConformite?.(); }
     });
+  },
+
+  _nbStagiairesForm() {
+    return [...document.querySelectorAll('#traineeList .dynamic-row')]
+      .filter(r => r.querySelector('[data-field="firstName"]').value.trim() || r.querySelector('[data-field="lastName"]').value.trim()).length || 1;
+  },
+  _datesForm() {
+    return [...document.querySelectorAll('#dateList .dynamic-row')].map(r => ({
+      start: r.querySelector('[data-field="start"]').value, end: r.querySelector('[data-field="end"]').value })).filter(x => x.start);
+  },
+
+  /* ══════════════════════════════════════════════
+     PROPOSITION AUTOMATIQUE : durée, dates, répartition, prix
+  ══════════════════════════════════════════════ */
+  _calculerProposition(c, { garderDuree = true } = {}) {
+    const form = document.getElementById('dossierForm');
+    const dates = this._datesForm();
+    const debutSaisi = dates[0]?.start || null;
+    return CriteresOpco.proposer({
+      opco: this.currentOpco, client: c,
+      dispositif: document.getElementById('fieldDispositif')?.value,
+      stagiaires: this._nbStagiairesForm(),
+      heures: garderDuree ? document.getElementById('fieldDureeHeures')?.value : null,
+      debut: debutSaisi && CriteresOpco.date(debutSaisi) >= CriteresOpco.premierDemarrage(this.currentOpco) ? debutSaisi : null,
+      modalite: form?.querySelector('[name="modalite"]')?.value
+    });
+  },
+
+  _afficherProposition(c, p) {
+    const box = document.getElementById('propositionBox');
+    if (!box) return;
+    const jours = [...new Set(p.creneaux.map(x => x.date))];
+    const ligneJour = d => {
+      const cr = p.creneaux.filter(x => x.date === d);
+      const dt = new Date(d + 'T00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+      return `<li><strong>${esc(dt)}</strong> — ${cr.map(x => `${x.debut}-${x.fin}`).join(' / ')} (${String(cr.reduce((s, x) => s + x.heures, 0)).replace('.', ',')} h)</li>`;
+    };
+    box.innerHTML = `
+      <div class="prop-box">
+        <div class="prop-head">Proposition conforme ${esc(this.CONFIG[this.currentOpco]?.label || '')}</div>
+        <div class="prop-grid">
+          <div><span>Durée</span><strong>${String(p.heures).replace('.', ',')} h — ${p.nbJours} jour${p.nbJours > 1 ? 's' : ''}</strong></div>
+          <div><span>Prix HT</span><strong>${Tarifs.eur(p.prix)}</strong></div>
+          <div><span>Dépôt de la demande avant le</span><strong>${p.depotAvant ? p.depotAvant.toLocaleDateString('fr-FR') : '—'}</strong></div>
+        </div>
+        <ul class="prop-jours">${jours.map(ligneJour).join('')}</ul>
+        ${p.notes.length ? `<ul class="prop-notes">${p.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+        <div class="prop-actions">
+          <button type="button" class="btn btn-primary btn-sm" id="propAppliquer">Appliquer durée, dates et prix</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="propFermer">Ignorer</button>
+        </div>
+      </div>`;
+    document.getElementById('propAppliquer').addEventListener('click', () => { this._appliquerProposition(c, p); box.innerHTML = ''; });
+    document.getElementById('propFermer').addEventListener('click', () => { box.innerHTML = ''; });
+  },
+
+  _appliquerProposition(c, p, { seulementVides = false } = {}) {
+    const duree = document.getElementById('fieldDureeHeures');
+    const prix  = document.getElementById('fieldPrice');
+    const list  = document.getElementById('dateList');
+    if (duree && (!seulementVides || !duree.value)) duree.value = p.heures;
+    if (list && (!seulementVides || !this._datesForm().length)) {
+      list.innerHTML = p.trainingDates.map((d, i) => this._dateRow(d.start, d.end, i)).join('');
+      this._bindRemoveRows();
+    }
+    if (prix && (!seulementVides || !prix.value)) { prix.value = p.prix; prix.classList.add('field-auto'); }
+    this._majTarif(c);
+    this._majConformite?.();
   },
 
   async _submitDossierForm(opco, clientId, dossierId) {

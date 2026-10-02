@@ -890,6 +890,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Dark mode toggle
   document.getElementById('darkToggle').addEventListener('click', () => DarkMode.toggle());
+  /* Bouton Actualiser : récupère la dernière version mise en ligne (service
+     worker) puis recharge l'application avec des données fraîches. */
+  document.getElementById('refreshBtn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('refresh-en-cours'); btn.disabled = true;
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration();
+      if (reg) {
+        await reg.update();
+        if (reg.waiting) {                       // nouvelle version prête : on l'active, la page se recharge seule
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          setTimeout(() => location.reload(), 1500);
+          return;
+        }
+      }
+    } catch (err) { console.warn('[Actualiser]', err); }
+    location.reload();
+  });
 
   // Hamburger / mobile nav
   document.getElementById('hamburgerBtn').addEventListener('click', () => {

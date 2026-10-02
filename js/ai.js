@@ -58,6 +58,9 @@ const AI = {
         [t.lastName, t.firstName].map(x => String(x || '').toLowerCase()).sort().join('|'));
       return sal?.poste || '';
     }).filter(Boolean);
+    const creneaux = ctx.creneaux || [];
+    const planningTxt = creneaux.length ? creneaux.map((c, i) => `  ${i + 1}. ${new Date(c.date + 'T00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} ${c.demi === 'matin' ? 'matin' : 'après-midi'} ${c.debut}-${c.fin} (${String(c.heures).replace('.', ',')} h)`).join('\n') : '';
+    const regles = typeof CriteresOpco !== 'undefined' ? CriteresOpco.fiche(opco) : null;
     const libMod = { presentiel: 'présentiel (dans les locaux de l\'entreprise)', distanciel: 'à distance (classe virtuelle)', mixte: 'mixte : une partie en présentiel, une partie à distance' }[modalite];
 
     const system = `Tu es ingénieur pédagogique senior dans un organisme de formation certifié Qualiopi, spécialiste des dossiers de prise en charge OPCO.
@@ -74,12 +77,19 @@ CONTEXTE :
 - Nombre de stagiaires : ${(ctx.stagiaires || []).length || 'non précisé'}
 - Modalité : ${libMod}
 - Durée IMPOSÉE : ${heures ? `${heures} heures` : 'à proposer'}${nbJours ? ` sur ${nbJours} jour(s)` : ''}
-- OPCO : ${cfg.label || opco} — secteurs : ${cfg.sectors || 'non précisé'} — plafond : ${cfg.ceiling || 'non précisé'}
+- OPCO : ${cfg.label || opco} — secteurs : ${cfg.sectors || 'non précisé'}
+- Règles de prise en charge 2026 : ${cfg.ceiling || 'non précisé'}
 - Points d'attention OPCO : ${(cfg.alerts || []).join('. ') || '—'}
+- Exigences FOAD de l'OPCO : ${regles?.foad || '—'}${planningTxt ? `
+- PLANNING RETENU (demi-journées) :
+${planningTxt}` : ''}${ctx.corrections?.length ? `
+
+CORRECTIONS OBLIGATOIRES (ta proposition précédente était refusée pour ces raisons) :
+${ctx.corrections.map(c => '- ' + c).join('\n')}` : ''}
 
 RÈGLES IMPÉRATIVES :
 1. Objectifs : 3 à 5, chacun commence par un verbe d'action observable (identifier, appliquer, réaliser, analyser, mettre en œuvre…). Jamais « connaître », « comprendre », « être sensibilisé ».
-2. Contenu : chaque titre de module suit EXACTEMENT ce format : « Module N — Titre (X h — présentiel) : » ou « Module N — Titre (X h — à distance) : ». ${heures ? `La somme des X doit faire exactement ${heures} h.` : 'La somme des X doit égaler la durée proposée.'} ${nbJours && heures ? `Répartis de façon réaliste sur ${nbJours} jour(s) (7 h maximum par jour).` : ''}
+2. Contenu : ${creneaux.length ? `les modules suivent le PLANNING ci-dessus, dans l'ordre ; chaque module occupe une ou plusieurs demi-journées COMPLÈTES (durée = somme de ses créneaux). ` : ''}Chaque titre de module suit EXACTEMENT ce format : « Module N — Titre (X h — présentiel) : » ou « Module N — Titre (X h — à distance) : ». ${heures ? `La somme des X doit faire exactement ${heures} h.` : 'La somme des X doit égaler la durée proposée.'} ${nbJours && heures ? `Répartis de façon réaliste sur ${nbJours} jour(s) (7 h maximum par jour).` : ''}
 3. ${modalite === 'mixte' ? 'Mixte : place les apports théoriques à distance et la pratique / mises en situation en présentiel ; chaque module indique sa modalité.' : modalite === 'distanciel' ? 'Tous les modules sont « à distance » (classe virtuelle synchrone).' : 'Tous les modules sont « présentiel ».'}
 4. Sous chaque module, 3 à 6 points concrets, propres au métier des stagiaires, précédés de « • », un par ligne. Aucune incohérence technique (ex. pas d'« EPI adaptés au stress »).
 5. Évaluation : une modalité par ligne précédée de « • » (positionnement initial, évaluations formatives par module, évaluation finale des acquis, satisfaction à chaud et à froid${modalite !== 'presentiel' ? ', suivi de l\'assiduité à distance par relevé de connexion' : ''}).
@@ -101,6 +111,48 @@ Génère ce JSON (sans rien d'autre) :
 
     const text = await this._call(prompt, system, 2600);
     return this._parseJSON(text);
+  },
+
+  /** Contrôle automatique du contenu généré (mêmes règles que la conformité) */
+  controleContenu(r, ctx = {}) {
+    const err = [];
+    if (typeof Conformite === 'undefined') return err;
+    const heures = parseFloat(ctx.dureeHeures) || null;
+    const mods = Conformite.modules(r.contenu);
+    if (mods.length < 2) err.push('Le programme doit comporter au moins 2 modules au format « Module N — Titre (X h — présentiel) : ».');
+    const sansH = mods.filter(m => m.heures == null);
+    if (sansH.length) err.push(`Durée manquante dans le titre de : ${sansH.map(m => m.titre).join(' ; ')}.`);
+    const total = mods.reduce((t, m) => t + (m.heures || 0), 0);
+    if (heures && Math.abs(total - heures) > 0.01) err.push(`La somme des modules fait ${total} h au lieu de ${heures} h exactement.`);
+    if ((ctx.creneaux || []).length) {
+      const pasDemi = mods.filter(m => m.heures && Math.abs(m.heures / 3.5 - Math.round(m.heures / 3.5)) > 0.01);
+      if (pasDemi.length) err.push(`Ces modules ne tombent pas sur des demi-journées complètes (multiples de 3,5 h) : ${pasDemi.map(m => m.titre).join(' ; ')}.`);
+    }
+    if (ctx.modalite === 'mixte') {
+      if (mods.some(m => !m.modalite || m.modalite === 'mixte')) err.push('En mixte, chaque titre de module doit indiquer « présentiel » OU « à distance ».');
+      if (!mods.some(m => m.modalite === 'presentiel') || !mods.some(m => m.modalite === 'distanciel')) err.push('Une formation mixte doit comporter au moins un module en présentiel et un module à distance.');
+    }
+    if (ctx.modalite === 'presentiel' && mods.some(m => m.modalite === 'distanciel')) err.push('Formation en présentiel : aucun module ne doit être à distance.');
+    if (ctx.modalite === 'distanciel' && mods.some(m => m.modalite === 'presentiel')) err.push('Formation à distance : aucun module ne doit être en présentiel.');
+    const obj = Conformite._items(r.objectifs).filter(l => !/capables?\s+de\s*:?\s*$/i.test(l));
+    if (obj.length < 3) err.push('Il faut 3 à 5 objectifs opérationnels.');
+    const vagues = obj.filter(l => Conformite.MOTS_VAGUES.test(l));
+    if (vagues.length) err.push(`Objectifs non mesurables à réécrire avec un verbe observable : ${vagues.join(' ; ')}.`);
+    if (Conformite._items(r.evaluation).length < 3) err.push('Les modalités d\'évaluation doivent lister au moins 3 éléments, un par ligne.');
+    if (Conformite.publicGenerique(r.public_vise)) err.push('Le public visé ne doit pas recopier la liste des secteurs de la convention collective : décris les postes réels.');
+    return err;
+  },
+
+  /** Génère, contrôle, et relance une fois avec les corrections si nécessaire */
+  async genererFormationConforme(opco, trainingSubject, clientInfo = {}, ctx = {}) {
+    let r = await this.genererFormation(opco, trainingSubject, clientInfo, ctx);
+    let err = this.controleContenu(r, ctx);
+    if (err.length) {
+      const r2 = await this.genererFormation(opco, trainingSubject, clientInfo, { ...ctx, corrections: err });
+      const err2 = this.controleContenu(r2, ctx);
+      if (err2.length <= err.length) { r = r2; err = err2; }
+    }
+    return { ...r, erreurs_restantes: err };
   },
 
   /* ══════════════════════════════════════════════

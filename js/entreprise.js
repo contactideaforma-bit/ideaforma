@@ -183,12 +183,24 @@ const Tarifs = {
   },
 
   /** Ligne de barème applicable (effectif null → première ligne du dispositif) */
-  bareme(opco, dispositif, effectif) {
-    const lignes = (this.BAREMES[opco] || []).filter(b => b.dispositif === (dispositif || this.DISPOSITIF_DEFAUT));
+  bareme(opco, dispositif, effectif, client = null) {
+    let lignes = (this.BAREMES[opco] || []).filter(b => b.dispositif === (dispositif || this.DISPOSITIF_DEFAUT));
+    if (!lignes.length) lignes = (this.BAREMES[opco] || []).filter(b => b.dispositif === this.DISPOSITIF_DEFAUT);
     if (!lignes.length) return null;
+    /* Branche (ex. Constructys bâtiment / travaux publics) déterminée par l'IDCC du client */
+    const idcc = String(client?.idcc || '').trim();
+    const avecBranche = lignes.filter(b => b.idcc);
+    let brancheInconnue = false;
+    if (avecBranche.length) {
+      const match = idcc && avecBranche.some(b => b.idcc.includes(idcc));
+      const ref = match ? idcc : avecBranche[0].idcc[0];
+      brancheInconnue = !match && new Set(avecBranche.map(b => b.branche)).size > 1;
+      lignes = lignes.filter(b => !b.idcc || b.idcc.includes(ref));
+    }
     const n = parseInt(effectif);
-    if (!Number.isFinite(n)) return { ...lignes[0], effectifInconnu: lignes.length > 1 };
-    return lignes.find(b => n >= b.min && (b.max == null || n <= b.max)) || lignes[lignes.length - 1];
+    if (!Number.isFinite(n)) return { ...lignes[0], effectifInconnu: lignes.length > 1, brancheInconnue };
+    const l = lignes.find(b => n >= b.min && (b.max == null || n <= b.max)) || lignes[lignes.length - 1];
+    return { ...l, brancheInconnue };
   },
 
   eur(n) {
@@ -199,66 +211,55 @@ const Tarifs = {
    * Calcule la suggestion complète.
    * @returns {object|null} { bareme, taille, tauxTexte, estimation:{min,max}, base, tauxActuel, ecart, messages[] }
    */
-  suggestion({ opco, dispositif, effectif, heures, stagiaires, prix, jours: nbJours }) {
-    const b = this.bareme(opco, dispositif, effectif);
+  suggestion({ opco, dispositif, effectif, heures, stagiaires, prix, jours: nbJours, client = null }) {
+    const b = this.bareme(opco, dispositif, effectif, client);
     if (!b) return null;
 
     const h   = parseFloat(heures) || 0;
     const nb  = Math.max(1, parseInt(stagiaires) || 1);
     const p   = parseFloat(prix) || 0;
     const jours = parseInt(nbJours) > 0 ? parseInt(nbJours) : (h ? Math.max(1, Math.ceil(h / 7)) : 0);
-    const unite = b.unite === 'j' ? '€/jour/stagiaire' : '€/h/stagiaire';
+    const unite = '€/h/stagiaire';
 
     let tauxTexte = '';
-    if (b.pourcentage)      tauxTexte = `jusqu'à ${b.pourcentage} % du coût`;
-    else if (b.tauxMin == null) tauxTexte = 'sur devis — voir conseiller';
+    if (b.tauxMin == null) tauxTexte = b.budgetAnnuel ? `budget annuel ${this.eur(b.budgetAnnuel)} par entreprise` : 'barème non publié — voir le conseiller';
     else if (b.tauxMin === b.tauxMax) tauxTexte = `${b.tauxMax} ${unite}`;
     else tauxTexte = `${b.tauxMin} à ${b.tauxMax} ${unite}`;
+    if (b.plafondJour) tauxTexte += ` · ${this.eur(b.plafondJour)}/jour/groupe en intra`;
 
-    const base = b.unite === 'j' ? jours : h;
-    const estimation = (b.tauxMax != null && base)
-      ? { min: b.tauxMin * base * nb, max: b.tauxMax * base * nb }
-      : null;
-    if (estimation && b.plafond) {
-      estimation.min = Math.min(estimation.min, b.plafond);
-      estimation.max = Math.min(estimation.max, b.plafond);
-      estimation.plafonne = b.tauxMax * base * nb > b.plafond;
-    }
-    /* Plafond intra-entreprise par jour et par groupe (ex. Constructys bâtiment) */
-    if (estimation && b.plafondJour && jours) {
-      const cap = b.plafondJour * jours;
-      if (estimation.max > cap) { estimation.max = cap; estimation.min = Math.min(estimation.min, cap); estimation.plafondJour = true; }
-    }
+    /* Prise en charge maximale : règles centralisées dans CriteresOpco */
+    const fin = (typeof CriteresOpco !== 'undefined' && h) ? CriteresOpco.financement({ bareme: b, heures: h, jours, nb }) : { max: null };
+    const estimation = fin.max != null ? { min: fin.max, max: fin.max, detail: fin.detail,
+      plafondJour: /jour\/groupe/.test(fin.detail || ''), budget: /budget/.test(fin.detail || '') } : null;
 
-    /* Taux réellement pratiqué avec le prix saisi */
     let tauxActuel = null, ecart = null;
-    if (p && base) {
-      tauxActuel = p / base / nb;
+    if (p && h) {
+      tauxActuel = p / h / nb;
       if (b.tauxMax != null) ecart = tauxActuel - b.tauxMax;
     }
 
     const messages = [];
+    if (b.brancheInconnue) messages.push({ type:'warn', text:'Renseignez l\'IDCC du client : le barème dépend de la branche (ex. bâtiment / travaux publics).' });
     if (b.effectifInconnu) messages.push({ type:'info', text:'Renseignez l\'effectif du client pour affiner le barème.' });
     if (b.note) messages.push({ type:'info', text: b.note });
-    if (estimation?.plafondJour) messages.push({ type:'warn', text:`Plafond intra-entreprise : ${this.eur(b.plafondJour)} par jour et par groupe (${jours} jour${jours > 1 ? 's' : ''}).` });
-    if (estimation?.plafonne) messages.push({ type:'warn', text:`Plafond ${this.eur(b.plafond)} par formation atteint — le reste sera à la charge de l'entreprise.` });
-    const resteCharge = (p && estimation) ? p - estimation.max : (ecart != null ? ecart * base * nb : 0);
+    if (estimation?.detail) messages.push({ type:'info', text:`Prise en charge limitée par : ${estimation.detail}.` });
+    if (b.budgetAnnuel) messages.push({ type:'info', text:`Budget annuel ${this.eur(b.budgetAnnuel)} par entreprise : s'il a déjà servi cette année, le reste à charge augmente.` });
+    if (b.minStagiairesIntra && nb < b.minStagiairesIntra) messages.push({ type:'warn', text:`Forfait intra : ${b.minStagiairesIntra} stagiaires minimum.` });
+    const resteCharge = (p && estimation) ? p - estimation.max : 0;
     if (p && estimation && resteCharge > 1) {
-      messages.push({ type:'warn', text:`Prix saisi = ${tauxActuel.toFixed(2).replace('.', ',')} ${unite}, au-dessus de la prise en charge OPCO (max. ${this.eur(estimation.max)}) : reste à charge d'environ ${this.eur(resteCharge)} HT pour l'entreprise.` });
-    } else if (ecart != null && ecart > 0.5) {
-      messages.push({ type:'warn', text:`Prix saisi = ${tauxActuel.toFixed(2).replace('.', ',')} ${unite}, au-dessus du plafond OPCO : reste à charge d'environ ${this.eur(ecart * base * nb)} HT pour l'entreprise.` });
-    } else if (ecart != null && ecart < -3 && b.tauxMin != null) {
-      messages.push({ type:'ok', text:`Prix saisi = ${tauxActuel.toFixed(2).replace('.', ',')} ${unite} : marge de ${this.eur(-ecart * base * nb)} HT sous le plafond.` });
-    } else if (ecart != null) {
-      messages.push({ type:'ok', text:`Prix aligné sur le plafond OPCO (${tauxActuel.toFixed(2).replace('.', ',')} ${unite}).` });
+      messages.push({ type:'warn', text:`Prix saisi au-dessus de la prise en charge (max. ${this.eur(estimation.max)}) : reste à charge d'environ ${this.eur(resteCharge)} HT pour l'entreprise.` });
+    } else if (p && estimation && resteCharge < -50) {
+      messages.push({ type:'ok', text:`Prix entièrement pris en charge (marge de ${this.eur(-resteCharge)} sous le maximum).` });
+    } else if (p && estimation) {
+      messages.push({ type:'ok', text:'Prix aligné sur la prise en charge maximale : aucun reste à charge.' });
     }
 
-    return { bareme: b, taille: this.libelleTaille(b), unite, tauxTexte, estimation, base, jours, nb, tauxActuel, ecart, messages };
+    return { bareme: b, taille: this.libelleTaille(b), unite, tauxTexte, estimation, base: h, jours, nb, tauxActuel, ecart, messages };
   },
 
   /** Prix HT conseillé (taux max × durée × stagiaires, borné au plafond) */
-  prixConseille({ opco, dispositif, effectif, heures, stagiaires, jours }) {
-    const s = this.suggestion({ opco, dispositif, effectif, heures, stagiaires, jours });
+  prixConseille({ opco, dispositif, effectif, heures, stagiaires, jours, client }) {
+    const s = this.suggestion({ opco, dispositif, effectif, heures, stagiaires, jours, client });
     if (!s?.estimation) return null;
     return Math.round(s.estimation.max);
   }

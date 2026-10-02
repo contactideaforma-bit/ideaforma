@@ -272,6 +272,7 @@ const Documents = {
     ]);
     y = this._subBand(doc, y, 'Programme détaillé', 'left');
     y = this._contenuTable(doc, y, dossier.contenu, x);
+    y = this._planningTable(doc, y, dossier, true);
 
     /* Annexe 2 — stagiaires */
     y = this._band(doc, y, 'Annexe 2 — Liste des stagiaires');
@@ -331,6 +332,7 @@ const Documents = {
 
     y = this._band(doc, y, '4. Programme de la formation');
     y = this._contenuTable(doc, y, dossier.contenu, x);
+    y = this._planningTable(doc, y, dossier, true);
 
     y = this._band(doc, y, '5. Moyens pédagogiques et techniques');
     y = this._kv(doc, y, [
@@ -613,6 +615,23 @@ const Documents = {
     const body = rows.map(r => [r.titre, r.items.map(i => `• ${i}`).join('\n')]);
     body.push(['TOTAL', `${this._fmtH(x.heures)}${x.nbJ ? ` — ${x.nbJ} jour${x.nbJ > 1 ? 's' : ''}` : ''}`]);
     return this._table(doc, y, { head: ['Séquence', 'Contenu'], body, widths: [50, this.W - 50], navyHead: true, totalLast: 1 });
+  },
+
+  /** Planning prévisionnel : date, horaires, séquences, modalité (une ligne par demi-journée) */
+  _planningTable(doc, y, dossier, sousBandeau = false) {
+    if (typeof CriteresOpco === 'undefined') return y;
+    const pl = CriteresOpco.planning(dossier);
+    if (!pl.length) return y;
+    const MOD = { presentiel: 'Présentiel', distanciel: 'À distance', mixte: 'Mixte' };
+    const body = pl.map(c => [
+      new Date(c.date + 'T00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }),
+      `${c.debut} – ${c.fin}`,
+      c.sequences.join(' / ') || '—',
+      MOD[c.modalite] || '—'
+    ]);
+    if (sousBandeau) { y = this._need(doc, y, 30); y = this._subBand(doc, y, 'Planning prévisionnel', 'left'); }
+    else y = this._band(doc, y, 'Planning prévisionnel');
+    return this._table(doc, y, { head: ['Date', 'Horaires', 'Séquence', 'Modalité'], body, widths: [32, 28, this.W - 88, 28], navyHead: true });
   },
 
   /* ══════════════════════════════════════════════════════════════════════

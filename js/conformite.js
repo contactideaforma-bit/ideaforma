@@ -102,15 +102,18 @@ const Conformite = {
       const debut = this._date(jours[0]);
       const delta = Math.floor((debut - this._date()) / 86400000);
       const m = String(cfg.deadline || '').match(/(\d+)\s*jours/);
-      const delai = m ? parseInt(m[1]) : 0;
+      const delai = cfg.delaiJours ?? (m ? parseInt(m[1]) : 0);
+      const limite = typeof CriteresOpco !== 'undefined' ? CriteresOpco.depotAvant(opco, jours[0]) : this._plus(debut, -delai);
+      const avantLimite = limite ? Math.floor((limite - this._date()) / 86400000) : delta - delai;
       if (demande && avantAccord) {
         if (delta < 0) add(B, 'La formation a déjà commencé', 'Une demande de prise en charge doit être déposée avant le début de la formation.', 'Formation');
-        else if (delta < delai) add(B, `Délai de dépôt dépassé pour ${opcoLabel}`, `Début dans ${delta} jour(s) : la demande doit parvenir au moins ${delai} jours avant (au plus tard le ${this._fr(this._plus(debut, -delai))}). Décalez les dates.`, 'Formation');
-        else if (delai && delta < delai + 7) add(A, 'Délai de dépôt serré', `Dépôt à faire au plus tard le ${this._fr(this._plus(debut, -delai))}.`, 'Formation');
-        else if (delai) add(OK, `Délai respecté — dépôt au plus tard le ${this._fr(this._plus(debut, -delai))}`);
+        else if (avantLimite < 0) add(B, `Délai de dépôt dépassé pour ${opcoLabel}`, `La demande devait parvenir au plus tard le ${this._fr(limite)} (${cfg.deadline || `${delai} jours avant`}). Décalez les dates (bouton « Proposer durée, dates et prix »).`, 'Formation');
+        else if (avantLimite < 7) add(A, 'Délai de dépôt serré', `Dépôt à faire au plus tard le ${this._fr(limite)} — faites signer le devis tout de suite.`, 'Formation');
+        else add(OK, `Délai respecté — dépôt au plus tard le ${this._fr(limite)}`);
       }
       const hj = heures / jours.length;
-      if (hj > 7.5) add(B, `${this._h(hj)} par jour`, 'Une journée de formation ne doit pas dépasser 7 h : ajoutez des jours ou réduisez la durée.', 'Formation');
+      if (hj > 10) add(B, `${this._h(hj)} par jour`, 'Durée journalière irréaliste : ajoutez des jours ou réduisez la durée.', 'Formation');
+      else if (hj > 7.5) add(A, `${this._h(hj)} par jour`, 'Au-delà de 7 h par jour, l\'OPCO peut demander des justifications : préférez des journées de 7 h.', 'Formation');
       else if (Math.abs(hj * 2 - Math.round(hj * 2)) > 0.01)
         add(A, `Répartition irrégulière : ${this._h(hj)} par jour`, `${this._h(heures)} sur ${jours.length} jours. Préférez des journées ou demi-journées complètes (ex. 2 jours de 7 h), ou saisissez des périodes qui reflètent les vrais horaires.`, 'Formation');
     }
@@ -151,15 +154,42 @@ const Conformite = {
     if (this.publicGenerique(dossier.publicVise))
       add(A, 'Public visé trop générique', 'Il recopie la liste des secteurs de la convention collective. Décrivez les salariés réellement formés (postes, ex. maçons, chefs de chantier, secrétaire).', 'Formation');
 
+    /* ── 5 bis. Règles du dispositif (durée max, éligibilité, exclusions) ── */
+    const b = typeof Tarifs !== 'undefined' ? Tarifs.bareme(opco, dossier.dispositif, client.employees, client) : null;
+    if (b) {
+      if (b.brancheInconnue) add(A, 'Branche du client à préciser', 'Renseignez l\'IDCC : les plafonds diffèrent selon la branche (ex. bâtiment / travaux publics).', 'Fiche client');
+      if (b.dureeMax && heures > b.dureeMax) add(B, `Durée supérieure au maximum du dispositif (${b.dureeMax} h)`, `${b.dispositif} : ${this._h(heures)} prévues.`, 'Formation');
+      if (b.exclusions && b.exclusions.test(`${dossier.trainingSubject || ''} ${dossier.contenu || ''}`))
+        add(B, `Thème exclu du dispositif « ${b.dispositif} »`, b.note || '', 'Formation');
+      if (b.naf) {
+        const naf = String(client.codeNaf || '').replace(/[.\s]/g, '').toUpperCase();
+        if (!naf) add(A, 'Code NAF du client manquant', `Le dispositif « ${b.dispositif} » est réservé aux codes NAF ${b.naf.join(', ')}.`, 'Fiche client');
+        else if (!b.naf.includes(naf)) add(B, `Code NAF ${client.codeNaf} non éligible`, `« ${b.dispositif} » est réservé aux codes NAF ${b.naf.join(', ')}. Choisissez « Plan de développement des compétences ».`, 'Formation');
+      }
+      if (b.max != null && Number.isFinite(eff) && eff > b.max && b.dispositif !== 'Plan de développement des compétences')
+        add(B, `Effectif trop élevé pour « ${b.dispositif} »`, `Réservé aux entreprises de ${b.max} salariés maximum (${eff} chez le client).`, 'Formation');
+      if (b.minStagiairesIntra && stag.length && stag.length < b.minStagiairesIntra)
+        add(A, `Forfait intra : ${b.minStagiairesIntra} stagiaires minimum`, `${stag.length} stagiaire(s) prévu(s) : le forfait journalier ne s'applique pas, seul le taux horaire par stagiaire compte.`, 'Formation');
+      if (b.budgetAnnuel) add(A, `Budget annuel ${opcoLabel} : ${Tarifs.eur(b.budgetAnnuel)} par entreprise`, 'Vérifiez avec le client ce qui a déjà été consommé cette année sur son espace OPCO : le reste à charge augmente d\'autant.', 'Fiche client');
+    }
+    if (modules.length && jours.length) {
+      const pasDemi = modules.filter(mo => mo.heures && Math.abs(mo.heures / 3.5 - Math.round(mo.heures / 3.5)) > 0.01);
+      if (pasDemi.length) add(A, 'Modules non calés sur des demi-journées', `Le planning (programme) sera moins lisible : ${pasDemi.map(mo => mo.titre).join(' ; ')}. Privilégiez des durées multiples de 3,5 h.`, 'Formation');
+    }
+    if (dossier.modalite === 'mixte' && modules.length && modules.every(mo => mo.modalite)) {
+      if (!modules.some(mo => mo.modalite === 'presentiel') || !modules.some(mo => mo.modalite === 'distanciel'))
+        add(B, 'Formation déclarée mixte sans présentiel ET distanciel', 'Changez la modalité ou répartissez les modules.', 'Formation');
+    }
+
     /* ── 6. Prix / barème OPCO ── */
     if (this.DOCS_PRIX.includes(typeDoc) || demande) {
       const prix = parseFloat(dossier.price) || 0;
       if (!prix) add(B, 'Prix HT manquant', '', 'Formation');
       else if (typeof Tarifs !== 'undefined') {
-        const s = Tarifs.suggestion({ opco, dispositif: dossier.dispositif, effectif: client.employees, heures, stagiaires: stag.length || 1, prix, jours: jours.length });
+        const s = Tarifs.suggestion({ opco, dispositif: dossier.dispositif, effectif: client.employees, heures, stagiaires: stag.length || 1, prix, jours: jours.length, client });
         if (s?.estimation && prix > s.estimation.max + 1) {
           add(A, `Prix au-dessus de la prise en charge ${opcoLabel}`,
-            `${Tarifs.eur(prix)} demandés, prise en charge maximale estimée ${Tarifs.eur(s.estimation.max)} (${s.tauxTexte}${s.estimation.plafondJour ? `, plafond ${Tarifs.eur(s.bareme.plafondJour)}/jour/groupe` : ''}). Reste à charge de l'entreprise : ${Tarifs.eur(prix - s.estimation.max)} — à faire accepter par le client, ou ajustez le prix à ${Tarifs.eur(s.estimation.max)}.`, 'Formation');
+            `${Tarifs.eur(prix)} demandés, prise en charge maximale estimée ${Tarifs.eur(s.estimation.max)} (limitée par : ${s.estimation.detail}). Reste à charge de l'entreprise : ${Tarifs.eur(prix - s.estimation.max)} — à faire accepter par le client, ou ajustez le prix à ${Tarifs.eur(s.estimation.max)}.`, 'Formation');
         } else if (s?.estimation) add(OK, `Prix dans le barème (max. ${Tarifs.eur(s.estimation.max)})`);
       }
     }
