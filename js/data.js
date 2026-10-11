@@ -15,6 +15,28 @@ function _mapClientRow(row) {
     idcc:        row.idcc            || '',
     codeNaf:     row.code_naf        || '',
     salaries:    Array.isArray(row.salaries) ? row.salaries : [],
+    /* v63 — fiche client OPCO complète */
+    formeJuridique:  row.forme_juridique       || '',
+    adresseFormation:row.adresse_formation     || '',
+    numeroAdherent:  row.numero_adherent_opco  || '',
+    statutAdhesion:  row.statut_adhesion_opco  || 'a_verifier',
+    budgetConsomme:  row.budget_consomme ?? '',
+    subrogation:     row.subrogation == null ? '' : (row.subrogation ? 'oui' : 'non'),
+    kbisDate:        row.kbis_date             || '',
+    gerantCivilite:  row.gerant_civilite       || '',
+    gerantPrenom:    row.gerant_prenom         || '',
+    gerantNom:       row.gerant_nom            || '',
+    gerantQualite:   row.gerant_qualite        || '',
+    gerantEmail:     row.gerant_email          || '',
+    gerantTel:       row.gerant_tel            || '',
+    contactNom:      row.contact_nom           || '',
+    contactFonction: row.contact_fonction      || '',
+    contactEmail:    row.contact_email         || '',
+    contactTel:      row.contact_tel           || '',
+    horaires:        row.horaires              || '',
+    activite:        row.activite              || '',
+    besoins:         row.besoins               || '',
+    formationsAnterieures: row.formations_anterieures || '',
     /* stats calculées à partir des dossiers joints */
     dossiers:    (row.dossiers || []).map(_mapDossierRow),
     createdAt:   row.cree_le
@@ -47,6 +69,78 @@ function _mapDossierRow(row) {
   };
 }
 
+
+/* ── v63 — Fiche client : colonnes de base + colonnes « fiche complète »
+   (setup_update22.sql). Si la migration n'a pas encore été jouée, on
+   enregistre au moins les colonnes de base et on prévient. ── */
+const CLIENT_COLS_BASE = 'id, opco, nom_entreprise, siret, adresse, tel, email, nb_salaries, nom_gerant, idcc, code_naf, salaries, cree_le';
+const CLIENT_COLS_FICHE = 'forme_juridique, adresse_formation, numero_adherent_opco, statut_adhesion_opco, budget_consomme, subrogation, kbis_date, ' +
+  'gerant_civilite, gerant_prenom, gerant_nom, gerant_qualite, gerant_email, gerant_tel, contact_nom, contact_fonction, contact_email, contact_tel, ' +
+  'horaires, activite, besoins, formations_anterieures';
+const DOSSIER_COLS = `dossiers(id, client_id, sujet_formation, prix, dates_formation,
+                 salaries, statut, notes, objectifs, contenu, modalite,
+                 evaluation, prerequis, duree_heures, lieu, public_vise, moyens,
+                 dispositif, taux_horaire, cree_le, modifie_le)`;
+
+/** « Prénom NOM, qualité » composé depuis les champs séparés du représentant légal */
+function composerGerant(d) {
+  const nom = [String(d.gerantPrenom || '').trim(), String(d.gerantNom || '').trim().toUpperCase()].filter(Boolean).join(' ');
+  if (!nom) return '';
+  return d.gerantQualite ? `${nom}, ${String(d.gerantQualite).trim().toLowerCase()}` : nom;
+}
+
+function _clientPayload(d) {
+  const t = v => (v == null ? '' : String(v)).trim() || null;
+  const base = {
+    nom_entreprise: d.companyName,
+    siret:          t(d.siret),
+    adresse:        t(d.address),
+    tel:            t(d.phone),
+    email:          t(d.email),
+    nb_salaries:    d.employees !== '' && d.employees != null ? parseInt(d.employees) : null,
+    nom_gerant:     composerGerant(d) || t(d.nomGerant),
+    idcc:           t(d.idcc),
+    code_naf:       t(d.codeNaf),
+    salaries:       d.salaries || []
+  };
+  const budget = parseFloat(String(d.budgetConsomme ?? '').replace(',', '.'));
+  const fiche = {
+    forme_juridique:      t(d.formeJuridique),
+    adresse_formation:    t(d.adresseFormation),
+    numero_adherent_opco: t(d.numeroAdherent),
+    statut_adhesion_opco: ['adherent', 'non_adherent', 'a_verifier'].includes(d.statutAdhesion) ? d.statutAdhesion : 'a_verifier',
+    budget_consomme:      Number.isFinite(budget) ? budget : null,
+    subrogation:          d.subrogation === 'oui' ? true : d.subrogation === 'non' ? false : null,
+    kbis_date:            t(d.kbisDate),
+    gerant_civilite:      t(d.gerantCivilite),
+    gerant_prenom:        t(d.gerantPrenom),
+    gerant_nom:           t(d.gerantNom) ? String(d.gerantNom).trim().toUpperCase() : null,
+    gerant_qualite:       t(d.gerantQualite),
+    gerant_email:         t(d.gerantEmail),
+    gerant_tel:           t(d.gerantTel),
+    contact_nom:          t(d.contactNom),
+    contact_fonction:     t(d.contactFonction),
+    contact_email:        t(d.contactEmail),
+    contact_tel:          t(d.contactTel),
+    horaires:             t(d.horaires),
+    activite:             t(d.activite),
+    besoins:              t(d.besoins),
+    formations_anterieures: t(d.formationsAnterieures)
+  };
+  return { base, fiche };
+}
+
+/** Colonne absente (migration non jouée) ? */
+function _colonneManquante(error) {
+  return error && (error.code === '42703' || error.code === 'PGRST204' || /column .* does not exist|Could not find the .* column/i.test(error.message || ''));
+}
+let _ficheMigrationOk = true;
+function _avertirMigration() {
+  _ficheMigrationOk = false;
+  console.warn('[DataStore] colonnes de la fiche client absentes — jouer setup_update22.sql dans Supabase');
+  if (typeof Toast !== 'undefined') Toast.show('Fiche enregistrée partiellement : jouez setup_update22.sql dans Supabase pour conserver toutes les informations', 'warning', 9000);
+}
+
 const DataStore = {
   OPCOS: ['opco_commerce', 'opco_mobilite', 'akto', 'constructys', 'opco_ep'],
 
@@ -71,18 +165,12 @@ const DataStore = {
     const uid = await this._uid();
     const { data, error } = await supa
       .from('clients')
-      .select(`
-        id, opco, nom_entreprise, siret, adresse, tel, email,
-        nb_salaries, nom_gerant, idcc, code_naf, salaries, cree_le,
-        dossiers(id, client_id, sujet_formation, prix, dates_formation,
-                 salaries, statut, notes, objectifs, contenu, modalite,
-                 evaluation, prerequis, duree_heures, lieu, public_vise, moyens,
-                 dispositif, taux_horaire, cree_le, modifie_le)
-      `)
+      .select(this._clientSelect())
       .eq('user_id', uid)
       .eq('opco', opco)
       .order('nom_entreprise', { ascending: true });
 
+    if (_colonneManquante(error) && _ficheMigrationOk) { _avertirMigration(); return this.getClients(opco); }
     if (error) this._handleError(error, 'getClients');
     return (data || []).map(_mapClientRow);
   },
@@ -102,43 +190,27 @@ const DataStore = {
     const uid = await this._uid();
     const { data, error } = await supa
       .from('clients')
-      .select(`
-        id, opco, nom_entreprise, siret, adresse, tel, email,
-        nb_salaries, nom_gerant, idcc, code_naf, salaries, cree_le,
-        dossiers(id, client_id, sujet_formation, prix, dates_formation,
-                 salaries, statut, notes, objectifs, contenu, modalite,
-                 evaluation, prerequis, duree_heures, lieu, public_vise, moyens,
-                 dispositif, taux_horaire, cree_le, modifie_le)
-      `)
+      .select(this._clientSelect())
       .eq('user_id', uid)
       .order('nom_entreprise', { ascending: true });
 
+    if (_colonneManquante(error) && _ficheMigrationOk) { _avertirMigration(); return this.getAllClients(); }
     if (error) this._handleError(error, 'getAllClients');
     return (data || []).map(_mapClientRow);
+  },
+
+  /** Colonnes lues pour un client (+ dossiers joints) */
+  _clientSelect() {
+    return `${CLIENT_COLS_BASE}${_ficheMigrationOk ? ', ' + CLIENT_COLS_FICHE : ''}, ${DOSSIER_COLS}`;
   },
 
   /** Crée un client (entreprise) sans formation */
   async addClient(opco, d) {
     const uid = await this._uid();
-    const { data, error } = await supa
-      .from('clients')
-      .insert({
-        user_id:        uid,
-        opco,
-        nom_entreprise: d.companyName,
-        siret:          d.siret       || null,
-        adresse:        d.address     || null,
-        tel:            d.phone       || null,
-        email:          d.email       || null,
-        nb_salaries:    d.employees   ? parseInt(d.employees) : null,
-        nom_gerant:     d.nomGerant   || null,
-        idcc:           d.idcc        || null,
-        code_naf:       d.codeNaf     || null,
-        salaries:       d.salaries    || []
-      })
-      .select()
-      .single();
-
+    const { base, fiche } = _clientPayload(d);
+    const ins = row => supa.from('clients').insert({ user_id: uid, opco, ...row }).select().single();
+    let { data, error } = await ins(_ficheMigrationOk ? { ...base, ...fiche } : base);
+    if (_colonneManquante(error)) { _avertirMigration(); ({ data, error } = await ins(base)); }
     if (error) this._handleError(error, 'addClient');
     return { ..._mapClientRow(data), dossiers: [] };
   },
@@ -146,23 +218,10 @@ const DataStore = {
   /** Met à jour les infos d'un client */
   async updateClient(id, d) {
     const uid = await this._uid();
-    const { error } = await supa
-      .from('clients')
-      .update({
-        nom_entreprise: d.companyName,
-        siret:          d.siret       || null,
-        adresse:        d.address     || null,
-        tel:            d.phone       || null,
-        email:          d.email       || null,
-        nb_salaries:    d.employees   ? parseInt(d.employees) : null,
-        nom_gerant:     d.nomGerant   || null,
-        idcc:           d.idcc        || null,
-        code_naf:       d.codeNaf     || null,
-        salaries:       d.salaries    || []
-      })
-      .eq('id', id)
-      .eq('user_id', uid);
-
+    const { base, fiche } = _clientPayload(d);
+    const maj = row => supa.from('clients').update(row).eq('id', id).eq('user_id', uid);
+    let { error } = await maj(_ficheMigrationOk ? { ...base, ...fiche } : base);
+    if (_colonneManquante(error)) { _avertirMigration(); ({ error } = await maj(base)); }
     if (error) this._handleError(error, 'updateClient');
   },
 

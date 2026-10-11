@@ -312,6 +312,9 @@ const OpcoPage = {
               ${c.phone     ? `<span>📞 ${esc(c.phone)}</span>` : ''}
               ${c.email     ? `<span>✉️ ${esc(c.email)}</span>` : ''}
             </div>
+            ${(() => { const r = this.completudeClient(c, c.opco); return r.manquants.length
+              ? `<button type="button" class="fiche-badge fiche-badge-ko" data-action="edit-client" data-id="${c.id}" title="${esc(r.manquants.join(' · '))}">⚠ Fiche OPCO incomplète — ${r.manquants.length} info${r.manquants.length > 1 ? 's' : ''} à obtenir</button>`
+              : `<span class="fiche-badge fiche-badge-ok">✓ Fiche OPCO complète</span>`; })()}
           </div>
           <div class="client-card-stats">
             <div class="client-stat">
@@ -469,7 +472,7 @@ const OpcoPage = {
 
     Modal.open(
       isEdit ? `Modifier — ${c.companyName}` : `Nouveau client — ${cfg.label}`,
-      this._buildClientForm(c),
+      this._buildClientForm(c, opco),
       [
         { label:'Annuler',  cls:'btn btn-secondary', action: () => Modal.close() },
         { label: isEdit ? 'Enregistrer' : 'Créer le client', cls:'btn btn-primary',
@@ -479,57 +482,162 @@ const OpcoPage = {
     );
     this._initSalariesEvents();
     this._initClientLookup(opco, c);
+    this._initCompletude(opco);
   },
 
-  _buildClientForm(c) {
-    const salaries = c?.salaries?.length ? c.salaries : [{ firstName:'', lastName:'', poste:'' }];
+  /* ══════════════════════════════════════════════
+     FICHE CLIENT OPCO (v63) — tout ce qu'il faut pour une formation conforme
+  ══════════════════════════════════════════════ */
+  CIVILITES:  ['M.', 'Mme'],
+  CSP:        ['Ouvrier', 'Employé', 'Technicien / agent de maîtrise', 'Cadre', 'Dirigeant salarié'],
+  CONTRATS:   ['CDI', 'CDD', 'Contrat d\'apprentissage', 'Contrat de professionnalisation', 'Intérim', 'Autre'],
+  DIPLOMES:   ['Sans diplôme', 'CAP / BEP', 'Bac', 'Bac +2 (BTS, DUT)', 'Bac +3 (Licence)', 'Bac +5 et plus'],
+  FORMES_JURIDIQUES: { '1000': 'Entrepreneur individuel', '5498': 'EURL', '5499': 'SARL', '5710': 'SAS', '5720': 'SASU', '5599': 'SA', '5202': 'SNC', '6540': 'SCI', '9220': 'Association' },
+
+  /** Découpe « Prénom NOM, qualité » (anciennes fiches) en champs séparés */
+  _decouperGerant(txt) {
+    const [nomPart, ...reste] = String(txt || '').split(',');
+    const mots = nomPart.trim().split(/\s+/).filter(Boolean);
+    if (!mots.length) return { prenom: '', nom: '', qualite: reste.join(',').trim() };
+    const maj = mots.filter(m => m.length > 1 && m === m.toUpperCase());
+    const prenom = maj.length && maj.length < mots.length ? mots.filter(m => !maj.includes(m)).join(' ') : mots[0];
+    const nom    = maj.length && maj.length < mots.length ? maj.join(' ') : mots.slice(1).join(' ');
+    return { prenom, nom, qualite: reste.join(',').trim() };
+  },
+
+  _opt(liste, valeur, vide = 'Choisir…') {
+    return `<option value="">${vide}</option>` + liste.map(v => `<option value="${esc(v)}" ${v === valeur ? 'selected' : ''}>${esc(v)}</option>`).join('');
+  },
+
+  _buildClientForm(c, opco) {
+    const salaries = c?.salaries?.length ? c.salaries : [{}];
+    const g = (c && !c.gerantNom && !c.gerantPrenom && c.nomGerant) ? this._decouperGerant(c.nomGerant) : {};
+    const gerantPrenom  = c?.gerantPrenom  || g.prenom  || '';
+    const gerantNom     = c?.gerantNom     || g.nom     || '';
+    const gerantQualite = c?.gerantQualite || g.qualite || '';
+    const cfg = this.CONFIG[opco] || {};
+    const sel = (v, x) => v === x ? 'selected' : '';
     return `
       <form id="clientForm" novalidate>
+        <div id="ficheCompletude" class="fiche-completude"></div>
+
         <div class="form-section lookup-section">
           <div class="form-section-title">🔎 Remplissage automatique</div>
           <div class="field">
             <input type="search" id="lookupInput" autocomplete="off" spellcheck="false"
               placeholder="Tapez un SIRET, un SIREN ou le nom de la société…" />
-            <div class="lookup-hint">Recherche dans l'annuaire officiel des entreprises — la fiche se remplit toute seule (adresse, effectif, gérant, convention collective, OPCO).</div>
+            <div class="lookup-hint">Recherche dans l'annuaire officiel des entreprises — la fiche se remplit toute seule (adresse, forme juridique, effectif, gérant, convention collective, OPCO). Les champs marqués * sont exigés pour un dossier OPCO.</div>
           </div>
           <div id="lookupResults" class="lookup-results" hidden></div>
           <div id="lookupStatus" hidden></div>
         </div>
 
         <div class="form-section">
-          <div class="form-section-title">🏢 Coordonnées de l'entreprise</div>
+          <div class="form-section-title">🏢 1. Entreprise</div>
           <div class="form-grid">
             <div class="field form-col-full"><label>Raison sociale *</label>
-              <input type="text" name="companyName" value="${esc(c?.companyName)}" placeholder="Nom de la société" required /></div>
-            <div class="field"><label>SIRET</label>
-              <input type="text" name="siret" id="clientSiret" value="${esc(c?.siret)}" placeholder="14 chiffres" maxlength="14" inputmode="numeric" /></div>
-            <div class="field"><label>IDCC</label>
-              <input type="text" name="idcc" value="${esc(c?.idcc)}" placeholder="Ex. 1979" /></div>
-            <div class="field"><label>Code NAF / APE</label>
+              <input type="text" name="companyName" value="${esc(c?.companyName)}" placeholder="Nom de la société (comme sur le KBIS)" required /></div>
+            <div class="field"><label>SIRET de l'établissement *</label>
+              <input type="text" name="siret" id="clientSiret" value="${esc(c?.siret)}" placeholder="14 chiffres" maxlength="17" inputmode="numeric" /></div>
+            <div class="field"><label>Forme juridique</label>
+              <input type="text" name="formeJuridique" value="${esc(c?.formeJuridique)}" placeholder="SARL, SAS, EI…" list="formesJuridiques" />
+              <datalist id="formesJuridiques">${[...new Set(Object.values(this.FORMES_JURIDIQUES))].map(f => `<option value="${esc(f)}">`).join('')}</datalist></div>
+            <div class="field"><label>Code NAF / APE *</label>
               <input type="text" name="codeNaf" value="${esc(c?.codeNaf)}" placeholder="Ex. 45.20A" /></div>
-            <div class="field form-col-full"><label>Adresse</label>
-              <input type="text" name="address" value="${esc(c?.address)}" placeholder="Adresse complète" /></div>
-            <div class="field"><label>Téléphone</label>
-              <input type="tel" name="phone" value="${esc(c?.phone)}" placeholder="01 23 45 67 89" /></div>
-            <div class="field"><label>Email</label>
+            <div class="field"><label>Convention collective (IDCC) *</label>
+              <input type="text" name="idcc" value="${esc(c?.idcc)}" placeholder="Ex. 1090 — voir fiche de paie" /></div>
+            <div class="field"><label>Effectif salarié *</label>
+              <input type="number" name="employees" value="${c?.employees ?? ''}" placeholder="Ex. 12" min="0" />
+              <div class="field-hint">Détermine le barème OPCO (moins de 11, 11-49, 50 et plus).</div></div>
+            <div class="field"><label>Téléphone de l'entreprise</label>
+              <input type="tel" name="phone" value="${esc(c?.phone)}" placeholder="04 91 00 00 00" /></div>
+            <div class="field form-col-full"><label>Adresse du siège / de l'établissement *</label>
+              <input type="text" name="address" value="${esc(c?.address)}" placeholder="N°, rue, code postal, ville" /></div>
+            <div class="field form-col-full"><label>Lieu de formation, si différent</label>
+              <input type="text" name="adresseFormation" value="${esc(c?.adresseFormation)}" placeholder="Ex. Atelier — 12 rue …, 13014 Marseille (vide = adresse ci-dessus)" /></div>
+            <div class="field"><label>E-mail de l'entreprise</label>
               <input type="email" name="email" value="${esc(c?.email)}" placeholder="contact@entreprise.fr" /></div>
+            <div class="field"><label>Horaires de travail habituels</label>
+              <input type="text" name="horaires" value="${esc(c?.horaires)}" placeholder="Ex. lun-ven 8h-12h / 13h30-17h" />
+              <div class="field-hint">Pour planifier la formation sur le temps de travail.</div></div>
           </div>
         </div>
 
         <div class="form-section">
-          <div class="form-section-title">👤 Représentant légal / Gérant</div>
+          <div class="form-section-title">🏛 2. Adhésion et financement OPCO</div>
           <div class="form-grid">
-            <div class="field"><label>Nom du gérant *</label>
-              <input type="text" name="nomGerant" value="${esc(c?.nomGerant)}" placeholder="Prénom Nom" /></div>
-            <div class="field"><label>Nombre de salariés</label>
-              <input type="number" name="employees" value="${c?.employees||''}" placeholder="Ex. 12" min="1" /></div>
+            <div class="field"><label>Adhésion à ${esc(cfg.label || 'l\'OPCO')} *</label>
+              <select name="statutAdhesion">
+                <option value="a_verifier"   ${sel(c?.statutAdhesion || 'a_verifier', 'a_verifier')}>À vérifier</option>
+                <option value="adherent"     ${sel(c?.statutAdhesion, 'adherent')}>Adhérent — à jour de ses contributions</option>
+                <option value="non_adherent" ${sel(c?.statutAdhesion, 'non_adherent')}>Non adhérent</option>
+              </select>
+              <div class="field-hint">Premier motif de refus : vérifiez sur l'espace en ligne de l'OPCO ou avec le client.</div></div>
+            <div class="field"><label>N° d'adhérent OPCO</label>
+              <input type="text" name="numeroAdherent" value="${esc(c?.numeroAdherent)}" placeholder="Sur l'espace en ligne du client" /></div>
+            <div class="field"><label>Paiement direct de l'OPCO (subrogation) *</label>
+              <select name="subrogation">
+                <option value="" ${sel(c?.subrogation || '', '')}>Choisir…</option>
+                <option value="oui" ${sel(c?.subrogation, 'oui')}>Oui — l'OPCO paie IDEAFORMA directement</option>
+                <option value="non" ${sel(c?.subrogation, 'non')}>Non — l'entreprise paie puis se fait rembourser</option>
+              </select></div>
+            <div class="field"><label>Budget OPCO déjà consommé cette année (€)</label>
+              <input type="number" name="budgetConsomme" value="${c?.budgetConsomme ?? ''}" placeholder="0" min="0" step="0.01" /></div>
+            <div class="field"><label>Date du KBIS${opco === 'constructys' ? ' *' : ''}</label>
+              <input type="date" name="kbisDate" value="${esc(c?.kbisDate)}" />
+              <div class="field-hint">${opco === 'constructys' ? 'Constructys exige un KBIS de moins de 3 mois au dépôt.' : 'Utile si l\'OPCO le demande (moins de 3 mois).'}</div></div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">✍️ 3. Représentant légal (signataire du devis et de la convention)</div>
+          <div class="form-grid">
+            <div class="field"><label>Civilité</label>
+              <select name="gerantCivilite">${this._opt(this.CIVILITES, c?.gerantCivilite, '—')}</select></div>
+            <div class="field"><label>Qualité *</label>
+              <input type="text" name="gerantQualite" value="${esc(gerantQualite)}" placeholder="Gérant, président, directeur…" list="qualitesGerant" />
+              <datalist id="qualitesGerant"><option value="Gérant"><option value="Gérante"><option value="Président"><option value="Présidente"><option value="Directeur général"><option value="Entrepreneur individuel"></datalist></div>
+            <div class="field"><label>Prénom *</label>
+              <input type="text" name="gerantPrenom" value="${esc(gerantPrenom)}" placeholder="Prénom" /></div>
+            <div class="field"><label>NOM *</label>
+              <input type="text" name="gerantNom" value="${esc(gerantNom)}" placeholder="NOM" /></div>
+            <div class="field"><label>E-mail du signataire</label>
+              <input type="email" name="gerantEmail" value="${esc(c?.gerantEmail)}" placeholder="Pour l'envoi du devis à signer" /></div>
+            <div class="field"><label>Téléphone du signataire</label>
+              <input type="tel" name="gerantTel" value="${esc(c?.gerantTel)}" placeholder="06 …" /></div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">📇 4. Interlocuteur du dossier formation <span class="form-section-sub">(si différent du signataire : RH, assistante, comptable…)</span></div>
+          <div class="form-grid">
+            <div class="field"><label>Prénom NOM</label>
+              <input type="text" name="contactNom" value="${esc(c?.contactNom)}" placeholder="Prénom NOM" /></div>
+            <div class="field"><label>Fonction</label>
+              <input type="text" name="contactFonction" value="${esc(c?.contactFonction)}" placeholder="Ex. Responsable administrative" /></div>
+            <div class="field"><label>E-mail</label>
+              <input type="email" name="contactEmail" value="${esc(c?.contactEmail)}" placeholder="prenom@entreprise.fr" /></div>
+            <div class="field"><label>Téléphone</label>
+              <input type="tel" name="contactTel" value="${esc(c?.contactTel)}" placeholder="06 …" /></div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">🎯 5. Analyse du besoin <span class="form-section-sub">(Qualiopi indicateur 4 — sert aussi à l'IA pour adapter le programme)</span></div>
+          <div class="form-grid">
+            <div class="field form-col-full"><label>Activité réelle de l'entreprise</label>
+              <textarea name="activite" rows="2" placeholder="Ex. Carrosserie-peinture, réparation après sinistre, 2 cabines de peinture, clientèle particuliers et assureurs">${esc(c?.activite)}</textarea></div>
+            <div class="field form-col-full"><label>Besoins de formation exprimés par l'employeur *</label>
+              <textarea name="besoins" rows="3" placeholder="Ex. Les réceptionnaires doivent mieux chiffrer les devis et gérer les dossiers d'assurance ; difficultés constatées : …">${esc(c?.besoins)}</textarea></div>
+            <div class="field form-col-full"><label>Formations déjà suivies / niveau actuel des salariés</label>
+              <textarea name="formationsAnterieures" rows="2" placeholder="Ex. Aucune formation depuis 2022 ; les salariés utilisent déjà le logiciel X au niveau débutant">${esc(c?.formationsAnterieures)}</textarea></div>
           </div>
         </div>
 
         <div class="form-section" style="margin-bottom:0;">
-          <div class="form-section-title">👥 Salariés de l'entreprise</div>
+          <div class="form-section-title">👥 6. Salariés à former <span class="form-section-sub">(identité exactement comme sur la fiche de paie — l'OPCO rapproche avec la DSN)</span></div>
           <div class="dynamic-list" id="salaryList">
-            ${salaries.map((s,i) => this._salaryRow(s.firstName, s.lastName, s.poste||'', i)).join('')}
+            ${salaries.map((s, i) => this._salaryRow(s, i)).join('')}
           </div>
           <button type="button" class="btn-add-row" id="addSalary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -633,8 +741,14 @@ const OpcoPage = {
       set('address',     fiche.adresse, force);
       set('codeNaf',     fiche.naf, force);
       set('idcc',        (fiche.idcc || [])[0] || '', force);
-      set('nomGerant',   fiche.dirigeant);
       set('employees',   Entreprise.effectifEstime(fiche));
+      set('formeJuridique', this.FORMES_JURIDIQUES[String(fiche.natureJuridique || '')] || '');
+      if (fiche.dirigeant) {
+        const g = this._decouperGerant(fiche.dirigeant);
+        set('gerantPrenom', g.prenom); set('gerantNom', g.nom);
+      }
+      set('gerantQualite', fiche.dirigeantQualite ? fiche.dirigeantQualite.charAt(0).toUpperCase() + fiche.dirigeantQualite.slice(1).toLowerCase() : '');
+      this._majCompletude?.();
     }
 
     /* ── OPCO détecté ── */
@@ -660,6 +774,7 @@ const OpcoPage = {
       setStatus(lignes.join('<br>'), 'ai-warn');
       document.getElementById('lookupSwitchOpco')?.addEventListener('click', () => {
         form.dataset.opcoCible = det.code;
+        this._majCompletude?.();
         setStatus(`✅ Le client sera créé dans <strong>${esc(det.label)}</strong>.`, 'ai-success');
       });
     } else {
@@ -668,20 +783,32 @@ const OpcoPage = {
     }
   },
 
-  _salaryRow(fn='', ln='', poste='', idx) {
-    return `<div class="dynamic-row" data-salary="${idx}">
-      <input type="text" placeholder="Prénom"  data-field="firstName" value="${esc(fn)}" style="flex:1;" />
-      <input type="text" placeholder="Nom"     data-field="lastName"  value="${esc(ln)}" style="flex:1;" />
-      <input type="text" placeholder="Poste"   data-field="poste"     value="${esc(poste)}" style="flex:1.5;" />
-      <button type="button" class="btn-remove-row">×</button>
+  /** Carte « salarié » de la fiche client : tout ce que l'OPCO demande à la saisie */
+  _salaryRow(s = {}, idx) {
+    return `<div class="dynamic-row salarie-card" data-salary="${idx}">
+      <div class="salarie-grid">
+        <label class="sal-f sal-xs"><span>Civilité *</span><select data-field="civilite">${this._opt(this.CIVILITES, s.civilite, '—')}</select></label>
+        <label class="sal-f"><span>Prénom *</span><input type="text" data-field="firstName" value="${esc(s.firstName)}" placeholder="Prénom" /></label>
+        <label class="sal-f"><span>NOM *</span><input type="text" data-field="lastName" value="${esc(s.lastName)}" placeholder="NOM" /></label>
+        <label class="sal-f"><span>Date de naissance *</span><input type="date" data-field="dateNaissance" value="${esc(s.dateNaissance)}" /></label>
+        <label class="sal-f sal-l"><span>Poste occupé *</span><input type="text" data-field="poste" value="${esc(s.poste)}" placeholder="Ex. Carrossier-peintre" /></label>
+        <label class="sal-f"><span>Catégorie *</span><select data-field="csp">${this._opt(this.CSP, s.csp)}</select></label>
+        <label class="sal-f"><span>Contrat *</span><select data-field="contrat">${this._opt(this.CONTRATS, s.contrat)}</select></label>
+        <label class="sal-f"><span>Date d'embauche</span><input type="date" data-field="dateEmbauche" value="${esc(s.dateEmbauche)}" /></label>
+        <label class="sal-f"><span>Diplôme le plus élevé</span><select data-field="diplome">${this._opt(this.DIPLOMES, s.diplome)}</select></label>
+        <label class="sal-f sal-l"><span>E-mail (convocation, questionnaires)</span><input type="email" data-field="email" value="${esc(s.email)}" placeholder="facultatif" /></label>
+        <label class="sal-f sal-l"><span>Besoin d'adaptation (handicap…)</span><select data-field="amenagement">${this._opt(['Non', 'Oui — à voir avec le référent handicap'], s.amenagement, 'Non renseigné')}</select></label>
+      </div>
+      <button type="button" class="btn-remove-row" title="Retirer ce salarié">×</button>
     </div>`;
   },
 
   _initSalariesEvents() {
     let count = document.querySelectorAll('#salaryList .dynamic-row').length;
     document.getElementById('addSalary')?.addEventListener('click', () => {
-      document.getElementById('salaryList').insertAdjacentHTML('beforeend', this._salaryRow('','','',count++));
+      document.getElementById('salaryList').insertAdjacentHTML('beforeend', this._salaryRow({}, count++));
       this._bindRemoveRows();
+      this._majCompletude?.();
     });
     this._bindRemoveRows();
   },
@@ -691,43 +818,131 @@ const OpcoPage = {
       btn.onclick = () => {
         const row = btn.closest('.dynamic-row');
         if (row.parentElement.querySelectorAll('.dynamic-row').length > 1) row.remove();
+        this._majCompletude?.();
       };
     });
   },
 
-  async _submitClientForm(opco, id) {
-    const form = document.getElementById('clientForm');
-    const companyName = form.querySelector('[name="companyName"]').value.trim();
-    if (!companyName) { Toast.show('La raison sociale est requise', 'error'); return; }
-
+  /** Lit la fiche client (noms normalisés : NOM en capitales) */
+  _lireClientForm(form) {
+    const v = n => (form.querySelector(`[name="${n}"]`)?.value || '').trim();
     const salaries = [];
     form.querySelectorAll('#salaryList .dynamic-row').forEach(row => {
-      const fn    = row.querySelector('[data-field="firstName"]').value.trim();
-      const ln    = row.querySelector('[data-field="lastName"]').value.trim();
-      const poste = row.querySelector('[data-field="poste"]').value.trim();
-      if (fn || ln) salaries.push({ firstName: fn, lastName: ln, poste });
+      const s = {};
+      row.querySelectorAll('[data-field]').forEach(el => { s[el.dataset.field] = el.value.trim(); });
+      if (!s.firstName && !s.lastName) return;
+      if (s.lastName) s.lastName = s.lastName.toUpperCase();
+      Object.keys(s).forEach(k => { if (!s[k]) delete s[k]; });
+      salaries.push(s);
     });
-
-    const opcoCible = form.dataset.opcoCible || opco;
-    const data = {
-      companyName,
-      siret:     form.querySelector('[name="siret"]').value.replace(/\s/g, '').trim(),
-      idcc:      form.querySelector('[name="idcc"]').value.trim(),
-      codeNaf:   form.querySelector('[name="codeNaf"]').value.trim(),
-      address:   form.querySelector('[name="address"]').value.trim(),
-      phone:     form.querySelector('[name="phone"]').value.trim(),
-      email:     form.querySelector('[name="email"]').value.trim(),
-      nomGerant: form.querySelector('[name="nomGerant"]').value.trim(),
-      employees: form.querySelector('[name="employees"]').value,
+    const d = {
+      companyName: v('companyName'), siret: v('siret').replace(/\s/g, ''), formeJuridique: v('formeJuridique'),
+      codeNaf: v('codeNaf'), idcc: v('idcc'), employees: v('employees'), phone: v('phone'), email: v('email'),
+      address: v('address'), adresseFormation: v('adresseFormation'), horaires: v('horaires'),
+      statutAdhesion: v('statutAdhesion') || 'a_verifier', numeroAdherent: v('numeroAdherent'),
+      subrogation: v('subrogation'), budgetConsomme: v('budgetConsomme'), kbisDate: v('kbisDate'),
+      gerantCivilite: v('gerantCivilite'), gerantQualite: v('gerantQualite'), gerantPrenom: v('gerantPrenom'),
+      gerantNom: v('gerantNom').toUpperCase(), gerantEmail: v('gerantEmail'), gerantTel: v('gerantTel'),
+      contactNom: v('contactNom'), contactFonction: v('contactFonction'), contactEmail: v('contactEmail'), contactTel: v('contactTel'),
+      activite: v('activite'), besoins: v('besoins'), formationsAnterieures: v('formationsAnterieures'),
       salaries
     };
+    d.nomGerant = typeof composerGerant === 'function' ? composerGerant(d) : '';
+    return d;
+  },
+
+  /** Ce qui manque à la fiche pour monter un dossier OPCO conforme
+      → { manquants:[libellé], conseils:[libellé], total, faits } */
+  completudeClient(c = {}, opco = c.opco) {
+    const manquants = [], conseils = [];
+    let total = 0;
+    const exiger  = (ok, lib) => { total++; if (!ok) manquants.push(lib); };
+    const suggerer = (ok, lib) => { if (!ok) conseils.push(lib); };
+    exiger(c.companyName, 'Raison sociale');
+    exiger(/^\d{14}$/.test(String(c.siret || '').replace(/\s/g, '')), 'SIRET (14 chiffres)');
+    exiger(c.codeNaf, 'Code NAF');
+    exiger(c.idcc, 'Convention collective (IDCC)');
+    exiger(c.employees !== '' && c.employees != null && Number.isFinite(parseInt(c.employees)), 'Effectif');
+    exiger(/\b\d{5}\b/.test(c.address || ''), 'Adresse avec code postal');
+    exiger(c.statutAdhesion === 'adherent', c.statutAdhesion === 'non_adherent' ? 'Entreprise NON adhérente à l\'OPCO : dossier impossible' : 'Adhésion à l\'OPCO à vérifier');
+    exiger(c.subrogation === 'oui' || c.subrogation === 'non', 'Choix du paiement direct (subrogation)');
+    const g = (!c.gerantNom && !c.gerantPrenom && c.nomGerant) ? this._decouperGerant(c.nomGerant) : { prenom: c.gerantPrenom, nom: c.gerantNom, qualite: c.gerantQualite };
+    exiger(g.prenom && g.nom, 'Prénom et NOM du représentant légal');
+    exiger(g.qualite, 'Qualité du représentant légal (gérant, président…)');
+    exiger(c.gerantEmail || c.gerantTel || c.email || c.phone, 'Un e-mail ou téléphone de contact');
+    exiger(String(c.besoins || '').trim().length >= 20, 'Besoins de formation exprimés (analyse du besoin)');
+    if (opco === 'constructys') {
+      const kbis = c.kbisDate ? new Date(c.kbisDate) : null;
+      exiger(kbis && (Date.now() - kbis) / 86400000 <= 92, kbis ? 'KBIS de moins de 3 mois (le vôtre est trop ancien)' : 'Date du KBIS (moins de 3 mois)');
+    }
+    const sal = (c.salaries || []).filter(s => s.firstName || s.lastName);
+    exiger(sal.length, 'Au moins un salarié à former');
+    sal.forEach(s => {
+      const nom = `${s.firstName || ''} ${s.lastName || ''}`.trim();
+      const manque = [['civilite', 'civilité'], ['firstName', 'prénom'], ['lastName', 'NOM'], ['dateNaissance', 'date de naissance'], ['poste', 'poste'], ['csp', 'catégorie'], ['contrat', 'contrat']]
+        .filter(([k]) => !s[k]).map(([, l]) => l);
+      exiger(!manque.length, `${nom || 'Salarié'} : ${manque.join(', ')}`);
+    });
+    const eff = parseInt(c.employees);
+    if (Number.isFinite(eff) && sal.length > eff) manquants.push(`Plus de salariés à former (${sal.length}) que l'effectif déclaré (${eff})`);
+    suggerer(c.numeroAdherent, 'N° d\'adhérent OPCO');
+    suggerer(c.formeJuridique, 'Forme juridique');
+    suggerer(c.horaires, 'Horaires de travail');
+    suggerer(c.activite, 'Activité réelle de l\'entreprise');
+    if (sal.some(s => !s.amenagement)) suggerer(false, 'Besoin d\'adaptation (handicap) des salariés — Qualiopi ind. 26');
+    return { manquants, conseils, total, faits: total - manquants.length };
+  },
+
+  _panneauCompletude(r) {
+    const pct = r.total ? Math.round(100 * r.faits / r.total) : 0;
+    const etat = r.manquants.length ? 'fiche-incomplete' : 'fiche-complete';
+    return `<div class="fiche-compl ${etat}">
+      <div class="fiche-compl-head">
+        <strong>${r.manquants.length ? `Fiche OPCO incomplète — ${r.manquants.length} information${r.manquants.length > 1 ? 's' : ''} à obtenir` : 'Fiche OPCO complète ✓'}</strong>
+        <span>${pct} %</span>
+      </div>
+      <div class="fiche-compl-barre"><span style="width:${pct}%"></span></div>
+      ${r.manquants.length ? `<ul class="fiche-compl-liste">${r.manquants.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
+      ${r.conseils.length ? `<div class="fiche-compl-conseils">Conseillé : ${r.conseils.map(esc).join(' · ')}</div>` : ''}
+    </div>`;
+  },
+
+  _initCompletude(opco) {
+    const form = document.getElementById('clientForm');
+    const box  = document.getElementById('ficheCompletude');
+    if (!form || !box) return;
+    let t = null;
+    this._majCompletude = () => {
+      if (!document.body.contains(form)) return;
+      const opcoCible = form.dataset.opcoCible || opco;
+      box.innerHTML = this._panneauCompletude(this.completudeClient({ ...this._lireClientForm(form), opco: opcoCible }, opcoCible));
+    };
+    const planifier = () => { clearTimeout(t); t = setTimeout(() => this._majCompletude(), 250); };
+    form.addEventListener('input', planifier);
+    form.addEventListener('change', planifier);
+    this._majCompletude();
+  },
+
+  async _submitClientForm(opco, id) {
+    const form = document.getElementById('clientForm');
+    const data = this._lireClientForm(form);
+    if (!data.companyName) { Toast.show('La raison sociale est requise', 'error'); return; }
+    if (data.siret && !/^\d{14}$/.test(data.siret)) { Toast.show('Le SIRET doit comporter 14 chiffres', 'error'); return; }
+    if (!data.nomGerant) {
+      const ancien = (this._cachedClients || []).find(cl => cl.id === id)?.nomGerant;
+      if (ancien) data.nomGerant = ancien;
+    }
+
+    const opcoCible = form.dataset.opcoCible || opco;
+    const reste = this.completudeClient({ ...data, opco: opcoCible }, opcoCible).manquants.length;
 
     const btn = document.getElementById('modalAction1');
     if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
 
     try {
-      if (id) { await DataStore.updateClient(id, data); Toast.show('Client mis à jour ✓', 'success'); }
-      else    { await DataStore.addClient(opcoCible, data); Toast.show(`Client créé dans ${this.CONFIG[opcoCible]?.label || opcoCible} ✓`, 'success'); }
+      const suffixe = reste ? ` — ${reste} info${reste > 1 ? 's' : ''} encore à obtenir` : ' — fiche complète';
+      if (id) { await DataStore.updateClient(id, data); Toast.show('Client mis à jour ✓' + suffixe, reste ? 'warning' : 'success'); }
+      else    { await DataStore.addClient(opcoCible, data); Toast.show(`Client créé dans ${this.CONFIG[opcoCible]?.label || opcoCible} ✓${suffixe}`, reste ? 'warning' : 'success'); }
       Modal.close();
       if (!id && opcoCible !== opco && typeof Router !== 'undefined') Router.navigate(opcoCible);
       else await this.render(opco);
@@ -1164,6 +1379,15 @@ const OpcoPage = {
     const montrer = el => { if (!el) return; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('conf-flash'); setTimeout(() => el.classList.remove('conf-flash'), 1800); };
     const lu = this._lireFormulaire(form);
     switch (nom) {
+      case 'ficheClient': {
+        /* La formation en cours reste en brouillon automatique : on la retrouve en la rouvrant */
+        form.dispatchEvent(new Event('input', { bubbles: true }));   // déclenche l'enregistrement du brouillon
+        if (typeof Modal !== 'undefined') Modal._sale = false;
+        Modal.close();
+        this.openClientForm(this.currentOpco || c.opco, c.id);
+        Toast.show('Formation gardée en brouillon — rouvrez-la après avoir complété la fiche', 'info', 7000);
+        return;
+      }
       case 'inverserNoms': {
         let n = 0;
         form.querySelectorAll('#traineeList .dynamic-row').forEach(row => {
@@ -1457,8 +1681,11 @@ const OpcoPage = {
 
   /** Données du dossier enrichies de la fiche client, pour les documents */
   _docData(c, d, opco) {
-    return { ...d, companyName: c.companyName, siret: c.siret, address: c.address, phone: c.phone,
-      email: c.email, codeNaf: c.codeNaf, nomGerant: c.nomGerant, idcc: c.idcc, employees: c.employees,
+    return { ...d, companyName: c.companyName, siret: c.siret, address: c.address,
+      phone: c.gerantTel || c.phone, email: c.gerantEmail || c.email,
+      codeNaf: c.codeNaf, nomGerant: c.nomGerant, idcc: c.idcc, employees: c.employees,
+      formeJuridique: c.formeJuridique, adresseFormation: c.adresseFormation,
+      numeroAdherent: c.numeroAdherent, subrogation: c.subrogation,
       salariesClient: c.salaries || [], opco };
   },
 

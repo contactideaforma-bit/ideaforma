@@ -101,7 +101,8 @@ const Documents = {
     const modalite = this.MODALITE[dossier.modalite] || this.MODALITE.presentiel;
     const distanciel = dossier.modalite === 'distanciel';
     const mixte = dossier.modalite === 'mixte';
-    const locaux = dossier.address ? `dans les locaux de l'entreprise — ${dossier.address}` : 'dans les locaux de l\'entreprise';
+    const adrLocaux = dossier.adresseFormation || dossier.address;
+    const locaux = adrLocaux ? `dans les locaux de l'entreprise — ${adrLocaux}` : 'dans les locaux de l\'entreprise';
     const lieu = dossier.lieu
       || (distanciel ? 'À distance — classe virtuelle (visioconférence)'
         : mixte ? `Présentiel : ${locaux} ; distanciel : classe virtuelle (visioconférence)`
@@ -569,12 +570,12 @@ const Documents = {
 
   _clientRows(dossier, x) {
     return [
-      ['Raison sociale', dossier.companyName || '—'],
+      ['Raison sociale', [dossier.companyName, dossier.formeJuridique].filter(Boolean).join(' — ') || '—'],
       ['Adresse', dossier.address || '—'],
       ['SIRET / Code NAF', [dossier.siret, dossier.codeNaf].filter(Boolean).join(' — ') || '—'],
       ['Représentée par', dossier.nomGerant || '—'],
       ['Contact', [dossier.phone, dossier.email].filter(Boolean).join(' — ') || '—'],
-      ['OPCO / IDCC', `${x.opcoLabel}${dossier.idcc ? ` — IDCC ${dossier.idcc}` : ''}`]
+      ['OPCO / IDCC', `${x.opcoLabel}${dossier.numeroAdherent ? ` (adhérent n° ${dossier.numeroAdherent})` : ''}${dossier.idcc ? ` — IDCC ${dossier.idcc}` : ''}`]
     ];
   },
 

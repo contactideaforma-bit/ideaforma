@@ -74,7 +74,18 @@ CONTEXTE :
 - Intitulé : "${trainingSubject}"
 - Entreprise : ${clientInfo.companyName || 'non précisée'} — effectif : ${clientInfo.employees || 'inconnu'} salarié(s) — IDCC ${clientInfo.idcc || 'non précisée'}
 - Postes réellement occupés par les stagiaires : ${stag.length ? stag.join(', ') : (postes.length ? postes.join(', ') : 'non précisés')}
-- Nombre de stagiaires : ${(ctx.stagiaires || []).length || 'non précisé'}
+- Nombre de stagiaires : ${(ctx.stagiaires || []).length || 'non précisé'}${clientInfo.activite ? `
+- Activité réelle de l'entreprise : ${clientInfo.activite}` : ''}${clientInfo.besoins ? `
+- BESOINS EXPRIMÉS PAR L'EMPLOYEUR (analyse du besoin — le programme doit y répondre point par point) : ${clientInfo.besoins}` : ''}${clientInfo.formationsAnterieures ? `
+- Formations déjà suivies / niveau actuel : ${clientInfo.formationsAnterieures}` : ''}${(() => {
+  const cles = (ctx.stagiaires || []).map(t => [t.lastName, t.firstName].map(v => String(v || '').trim().toLowerCase()).sort().join('|'));
+  const prof = (clientInfo.salaries || []).filter(s => !cles.length || cles.includes([s.lastName, s.firstName].map(v => String(v || '').trim().toLowerCase()).sort().join('|')))
+    .map(s => [s.poste, s.csp, s.diplome].filter(Boolean).join(', ')).filter(Boolean);
+  const amenag = (clientInfo.salaries || []).some(s => /^oui/i.test(s.amenagement || ''));
+  return (prof.length ? `
+- Profil des stagiaires (poste, catégorie, diplôme) : ${prof.join(' ; ')}` : '') + (amenag ? `
+- Au moins un stagiaire a un besoin d'adaptation : prévoir dans les moyens l'adaptation des modalités avec le référent handicap.` : '');
+})()}
 - Modalité : ${libMod}
 - Durée IMPOSÉE : ${heures ? `${heures} heures` : 'à proposer'}${nbJours ? ` sur ${nbJours} jour(s)` : ''}
 - OPCO : ${cfg.label || opco} — secteurs : ${cfg.sectors || 'non précisé'}

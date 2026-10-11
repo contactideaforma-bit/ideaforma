@@ -78,10 +78,23 @@ const Conformite = {
     const siret = String(client.siret || '').replace(/\s/g, '');
     if (!/^\d{14}$/.test(siret)) add(B, 'SIRET du client manquant ou invalide', siret ? `« ${client.siret} » ne comporte pas 14 chiffres.` : '', 'Fiche client');
     if (!/\b\d{5}\b/.test(client.address || '')) add(A, 'Adresse du client sans code postal', '', 'Fiche client');
-    if (!client.nomGerant) add(A, 'Représentant légal du client non renseigné', 'Nécessaire pour la signature du devis et de la convention.', 'Fiche client');
-    else if (!/\s/.test(client.nomGerant.trim()) || !/,|gérant|gerant|président|president|directeur|directrice|dirigeant/i.test(client.nomGerant))
-      add(A, 'Représentant légal incomplet', `« ${client.nomGerant} » : indiquez prénom, NOM et qualité (ex. « Massoud MESSOUT, gérant ») — c'est lui qui signe.`, 'Fiche client');
-    if (!client.phone && !client.email) add(A, 'Contact du client manquant', 'Téléphone ou e-mail du signataire : la ligne « Contact » des documents est vide.', 'Fiche client');
+    const gParts = client.gerantNom || client.gerantPrenom;
+    if (!client.nomGerant && !gParts) add(A, 'Représentant légal du client non renseigné', 'Nécessaire pour la signature du devis et de la convention.', 'Fiche client');
+    else if (gParts ? !(client.gerantPrenom && client.gerantNom && client.gerantQualite)
+                    : (!/\s/.test(client.nomGerant.trim()) || !/,|gérant|gerant|président|president|directeur|directrice|dirigeant/i.test(client.nomGerant)))
+      add(A, 'Représentant légal incomplet', `« ${client.nomGerant || [client.gerantPrenom, client.gerantNom].filter(Boolean).join(' ')} » : indiquez prénom, NOM et qualité (ex. « Massoud MESSOUT, gérant ») — c'est lui qui signe.`, 'Fiche client');
+    if (!client.phone && !client.email && !client.gerantTel && !client.gerantEmail) add(A, 'Contact du client manquant', 'Téléphone ou e-mail du signataire : la ligne « Contact » des documents est vide.', 'Fiche client');
+
+    /* v63 — adhésion, subrogation, KBIS, analyse du besoin (fiche client complète) */
+    if (client.statutAdhesion === 'non_adherent') add(B, `Entreprise non adhérente à ${opcoLabel}`, 'Un dossier déposé pour un non-adhérent est refusé d\'office : régularisez l\'adhésion ou changez de financement.', 'Fiche client');
+    else if (client.statutAdhesion !== 'adherent') add(A, `Adhésion à ${opcoLabel} non vérifiée`, 'Premier motif de refus : vérifiez sur l\'espace en ligne du client qu\'il est adhérent et à jour de ses contributions.', 'Fiche client');
+    if (client.subrogation !== 'oui' && client.subrogation !== 'non') add(A, 'Paiement direct (subrogation) non précisé', 'À indiquer sur la demande de prise en charge et la convention : l\'OPCO paie-t-il l\'organisme directement ?', 'Fiche client');
+    if (opco === 'constructys') {
+      const kbis = client.kbisDate ? this._date(client.kbisDate) : null;
+      if (!kbis) add(A, 'KBIS de moins de 3 mois à obtenir', 'Constructys le demande au dépôt : demandez-le au client dès la signature du devis.', 'Fiche client');
+      else if ((this._date() - kbis) / 86400000 > 92) add(B, 'KBIS de plus de 3 mois', `KBIS du ${this._fr(client.kbisDate)} : Constructys exige un KBIS de moins de 3 mois au dépôt.`, 'Fiche client');
+    }
+    if (demande && String(client.besoins || '').trim().length < 20) add(A, 'Analyse du besoin non renseignée', 'Qualiopi (indicateur 4) : notez dans la fiche client les besoins exprimés par l\'employeur — l\'IA s\'en sert aussi pour adapter le programme.', 'Fiche client');
 
     const idcc = String(client.idcc || '').trim();
     const eff = parseInt(client.employees);
@@ -109,6 +122,20 @@ const Conformite = {
     if (inverses.length)
       add(A, `Nom / prénom peut-être inversé(s) : ${inverses.map(t => `Prénom « ${t.firstName} », Nom « ${t.lastName} »`).join(' ; ')}`,
         'L\'OPCO rapproche les noms de la DSN : ils doivent correspondre exactement à la pièce d\'identité / fiche de paie (Prénom dans « Prénom », NOM dans « Nom »).', 'Formation');
+    if (demande && stag.length) {
+      const cleN = t => [t.lastName, t.firstName].map(v => String(v || '').trim().toLowerCase()).sort().join('|');
+      const fiches = client.salaries || [];
+      const absents = [], incomplets = [];
+      stag.forEach(t => {
+        const f = fiches.find(sc => cleN(sc) === cleN(t));
+        const nom = `${t.firstName || ''} ${String(t.lastName || '').toUpperCase()}`.trim();
+        if (!f) { absents.push(nom); return; }
+        const manque = [['civilite', 'civilité'], ['dateNaissance', 'date de naissance'], ['poste', 'poste'], ['csp', 'catégorie'], ['contrat', 'contrat']].filter(([k]) => !f[k]).map(([, l]) => l);
+        if (manque.length) incomplets.push(`${nom} (${manque.join(', ')})`);
+      });
+      if (absents.length) add(A, `Stagiaire(s) absent(s) de la fiche client : ${absents.join(', ')}`, 'Ajoutez-les dans la fiche client avec poste, catégorie, contrat et date de naissance : l\'OPCO les demande à la saisie.', 'Fiche client');
+      if (incomplets.length) add(A, `Infos salarié incomplètes : ${incomplets.join(' ; ')}`, 'Demandées par l\'OPCO lors de la saisie de la demande de prise en charge.', 'Fiche client');
+    }
     if (Number.isFinite(eff) && stag.length > eff) add(A, 'Plus de stagiaires que de salariés', `${stag.length} stagiaires pour un effectif de ${eff}.`, 'Formation');
 
     /* ── 4. Dates, durée, délai de dépôt ── */
@@ -191,7 +218,11 @@ const Conformite = {
         add(B, `Effectif trop élevé pour « ${b.dispositif} »`, `Réservé aux entreprises de ${b.max} salariés maximum (${eff} chez le client).`, 'Formation');
       if (b.minStagiairesIntra && stag.length && stag.length < b.minStagiairesIntra)
         add(A, `Forfait intra : ${b.minStagiairesIntra} stagiaires minimum`, `${stag.length} stagiaire(s) prévu(s) : le forfait journalier ne s'applique pas, seul le taux horaire par stagiaire compte.`, 'Formation');
-      if (b.budgetAnnuel) add(A, `Budget annuel ${opcoLabel} : ${Tarifs.eur(b.budgetAnnuel)} par entreprise`, 'Vérifiez avec le client ce qui a déjà été consommé cette année sur son espace OPCO : le reste à charge augmente d\'autant.', 'Fiche client');
+      if (b.budgetAnnuel) {
+        const conso = parseFloat(client.budgetConsomme);
+        if (Number.isFinite(conso)) add(conso >= b.budgetAnnuel ? B : A, `Budget annuel ${opcoLabel} : ${Tarifs.eur(b.budgetAnnuel)} par entreprise — ${Tarifs.eur(Math.max(0, b.budgetAnnuel - conso))} restant`, `Déjà consommé cette année : ${Tarifs.eur(conso)}. Au-delà, le reste à charge est pour l'entreprise.`, 'Fiche client');
+        else add(A, `Budget annuel ${opcoLabel} : ${Tarifs.eur(b.budgetAnnuel)} par entreprise`, 'Vérifiez avec le client ce qui a déjà été consommé cette année sur son espace OPCO (champ « Budget déjà consommé » de la fiche) : le reste à charge augmente d\'autant.', 'Fiche client');
+      }
     }
     if (modules.length && jours.length) {
       const pasDemi = modules.filter(mo => mo.heures && Math.abs(mo.heures / 3.5 - Math.round(mo.heures / 3.5)) > 0.01);
@@ -300,7 +331,12 @@ const Conformite = {
       [/Référent handicap/, { type: 'profil', champs: [P('referent_handicap', 'Référent handicap', of.dirigeant || '', 'Nom'), P('referent_handicap_contact', 'Contact', emailPro, 'E-mail ou téléphone')] }],
       [/SIRET du client/, { type: 'client', champs: [P('siret', 'SIRET', client.siret || '', '14 chiffres')] }],
       [/Adresse du client/, { type: 'client', champs: [P('address', 'Adresse du client', client.address || '', 'N°, rue, code postal, ville')] }],
-      [/Représentant légal du client/, { type: 'client', champs: [P('nomGerant', 'Représentant légal', '', 'Nom et prénom')] }],
+      [/Représentant légal du client/, { type: 'client', champs: [P('gerantPrenom', 'Prénom', '', 'Prénom'), P('gerantNom', 'NOM', '', 'NOM'), P('gerantQualite', 'Qualité', '', 'Gérant, président…')] }],
+      [/Adhésion à .* non vérifiée/, { type: 'client', set: { statutAdhesion: 'adherent' }, label: 'C\'est vérifié : l\'entreprise est adhérente', champs: [P('numeroAdherent', 'N° d\'adhérent (facultatif)', client.numeroAdherent || '', 'Sur l\'espace en ligne du client')], facultatif: true }],
+      [/subrogation/, { type: 'action', action: 'ficheClient', label: 'Compléter la fiche client' }],
+      [/KBIS/, { type: 'client', champs: [P('kbisDate', 'Date du KBIS (AAAA-MM-JJ)', client.kbisDate || '', 'Ex. 2026-10-01')] }],
+      [/Analyse du besoin/, { type: 'client', champs: [P('besoins', 'Besoins exprimés par l\'employeur', client.besoins || '', 'Ex. mieux chiffrer les devis, réduire les reprises…')] }],
+      [/absent\(s\) de la fiche client|Infos salarié incomplètes|Entreprise non adhérente/, { type: 'action', action: 'ficheClient', label: 'Ouvrir la fiche client' }],
       [/IDCC .* incohérent/, { type: 'client', set: { idcc: fx.idccAutre }, label: `Passer le client en IDCC ${fx.idccAutre}`, champs: [P('idcc', 'IDCC (fiche de paie)', client.idcc || '')] }],
       [/IDCC\) non renseignée|ne relève pas de|Branche du client/, { type: 'client', champs: [P('idcc', 'IDCC (fiche de paie)', client.idcc || '', 'Ex. 1596')] }],
       [/Effectif du client/, { type: 'client', champs: [P('employees', 'Effectif (salariés)', '', 'Ex. 7')] }],
@@ -310,7 +346,7 @@ const Conformite = {
       [/Qualification du formateur inventée/, { type: 'action', action: 'retirerAffirmations', label: 'Retirer ces phrases' }],
       [/Formulations imprécises/, { type: 'action', action: 'nettoyerMoyens', label: 'Nettoyer le texte' }],
       [/Évaluation à froid à/, { type: 'action', action: 'froid', label: 'Passer l\'évaluation à froid à 2-3 mois' }],
-      [/Représentant légal incomplet/, { type: 'client', champs: [P('nomGerant', 'Prénom NOM, qualité', client.nomGerant || '', 'Ex. Massoud MESSOUT, gérant')] }],
+      [/Représentant légal incomplet/, { type: 'client', champs: [P('gerantPrenom', 'Prénom', client.gerantPrenom || '', 'Prénom'), P('gerantNom', 'NOM', client.gerantNom || '', 'NOM'), P('gerantQualite', 'Qualité', client.gerantQualite || '', 'Gérant, président…')] }],
       [/Contact du client/, { type: 'client', auMoinsUn: true, champs: [P('phone', 'Téléphone', client.phone || '', '06…'), P('email', 'E-mail', client.email || '', 'contact@…')] }],
       [/peut-être inversé/, { type: 'action', action: 'inverserNoms', label: 'Inverser prénom et nom de ces stagiaires' }],
       [/Aucun stagiaire|Stagiaire incomplet/, { type: 'action', action: 'champ:#traineeList', label: 'Aller aux participants' }],
@@ -362,7 +398,8 @@ const Conformite = {
         if (fix.type === 'action') { await ctx.action?.(fix.action, fix); }
         else {
           const valeurs = btn.dataset.unClic ? { ...fix.set } : Object.fromEntries(fix.champs.map((c, j) => [c.cle, racine.querySelector(`[data-fix-champ="${idx}-${j}"]`)?.value.trim() || '']));
-          if (fix.auMoinsUn ? Object.values(valeurs).every(v => !v) : Object.values(valeurs).some(v => !v)) { Toast.show('Complétez le champ avant d\'enregistrer', 'warning'); btn.disabled = false; return; }
+          if (fix.facultatif && !btn.dataset.unClic) Object.assign(valeurs, fix.set || {});
+          if (!fix.facultatif && (fix.auMoinsUn ? Object.values(valeurs).every(v => !v) : Object.values(valeurs).some(v => !v))) { Toast.show('Complétez le champ avant d\'enregistrer', 'warning'); btn.disabled = false; return; }
           if (fix.type === 'profil') {
             await DataStore.updateProfile(valeurs);
             this._of = null;
